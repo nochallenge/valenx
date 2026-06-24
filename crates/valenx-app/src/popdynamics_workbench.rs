@@ -154,70 +154,104 @@ pub fn draw_popdynamics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     });
 
                     ui.add_space(4.0);
+                    // Associate each numeric `DragValue` with its caption via
+                    // `labelled_by`, so the spin button carries the caption as
+                    // its accessibility / UI-Automation Name (egui clears a
+                    // DragValue's own Name, leaving it anonymous to a screen
+                    // reader / AI driver otherwise); the hover text mirrors the
+                    // caption for a mouse user. Applied across every model arm.
                     match s.model {
                         PopModel::Sir => {
                             ui.label(egui::RichText::new("SIR epidemic").strong());
                             ui.horizontal(|ui| {
-                                ui.label("transmission β (/day)");
-                                ui.add(egui::DragValue::new(&mut s.sir_beta).speed(0.01));
+                                let lbl = ui.label("transmission β (/day)");
+                                ui.add(egui::DragValue::new(&mut s.sir_beta).speed(0.01))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("transmission β (/day)");
                             });
                             ui.horizontal(|ui| {
-                                ui.label("recovery γ (/day)");
-                                ui.add(egui::DragValue::new(&mut s.sir_gamma).speed(0.01));
+                                let lbl = ui.label("recovery γ (/day)");
+                                ui.add(egui::DragValue::new(&mut s.sir_gamma).speed(0.01))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("recovery γ (/day)");
                             });
                             ui.horizontal(|ui| {
-                                ui.label("population N");
-                                ui.add(egui::DragValue::new(&mut s.sir_n).speed(10.0));
+                                let lbl = ui.label("population N");
+                                ui.add(egui::DragValue::new(&mut s.sir_n).speed(10.0))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("population N");
                             });
                             ui.horizontal(|ui| {
-                                ui.label("initial infectious I₀");
-                                ui.add(egui::DragValue::new(&mut s.sir_i0).speed(1.0));
+                                let lbl = ui.label("initial infectious I₀");
+                                ui.add(egui::DragValue::new(&mut s.sir_i0).speed(1.0))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("initial infectious I₀");
                             });
                         }
                         PopModel::Logistic => {
                             ui.label(egui::RichText::new("Logistic growth").strong());
                             ui.horizontal(|ui| {
-                                ui.label("growth rate r");
-                                ui.add(egui::DragValue::new(&mut s.log_r).speed(0.01));
+                                let lbl = ui.label("growth rate r");
+                                ui.add(egui::DragValue::new(&mut s.log_r).speed(0.01))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("growth rate r");
                             });
                             ui.horizontal(|ui| {
-                                ui.label("carrying capacity K");
-                                ui.add(egui::DragValue::new(&mut s.log_k).speed(10.0));
+                                let lbl = ui.label("carrying capacity K");
+                                ui.add(egui::DragValue::new(&mut s.log_k).speed(10.0))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("carrying capacity K");
                             });
                             ui.horizontal(|ui| {
-                                ui.label("initial N₀");
-                                ui.add(egui::DragValue::new(&mut s.log_n0).speed(1.0));
+                                let lbl = ui.label("initial N₀");
+                                ui.add(egui::DragValue::new(&mut s.log_n0).speed(1.0))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("initial N₀");
                             });
                             ui.horizontal(|ui| {
-                                ui.label("report at time t");
-                                ui.add(egui::DragValue::new(&mut s.log_t).speed(0.5));
+                                let lbl = ui.label("report at time t");
+                                ui.add(egui::DragValue::new(&mut s.log_t).speed(0.5))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("report at time t");
                             });
                         }
                         PopModel::LotkaVolterra => {
                             ui.label(egui::RichText::new("Predator-prey").strong());
                             ui.horizontal(|ui| {
-                                ui.label("prey birth α");
-                                ui.add(egui::DragValue::new(&mut s.lv_alpha).speed(0.01));
+                                let lbl = ui.label("prey birth α");
+                                ui.add(egui::DragValue::new(&mut s.lv_alpha).speed(0.01))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("prey birth α");
                             });
                             ui.horizontal(|ui| {
-                                ui.label("predation β");
-                                ui.add(egui::DragValue::new(&mut s.lv_beta).speed(0.005));
+                                let lbl = ui.label("predation β");
+                                ui.add(egui::DragValue::new(&mut s.lv_beta).speed(0.005))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("predation β");
                             });
                             ui.horizontal(|ui| {
-                                ui.label("predator death γ");
-                                ui.add(egui::DragValue::new(&mut s.lv_gamma).speed(0.01));
+                                let lbl = ui.label("predator death γ");
+                                ui.add(egui::DragValue::new(&mut s.lv_gamma).speed(0.01))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("predator death γ");
                             });
                             ui.horizontal(|ui| {
-                                ui.label("predator growth δ");
-                                ui.add(egui::DragValue::new(&mut s.lv_delta).speed(0.005));
+                                let lbl = ui.label("predator growth δ");
+                                ui.add(egui::DragValue::new(&mut s.lv_delta).speed(0.005))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("predator growth δ");
                             });
                             ui.horizontal(|ui| {
-                                ui.label("initial prey");
-                                ui.add(egui::DragValue::new(&mut s.lv_prey0).speed(1.0));
+                                let lbl = ui.label("initial prey");
+                                ui.add(egui::DragValue::new(&mut s.lv_prey0).speed(1.0))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("initial prey");
                             });
                             ui.horizontal(|ui| {
-                                ui.label("initial predator");
-                                ui.add(egui::DragValue::new(&mut s.lv_pred0).speed(1.0));
+                                let lbl = ui.label("initial predator");
+                                ui.add(egui::DragValue::new(&mut s.lv_pred0).speed(1.0))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("initial predator");
                             });
                         }
                     }
@@ -678,12 +712,28 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_popdynamics_workbench(app, ctx);
         });
+    }
+
+    /// As `draw_workbench`, but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_popdynamics_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -699,5 +749,47 @@ mod headless_ui_tests {
         app.show_popdynamics_workbench = true;
         run_popdynamics(&mut app.popdynamics);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // The default model is SIR, which shows four DragValues; each is a
+        // SpinButton that must be `labelled_by` its caption (egui clears a
+        // DragValue's own Name), so an AI / screen reader can find the control
+        // by the caption text. Only the SIR fields are counted — the Logistic
+        // and Lotka-Volterra fields are hidden behind a non-default selection.
+        let mut app = ValenxApp::default();
+        app.show_popdynamics_workbench = true;
+        assert_eq!(app.popdynamics.model, PopModel::Sir, "default model is SIR");
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // SIR shows transmission β, recovery γ, population N, initial I₀.
+        assert!(
+            spin_buttons.len() >= 4,
+            "expected the SIR numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every SIR DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["transmission β (/day)", "recovery γ (/day)", "population N"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        // The Analyze button stays a named, invokable node.
+        assert!(
+            nodes.iter().any(|(_, n)| n.role() == Role::Button
+                && n.name().is_some_and(|s| s.contains("Analyze"))),
+            "the Analyze button is a named, invokable node"
+        );
     }
 }

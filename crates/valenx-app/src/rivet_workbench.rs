@@ -108,17 +108,29 @@ pub fn draw_rivet_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Rivet group").strong());
+                    // Associate each numeric `DragValue` with its caption via
+                    // `labelled_by`, so the spin button carries the caption as
+                    // its accessibility / UI-Automation Name (egui clears a
+                    // DragValue's own Name, leaving it anonymous to a screen
+                    // reader / AI driver otherwise); the hover text mirrors the
+                    // caption for a mouse user.
                     ui.horizontal(|ui| {
-                        ui.label("diameter d (m)");
-                        ui.add(egui::DragValue::new(&mut s.diameter_m).speed(0.001));
+                        let lbl = ui.label("diameter d (m)");
+                        ui.add(egui::DragValue::new(&mut s.diameter_m).speed(0.001))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("diameter d (m)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("rivets per row");
-                        ui.add(egui::DragValue::new(&mut s.rivets_per_row).speed(1));
+                        let lbl = ui.label("rivets per row");
+                        ui.add(egui::DragValue::new(&mut s.rivets_per_row).speed(1))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("rivets per row");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("rows");
-                        ui.add(egui::DragValue::new(&mut s.rows).speed(1));
+                        let lbl = ui.label("rows");
+                        ui.add(egui::DragValue::new(&mut s.rows).speed(1))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("rows");
                     });
                     ui.horizontal(|ui| {
                         ui.label("shear planes s");
@@ -129,34 +141,46 @@ pub fn draw_rivet_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Plate").strong());
                     ui.horizontal(|ui| {
-                        ui.label("width w (m)");
-                        ui.add(egui::DragValue::new(&mut s.width_m).speed(0.005));
+                        let lbl = ui.label("width w (m)");
+                        ui.add(egui::DragValue::new(&mut s.width_m).speed(0.005))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("width w (m)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("thickness t (m)");
-                        ui.add(egui::DragValue::new(&mut s.thickness_m).speed(0.001));
+                        let lbl = ui.label("thickness t (m)");
+                        ui.add(egui::DragValue::new(&mut s.thickness_m).speed(0.001))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("thickness t (m)");
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Allowable stresses").strong());
                     ui.horizontal(|ui| {
-                        ui.label("shear τ (MPa)");
-                        ui.add(egui::DragValue::new(&mut s.shear_mpa).speed(1.0));
+                        let lbl = ui.label("shear τ (MPa)");
+                        ui.add(egui::DragValue::new(&mut s.shear_mpa).speed(1.0))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("shear τ (MPa)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("bearing σ_b (MPa)");
-                        ui.add(egui::DragValue::new(&mut s.bearing_mpa).speed(1.0));
+                        let lbl = ui.label("bearing σ_b (MPa)");
+                        ui.add(egui::DragValue::new(&mut s.bearing_mpa).speed(1.0))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("bearing σ_b (MPa)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("tension σ_t (MPa)");
-                        ui.add(egui::DragValue::new(&mut s.tension_mpa).speed(1.0));
+                        let lbl = ui.label("tension σ_t (MPa)");
+                        ui.add(egui::DragValue::new(&mut s.tension_mpa).speed(1.0))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("tension σ_t (MPa)");
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Applied load").strong());
                     ui.horizontal(|ui| {
-                        ui.label("service load P (kN)");
-                        ui.add(egui::DragValue::new(&mut s.applied_kn).speed(1.0));
+                        let lbl = ui.label("service load P (kN)");
+                        ui.add(egui::DragValue::new(&mut s.applied_kn).speed(1.0))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("service load P (kN)");
                     });
 
                     ui.add_space(6.0);
@@ -637,12 +661,28 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_rivet_workbench(app, ctx);
         });
+    }
+
+    /// As `draw_workbench`, but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_rivet_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -658,5 +698,46 @@ mod headless_ui_tests {
         app.show_rivet_workbench = true;
         run_rivet(&mut app.rivet);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // Every numeric DragValue is a SpinButton; each must be `labelled_by`
+        // its caption (egui clears a DragValue's own Name), so an AI / screen
+        // reader can find the control by the caption text. The rivet panel
+        // shows all of its fields unconditionally.
+        let mut app = ValenxApp::default();
+        app.show_rivet_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // diameter, rivets/row, rows, width, thickness, shear, bearing,
+        // tension, service load — all nine are always visible.
+        assert!(
+            spin_buttons.len() >= 9,
+            "expected the rivet numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every rivet DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["diameter d (m)", "width w (m)", "service load P (kN)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        // The Analyze button stays a named, invokable node.
+        assert!(
+            nodes.iter().any(|(_, n)| n.role() == Role::Button
+                && n.name().is_some_and(|s| s.contains("Analyze"))),
+            "the Analyze button is a named, invokable node"
+        );
     }
 }
