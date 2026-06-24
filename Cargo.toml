@@ -137,6 +137,11 @@ members = [
     "crates/valenx-reactdyn",
     "crates/valenx-neuro",
     "crates/valenx-vehicle",
+    # Defense M&S (M9 autonomy V&V, M1 UAS): simulated sensor models
+    # (LiDAR / camera / IMU / GPS) + a small autonomy step-harness that emits
+    # a SensorFrame per tick, for autonomy / RL testing. Analytic/graphics-grade
+    # models, not hardware-calibrated devices (clean-room, AirSim-inspired).
+    "crates/valenx-sensors",
     "crates/valenx-rail",
     "crates/valenx-mbd",
     "crates/valenx-muscle",
