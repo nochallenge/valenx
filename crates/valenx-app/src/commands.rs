@@ -255,6 +255,7 @@ fn tab_kind_id(kind: TabKind) -> String {
         TabKind::VariantEffect => "varianteffect",
         TabKind::Sensors => "sensors",
         TabKind::Fluids => "fluids",
+        TabKind::Ocean => "ocean",
     }
     .to_string()
 }

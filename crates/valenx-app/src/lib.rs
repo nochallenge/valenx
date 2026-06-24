@@ -166,6 +166,7 @@ pub mod piping_workbench;
 // -hemodynamics, -popdynamics as reactive right-side workbenches.
 pub mod fluids_workbench;
 pub mod hemodynamics_workbench;
+pub mod ocean_workbench;
 pub mod openchannel_workbench;
 pub mod osmosis_workbench;
 pub mod plate_workbench;
@@ -1986,6 +1987,15 @@ pub struct ValenxApp {
     /// Form + result state for the Fluids (SPH) workbench (particle simulation
     /// over the in-process `valenx-fluids` engine).
     pub fluids: crate::fluids_workbench::FluidsWorkbenchState,
+
+    /// Whether the right-side Ocean workbench panel is visible. Defaults to
+    /// `false`; toggled from the View menu or opened by the agent bridge under
+    /// the id `"ocean"`. Wraps `valenx-ocean` (Gerstner wave field + quasi-static
+    /// Archimedes buoyancy). See [`crate::ocean_workbench`].
+    pub show_ocean_workbench: bool,
+    /// Form + result state for the Ocean workbench (wave-height profile +
+    /// floating-body settle over the in-process `valenx-ocean` engine).
+    pub ocean: crate::ocean_workbench::OceanWorkbenchState,
 
     /// Whether the right-side Assistant activity sidebar is visible. On by
     /// default (set in [`ValenxApp::new`]) so the app narrates its own work
