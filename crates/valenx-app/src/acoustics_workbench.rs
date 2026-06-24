@@ -104,43 +104,64 @@ pub fn draw_acoustics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Room").strong());
+                    // Associate each numeric `DragValue` with its caption via
+                    // `labelled_by`, so the spin button carries the caption as
+                    // its accessibility / UI-Automation Name (egui clears a
+                    // DragValue's own Name, leaving it anonymous to a screen
+                    // reader / AI driver otherwise).
                     ui.horizontal(|ui| {
-                        ui.label("Lx (m)");
-                        ui.add(egui::DragValue::new(&mut s.length_x_m).speed(0.1));
+                        let lx = ui.label("Lx (m)");
+                        ui.add(egui::DragValue::new(&mut s.length_x_m).speed(0.1))
+                            .labelled_by(lx.id)
+                            .on_hover_text("Room length Lx (m)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Ly (m)");
-                        ui.add(egui::DragValue::new(&mut s.length_y_m).speed(0.1));
+                        let ly = ui.label("Ly (m)");
+                        ui.add(egui::DragValue::new(&mut s.length_y_m).speed(0.1))
+                            .labelled_by(ly.id)
+                            .on_hover_text("Room width Ly (m)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Lz height (m)");
-                        ui.add(egui::DragValue::new(&mut s.length_z_m).speed(0.1));
+                        let lz = ui.label("Lz height (m)");
+                        ui.add(egui::DragValue::new(&mut s.length_z_m).speed(0.1))
+                            .labelled_by(lz.id)
+                            .on_hover_text("Room height Lz (m)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("absorption ᾱ");
-                        ui.add(egui::DragValue::new(&mut s.absorption).speed(0.005));
+                        let ab = ui.label("absorption ᾱ");
+                        ui.add(egui::DragValue::new(&mut s.absorption).speed(0.005))
+                            .labelled_by(ab.id)
+                            .on_hover_text("Average surface absorption coefficient ᾱ");
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Air").strong());
                     ui.horizontal(|ui| {
-                        ui.label("temperature (°C)");
-                        ui.add(egui::DragValue::new(&mut s.temperature_c).speed(0.5));
+                        let tc = ui.label("temperature (°C)");
+                        ui.add(egui::DragValue::new(&mut s.temperature_c).speed(0.5))
+                            .labelled_by(tc.id)
+                            .on_hover_text("Air temperature (°C) — sets the speed of sound");
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Source / listener").strong());
                     ui.horizontal(|ui| {
-                        ui.label("source level (dB)");
-                        ui.add(egui::DragValue::new(&mut s.source_db).speed(0.5));
+                        let sd = ui.label("source level (dB)");
+                        ui.add(egui::DragValue::new(&mut s.source_db).speed(0.5))
+                            .labelled_by(sd.id)
+                            .on_hover_text("Source sound level (dB) at the reference distance");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("at distance (m)");
-                        ui.add(egui::DragValue::new(&mut s.ref_distance_m).speed(0.1));
+                        let rd = ui.label("at distance (m)");
+                        ui.add(egui::DragValue::new(&mut s.ref_distance_m).speed(0.1))
+                            .labelled_by(rd.id)
+                            .on_hover_text("Reference distance at which the source level is given (m)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("listener distance (m)");
-                        ui.add(egui::DragValue::new(&mut s.listener_distance_m).speed(0.1));
+                        let li = ui.label("listener distance (m)");
+                        ui.add(egui::DragValue::new(&mut s.listener_distance_m).speed(0.1))
+                            .labelled_by(li.id)
+                            .on_hover_text("Listener distance from the source (m)");
                     });
 
                     ui.add_space(6.0);
@@ -510,12 +531,28 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_acoustics_workbench(app, ctx);
         });
+    }
+
+    /// As [`draw_workbench`], but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_acoustics_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -531,5 +568,45 @@ mod headless_ui_tests {
         app.show_acoustics_workbench = true;
         run_acoustics(&mut app.acoustics);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // The room + air + source/listener DragValues are SpinButtons; each
+        // must be `labelled_by` its caption (egui clears a DragValue's own
+        // Name), so an AI / screen reader can find the control by the caption.
+        let mut app = ValenxApp::default();
+        app.show_acoustics_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // Lx, Ly, Lz, absorption, temperature, source level, ref distance,
+        // listener distance.
+        assert!(
+            spin_buttons.len() >= 8,
+            "expected the acoustics numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every acoustics DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["Lx (m)", "absorption ᾱ", "listener distance (m)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        // The Analyze button stays a named, invokable node.
+        assert!(
+            nodes.iter().any(|(_, n)| n.role() == Role::Button
+                && n.name().is_some_and(|s| s.contains("Analyze"))),
+            "the Analyze button is a named, invokable node"
+        );
     }
 }
