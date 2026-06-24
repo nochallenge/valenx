@@ -88,6 +88,17 @@
 //!   the solver can march a structure's transient vibration. A
 //!   single-DOF spring-mass oscillator reproduces its analytic natural
 //!   period. See [`dynamics::solve_transient_dynamics`].
+//! - **Blast / shock survivability** ([`transient`]). A *defensive*
+//!   structural-response screen: the same **Newmark-β** integrator run on
+//!   caller-**supplied** `M`/`C`/`K` matrices (an SDOF or small MDOF
+//!   reduced model — it assembles nothing from a mesh), driven by a
+//!   **time-varying** load such as the idealized **Friedlander** blast
+//!   overpressure pulse. Reports peak displacement, peak acceleration, and
+//!   the dynamic amplification factor — the protection-design question
+//!   "how does a structure survive a transient load?". Linear-elastic
+//!   small-deflection only, so it is a survivability *screen*, not a
+//!   nonlinear hydrocode. See [`transient::solve_transient_response`] and
+//!   [`transient::solve_sdof_blast`].
 //! - **Linear buckling** ([`buckling`]). **Eigenvalue buckling** — a
 //!   **geometric (stress) stiffness** matrix assembled from a reference
 //!   linear-static stress state, and the generalised eigenproblem
@@ -141,6 +152,7 @@ pub mod solver;
 pub mod stress_invariants;
 pub mod thermal_solver;
 pub mod thermal_transient;
+pub mod transient;
 pub mod validation;
 
 pub use analysis::{FemAnalysis, FemAnalysisError};
@@ -232,4 +244,9 @@ pub use thermal_solver::{
 };
 pub use thermal_transient::{
     lumped_capacitance, solve_transient_thermal, TransientThermalError, TransientThermalSolution,
+};
+pub use transient::{
+    rayleigh_damping_matrix, sdof_natural_frequency, sdof_natural_period, solve_sdof_blast,
+    solve_transient_response, FriedlanderPulse, NewmarkBeta, SurvivabilityError, TransientControls,
+    TransientResponse, MAX_TIME_STEPS as TRANSIENT_MAX_TIME_STEPS,
 };
