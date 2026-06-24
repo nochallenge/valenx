@@ -8039,6 +8039,7 @@ dependencies = [
  "valenx-rocket-demo",
  "valenx-rotor",
  "valenx-screwthread",
+ "valenx-sensors",
  "valenx-shaftdesign",
  "valenx-sheet-metal",
  "valenx-sketch",
