@@ -270,6 +270,7 @@ members = [
     "crates/valenx-codon-optimize",
     "crates/valenx-epitope-map",
     "crates/valenx-binder-score",
+    "crates/valenx-ppi",
     "crates/valenx-rom",
     "crates/valenx-fm-registry",
     "crates/valenx-lrp5",

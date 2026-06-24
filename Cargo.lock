@@ -8810,6 +8810,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-ppi"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "nalgebra",
+ "thiserror 2.0.18",
+ "valenx-align",
+ "valenx-binder-score",
+ "valenx-biostruct",
+ "valenx-dock",
+]
+
+[[package]]
 name = "valenx-pressure-vessel"
 version = "0.1.0-alpha.1"
 dependencies = [
