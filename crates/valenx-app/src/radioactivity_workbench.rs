@@ -85,20 +85,28 @@ pub fn draw_radioactivity_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Nuclide").strong());
+                    // Associate each numeric `DragValue` with its caption via
+                    // `labelled_by`, so the spin button carries the caption as
+                    // its accessibility / UI-Automation Name (egui clears a
+                    // DragValue's own Name, leaving it anonymous to a screen
+                    // reader / AI driver otherwise).
                     ui.horizontal(|ui| {
-                        ui.label("half-life t½ (time)");
-                        ui.add(egui::DragValue::new(&mut s.half_life).speed(0.1));
+                        let cap = ui.label("half-life t½ (time)");
+                        ui.add(egui::DragValue::new(&mut s.half_life).speed(0.1))
+                            .labelled_by(cap.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Sample").strong());
                     ui.horizontal(|ui| {
-                        ui.label("initial N₀ (nuclei)");
-                        ui.add(egui::DragValue::new(&mut s.n0).speed(1.0e4));
+                        let cap = ui.label("initial N₀ (nuclei)");
+                        ui.add(egui::DragValue::new(&mut s.n0).speed(1.0e4))
+                            .labelled_by(cap.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("elapsed t (time)");
-                        ui.add(egui::DragValue::new(&mut s.elapsed).speed(0.1));
+                        let cap = ui.label("elapsed t (time)");
+                        ui.add(egui::DragValue::new(&mut s.elapsed).speed(0.1))
+                            .labelled_by(cap.id);
                     });
 
                     ui.add_space(6.0);
@@ -403,5 +411,50 @@ mod headless_ui_tests {
         app.show_radioactivity_workbench = true;
         run_radioactivity(&mut app.radioactivity);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::{Node, NodeId, Role};
+
+        // Render with accesskit enabled and read the emitted a11y tree — the
+        // same tree a screen reader / AI UI-Automation driver consumes.
+        let mut app = ValenxApp::default();
+        app.show_radioactivity_workbench = true;
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_radioactivity_workbench(&mut app, ctx);
+        });
+        let nodes: Vec<(NodeId, Node)> = out
+            .platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes;
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 3,
+            "expected the radioactivity numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every radioactivity DragValue must be labelled_by its caption"
+        );
+        for caption in [
+            "half-life t½ (time)",
+            "initial N₀ (nuclei)",
+            "elapsed t (time)",
+        ] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

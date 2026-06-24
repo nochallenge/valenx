@@ -2518,13 +2518,17 @@ fn draw_sketch_canvas(s: &mut CadWorkbenchState, ui: &mut egui::Ui) {
         .monospace(),
     );
     ui.horizontal(|ui| {
-        ui.label("Extrude height");
+        // Associate the DragValue with its caption via `labelled_by`, so the
+        // spin button is named for a screen reader / AI driver (egui clears a
+        // DragValue's own Name).
+        let cap = ui.label("Extrude height");
         ui.add(
             egui::DragValue::new(&mut s.sketch_extrude_height)
                 .speed(0.1)
                 .range(0.01..=1.0e6)
                 .suffix(" u"),
-        );
+        )
+        .labelled_by(cap.id);
     });
     // A profile encloses area once its tessellated polyline has ≥3 points; arcs
     // and splines reach that with as few as 2 anchors.
@@ -2637,7 +2641,10 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     // ---- Material: density → mass readout ----
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
-                        ui.label("Material density").on_hover_text(
+                        // Associate the DragValue with its caption via
+                        // `labelled_by` so it is named for a screen reader / AI
+                        // driver (egui clears a DragValue's own Name).
+                        let cap = ui.label("Material density").on_hover_text(
                             "Mass per unit volume; the rebuild status shows \
                              mass = density × solid volume.",
                         );
@@ -2646,7 +2653,8 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                 .speed(0.1)
                                 .range(0.0..=1.0e9)
                                 .suffix(" /u³"),
-                        );
+                        )
+                        .labelled_by(cap.id);
                     });
 
                     // ---- Sketch: parameter-driven circle radius ----
@@ -2812,16 +2820,25 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                     let mut rm_pt: Option<usize> = None;
                                     for (j, pt) in st.profile.iter_mut().enumerate() {
                                         ui.horizontal(|ui| {
+                                            // Per-point captions associated via
+                                            // `labelled_by` so each profile
+                                            // spin button is uniquely named for
+                                            // a screen reader / AI driver (egui
+                                            // clears a DragValue's own Name).
+                                            let xcap = ui.label(format!("P{j} x"));
                                             ui.add(
                                                 egui::DragValue::new(&mut pt.0)
                                                     .speed(0.1)
                                                     .prefix("x "),
-                                            );
+                                            )
+                                            .labelled_by(xcap.id);
+                                            let ycap = ui.label(format!("P{j} y"));
                                             ui.add(
                                                 egui::DragValue::new(&mut pt.1)
                                                     .speed(0.1)
                                                     .prefix("y "),
-                                            );
+                                            )
+                                            .labelled_by(ycap.id);
                                             if ui.small_button("✕").clicked() {
                                                 rm_pt = Some(j);
                                             }
@@ -2851,17 +2868,26 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                     let mut rm_pt: Option<usize> = None;
                                     for (j, pt) in st.profile.iter_mut().enumerate() {
                                         ui.horizontal(|ui| {
+                                            // Per-point captions associated via
+                                            // `labelled_by` so each half-section
+                                            // spin button is uniquely named for
+                                            // a screen reader / AI driver (egui
+                                            // clears a DragValue's own Name).
+                                            let rcap = ui.label(format!("P{j} r"));
                                             ui.add(
                                                 egui::DragValue::new(&mut pt.0)
                                                     .speed(0.1)
                                                     .prefix("r ")
                                                     .range(0.0..=f64::INFINITY),
-                                            );
+                                            )
+                                            .labelled_by(rcap.id);
+                                            let zcap = ui.label(format!("P{j} z"));
                                             ui.add(
                                                 egui::DragValue::new(&mut pt.1)
                                                     .speed(0.1)
                                                     .prefix("z "),
-                                            );
+                                            )
+                                            .labelled_by(zcap.id);
                                             if ui.small_button("✕").clicked() {
                                                 rm_pt = Some(j);
                                             }
@@ -5480,5 +5506,101 @@ mod tests {
             "binary STL = 80B header + 4B count + triangles ({len} B)"
         );
         let _ = std::fs::remove_file(&path);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
+mod headless_ui_tests {
+    use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
+
+    /// Draw the whole CAD panel once with accesskit enabled and return the
+    /// emitted accessibility tree — the same tree a screen reader / AI
+    /// UI-Automation driver consumes. `accesskit` is re-exported by egui, so no
+    /// extra dependency is needed.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_cad_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
+    }
+
+    fn has_named_node(nodes: &[(NodeId, Node)], name: &str) -> bool {
+        nodes.iter().any(|(_, n)| n.name() == Some(name))
+    }
+
+    #[test]
+    fn workbench_is_a_noop_when_hidden() {
+        let mut app = ValenxApp::default();
+        assert!(!app.show_cad_workbench);
+        let _ = draw_and_collect_nodes(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // (1) Default panel: the always-visible standalone DragValues (sketch
+        // extrude height + material density) must be associated with their
+        // captions — egui clears a DragValue's own Name, so without
+        // `labelled_by` they are anonymous to a screen reader / AI driver.
+        let mut app = ValenxApp::default();
+        app.show_cad_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 2,
+            "expected the standalone CAD numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every CAD DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+        for caption in ["Extrude height", "Material density"] {
+            assert!(
+                has_named_node(&nodes, caption),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+
+        // (2) A feature tree containing an Extrude step renders the per-point
+        // profile-edit loop, whose x/y spin buttons live inside a `for` and are
+        // captioned per point (`P{j} x` / `P{j} y`). Verify those, too, are all
+        // named — the loop-gated case the prompt called out.
+        let mut app = ValenxApp::default();
+        app.show_cad_workbench = true;
+        app.cad.steps = vec![UiStep::new_extrude()];
+        let nodes = draw_and_collect_nodes(&mut app);
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // standalone (2) + a 4-point Extrude profile (4 × x,y = 8) = 10.
+        assert!(
+            spin_buttons.len() >= 10,
+            "expected the Extrude profile-loop spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every CAD profile-loop DragValue must be labelled_by its per-point caption"
+        );
+        for caption in ["P0 x", "P0 y"] {
+            assert!(
+                has_named_node(&nodes, caption),
+                "per-point caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

@@ -115,16 +115,24 @@ pub fn draw_collision_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
 /// Render a labelled `min` row and `max` row of three `DragValue`s for one box.
 fn corner_rows(ui: &mut egui::Ui, label: &str, min: &mut [f64; 3], max: &mut [f64; 3]) {
     ui.label(egui::RichText::new(format!("{label} (min / max corners)")).strong());
+    // Each x/y/z component is captioned and associated via `labelled_by`, so
+    // the spin button is named for a screen reader / AI driver (egui clears a
+    // DragValue's own Name). The min/max prefix keeps the two rows distinct.
+    const AXES: [&str; 3] = ["x", "y", "z"];
     ui.horizontal(|ui| {
         ui.label("min");
-        for v in min.iter_mut() {
-            ui.add(egui::DragValue::new(v).speed(0.5));
+        for (i, v) in min.iter_mut().enumerate() {
+            let cap = ui.label(AXES[i]);
+            ui.add(egui::DragValue::new(v).speed(0.5))
+                .labelled_by(cap.id);
         }
     });
     ui.horizontal(|ui| {
         ui.label("max");
-        for v in max.iter_mut() {
-            ui.add(egui::DragValue::new(v).speed(0.5));
+        for (i, v) in max.iter_mut().enumerate() {
+            let cap = ui.label(AXES[i]);
+            ui.add(egui::DragValue::new(v).speed(0.5))
+                .labelled_by(cap.id);
         }
     });
 }
@@ -459,5 +467,50 @@ mod headless_ui_tests {
         run_collision(&mut app.collision);
         app.collision.error = Some("invalid box".to_string());
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::{Node, NodeId, Role};
+
+        // Render with accesskit enabled and read the emitted a11y tree — the
+        // same tree a screen reader / AI UI-Automation driver consumes. Every
+        // DragValue (Role::SpinButton) must carry a caption via `labelled_by`,
+        // since egui clears a DragValue's own Name.
+        let mut app = ValenxApp::default();
+        app.show_collision_workbench = true;
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_collision_workbench(&mut app, ctx);
+        });
+        let nodes: Vec<(NodeId, Node)> = out
+            .platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes;
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // Box A + Box B, each a min(x,y,z) and max(x,y,z) row = 12 spin buttons.
+        assert!(
+            spin_buttons.len() >= 12,
+            "expected the collision numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every collision DragValue must be labelled_by its caption"
+        );
+        // The per-axis captions are present as named nodes.
+        for caption in ["x", "y", "z", "min", "max"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

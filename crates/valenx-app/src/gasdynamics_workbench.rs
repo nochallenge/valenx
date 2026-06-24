@@ -213,15 +213,17 @@ pub fn draw_gasdynamics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.label(egui::RichText::new("Inputs").strong());
                     let mut changed = false;
                     ui.horizontal(|ui| {
-                        ui.label("Mach M");
+                        let cap = ui.label("Mach M");
                         changed |= ui
                             .add(egui::DragValue::new(&mut s.mach).speed(0.01))
+                            .labelled_by(cap.id)
                             .changed();
                     });
                     ui.horizontal(|ui| {
-                        ui.label("gamma");
+                        let cap = ui.label("gamma");
                         changed |= ui
                             .add(egui::DragValue::new(&mut s.gamma).speed(0.005))
+                            .labelled_by(cap.id)
                             .changed();
                     });
 
@@ -440,5 +442,44 @@ mod headless_ui_tests {
         app.show_gasdynamics_workbench = true;
         app.gasdynamics.gamma = 1.0; // invalid → error path
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::{Node, NodeId, Role};
+
+        let mut app = ValenxApp::default();
+        app.show_gasdynamics_workbench = true;
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_gasdynamics_workbench(&mut app, ctx);
+        });
+        let nodes: Vec<(NodeId, Node)> = out
+            .platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes;
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 2,
+            "expected the gasdynamics numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every gasdynamics DragValue must be labelled_by its caption"
+        );
+        for caption in ["Mach M", "gamma"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }
