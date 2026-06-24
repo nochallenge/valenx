@@ -113,6 +113,30 @@ pub enum FmiError {
         /// Human-readable detail of exactly what went wrong.
         message: String,
     },
+
+    /// The implicit (iterative) coupling solver did not converge within the
+    /// allowed number of iterations. Returned by
+    /// [`crate::implicit::coupled_step`] when the fixed-point loop exhausts
+    /// `max_iter` without the infinity-norm of the residual falling below
+    /// `tol`. Also returned when a subsystem produces a non-finite output
+    /// (NaN / Inf) mid-iteration.
+    #[error(
+        "implicit coupling did not converge after {iterations} iterations \
+         (‖Δy‖_∞ = {final_residual:.3e}): {reason}"
+    )]
+    NotConverged {
+        /// Number of iterations performed before giving up.
+        iterations: usize,
+        /// Infinity-norm of the residual at the last iteration.
+        final_residual: f64,
+        /// Human-readable reason (scheme, tolerance, etc.).
+        reason: String,
+    },
+
+    /// A configuration error in [`crate::implicit::coupled_step`]: invalid
+    /// `tol`, `max_iter`, `dt`, or relaxation parameter.
+    #[error("coupled_step configuration error: {0}")]
+    BadCoupledStep(String),
 }
 
 /// Convenience result alias for this crate.
