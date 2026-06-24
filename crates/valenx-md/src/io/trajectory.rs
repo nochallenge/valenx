@@ -23,9 +23,22 @@
 use nalgebra::Vector3;
 
 use crate::error::{MdError, Result};
+use crate::pbc::SimBox;
 use crate::system::System;
 
 /// An in-memory trajectory: a sequence of coordinate frames.
+///
+/// Every frame holds the same number of atoms ([`Trajectory::n_atoms`]).
+/// Two kinds of timing metadata coexist:
+///
+/// - [`dt`](Trajectory::dt) — a single nominal spacing between frames
+///   (ps), set at construction and used by the dependency-free binary /
+///   framed-text writers.
+/// - **per-frame** simulation time ([`frame_time`](Trajectory::frame_time))
+///   and box ([`frame_box`](Trajectory::frame_box)) — optional, populated
+///   by readers (e.g. [`crate::io::trr`]) that carry richer per-frame
+///   metadata. These parallel arrays stay length-locked to `frames`; a
+///   frame appended without metadata records `None`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Trajectory {
     /// Number of atoms in every frame.
@@ -34,6 +47,10 @@ pub struct Trajectory {
     dt: f64,
     /// The frames, in order; each is `natoms` positions (nm).
     frames: Vec<Vec<Vector3<f64>>>,
+    /// Optional per-frame simulation time (ps); same length as `frames`.
+    times: Vec<Option<f64>>,
+    /// Optional per-frame simulation box; same length as `frames`.
+    boxes: Vec<Option<SimBox>>,
 }
 
 impl Trajectory {
@@ -54,11 +71,21 @@ impl Trajectory {
             natoms,
             dt,
             frames: Vec::new(),
+            times: Vec::new(),
+            boxes: Vec::new(),
         })
     }
 
     /// Number of atoms per frame.
     pub fn natoms(&self) -> usize {
+        self.natoms
+    }
+
+    /// Number of atoms per frame.
+    ///
+    /// Synonym for [`natoms`](Self::natoms), matching the accessor name
+    /// used across the sibling viewer / loader APIs.
+    pub fn n_atoms(&self) -> usize {
         self.natoms
     }
 
@@ -87,12 +114,31 @@ impl Trajectory {
         self.frames.get(index).map(|f| f.as_slice())
     }
 
-    /// Appends a frame.
+    /// Appends a frame with no per-frame time / box metadata.
     ///
     /// # Errors
     /// [`MdError::DimensionMismatch`] if the frame's atom count does
     /// not match the trajectory.
     pub fn push_frame(&mut self, frame: Vec<Vector3<f64>>) -> Result<()> {
+        self.push_frame_with(frame, None, None)
+    }
+
+    /// Appends a frame carrying optional per-frame simulation `time`
+    /// (ps) and `cell`.
+    ///
+    /// The parallel time / box arrays stay length-locked to the frame
+    /// list, so [`frame_time`](Self::frame_time) and
+    /// [`frame_box`](Self::frame_box) are valid for every stored frame.
+    ///
+    /// # Errors
+    /// [`MdError::DimensionMismatch`] if the frame's atom count does
+    /// not match the trajectory.
+    pub fn push_frame_with(
+        &mut self,
+        frame: Vec<Vector3<f64>>,
+        time: Option<f64>,
+        cell: Option<SimBox>,
+    ) -> Result<()> {
         if frame.len() != self.natoms {
             return Err(MdError::dimension(format!(
                 "frame has {} atoms, trajectory expects {}",
@@ -101,15 +147,34 @@ impl Trajectory {
             )));
         }
         self.frames.push(frame);
+        self.times.push(time);
+        self.boxes.push(cell);
         Ok(())
     }
 
-    /// Appends the current positions of a [`System`] as a frame.
+    /// Appends the current positions of a [`System`] as a frame
+    /// (no time / box metadata).
     ///
     /// # Errors
     /// [`MdError::DimensionMismatch`] on an atom-count mismatch.
     pub fn push_system(&mut self, system: &System) -> Result<()> {
         self.push_frame(system.positions.clone())
+    }
+
+    /// The simulation time (ps) recorded for frame `index`, if any.
+    ///
+    /// Returns `None` both when `index` is out of range and when the
+    /// frame was stored without a time stamp.
+    pub fn frame_time(&self, index: usize) -> Option<f64> {
+        self.times.get(index).copied().flatten()
+    }
+
+    /// The simulation box recorded for frame `index`, if any.
+    ///
+    /// Returns `None` both when `index` is out of range and when the
+    /// frame was stored without box metadata.
+    pub fn frame_box(&self, index: usize) -> Option<&SimBox> {
+        self.boxes.get(index).and_then(|b| b.as_ref())
     }
 }
 
@@ -441,6 +506,46 @@ mod tests {
         // Wrong-length frame.
         let bad = "# natoms=3 dt=0.001\nFRAME 0\n1 2 3\n4 5 6\n";
         assert!(read_text(bad).is_err());
+    }
+
+    #[test]
+    fn accessors_are_consistent() {
+        let traj = sample_trajectory();
+        // `n_atoms` mirrors `natoms`.
+        assert_eq!(traj.n_atoms(), traj.natoms());
+        assert_eq!(traj.n_atoms(), 3);
+        assert_eq!(traj.len(), 5);
+        // In-range frames resolve; out-of-range yields None.
+        assert!(traj.frame(0).is_some());
+        assert!(traj.frame(4).is_some());
+        assert!(traj.frame(5).is_none());
+        assert!(traj.frame(usize::MAX).is_none());
+        // Frames stored without metadata report None for time / box.
+        assert_eq!(traj.frame_time(0), None);
+        assert!(traj.frame_box(0).is_none());
+    }
+
+    #[test]
+    fn per_frame_metadata_round_trips_in_memory() {
+        let mut traj = Trajectory::new(2, 0.001).unwrap();
+        let cell = SimBox::cubic(3.5).unwrap();
+        traj.push_frame_with(
+            vec![Vector3::zeros(), Vector3::new(1.0, 0.0, 0.0)],
+            Some(0.25),
+            Some(cell.clone()),
+        )
+        .unwrap();
+        // A frame with no metadata interleaves cleanly.
+        traj.push_frame(vec![Vector3::zeros(), Vector3::new(1.0, 0.0, 0.0)])
+            .unwrap();
+        assert_eq!(traj.len(), 2);
+        assert_eq!(traj.frame_time(0), Some(0.25));
+        assert_eq!(traj.frame_box(0), Some(&cell));
+        assert_eq!(traj.frame_time(1), None);
+        assert!(traj.frame_box(1).is_none());
+        // Out-of-range metadata lookups are None, never a panic.
+        assert_eq!(traj.frame_time(99), None);
+        assert!(traj.frame_box(99).is_none());
     }
 
     #[test]
