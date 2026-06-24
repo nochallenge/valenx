@@ -65,6 +65,7 @@ pub mod dis;
 pub mod error;
 pub mod federation;
 pub mod fmi;
+pub mod implicit;
 
 #[cfg(feature = "binary-fmu")]
 pub mod binary;
@@ -77,6 +78,7 @@ pub use federation::{
     Message, SubsystemFederate, Time, TimePolicy, Value,
 };
 pub use fmi::{Causality, ModelDescription, ScalarVariable};
+pub use implicit::{coupled_step, CoupledStepResult, ImplicitScheme, Relaxation};
 
 #[cfg(test)]
 mod spring_damper_validation {
