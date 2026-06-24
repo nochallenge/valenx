@@ -198,6 +198,7 @@ pub mod retainingwall_workbench;
 pub mod rivet_workbench;
 pub mod rocket_mesh;
 pub mod rocket_workbench;
+pub mod rom_workbench;
 pub mod rotor_workbench;
 pub mod run;
 pub mod scene_overlay;
@@ -1997,6 +1998,15 @@ pub struct ValenxApp {
     /// Form + result state for the Ocean workbench (wave-height profile +
     /// floating-body settle over the in-process `valenx-ocean` engine).
     pub ocean: crate::ocean_workbench::OceanWorkbenchState,
+
+    /// Whether the right-side ROM (reduced-order model) workbench panel is
+    /// visible. Defaults to `false`; toggled from the View menu or opened by the
+    /// agent bridge under the id `"rom"`. Wraps `valenx-rom` (POD / DMD / DEIM).
+    /// See [`crate::rom_workbench`].
+    pub show_rom_workbench: bool,
+    /// Form + result state for the ROM workbench (POD energy spectrum +
+    /// snapshot reconstruction over the in-process `valenx-rom` engine).
+    pub rom: crate::rom_workbench::RomWorkbenchState,
 
     /// Whether the right-side Autonomy V&V workbench panel is visible. Defaults
     /// to `false`; toggled from the View menu or opened by the agent bridge

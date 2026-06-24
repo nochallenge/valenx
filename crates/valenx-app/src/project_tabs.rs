@@ -236,6 +236,8 @@ pub enum TabKind {
     Fluids,
     // -- Ocean --
     Ocean,
+    // -- Reduced-order modelling --
+    Rom,
     // -- Autonomy --
     Autonomy,
 }
@@ -243,7 +245,7 @@ pub enum TabKind {
 impl TabKind {
     /// Every *template* kind (i.e. excluding [`TabKind::Blank`]), in
     /// `＋ from template`-menu order (grouped via [`Self::group`]).
-    pub const TEMPLATES: [TabKind; 35] = [
+    pub const TEMPLATES: [TabKind; 36] = [
         TabKind::Rocket,
         TabKind::Engine,
         TabKind::Astro,
@@ -278,6 +280,7 @@ impl TabKind {
         TabKind::Sensors,
         TabKind::Fluids,
         TabKind::Ocean,
+        TabKind::Rom,
         TabKind::Autonomy,
     ];
 
@@ -316,6 +319,7 @@ impl TabKind {
             TabKind::Autonomy => "Sensors",
             TabKind::Fluids => "Simulation",
             TabKind::Ocean => "Simulation",
+            TabKind::Rom => "Simulation",
         }
     }
 
@@ -358,6 +362,7 @@ impl TabKind {
             TabKind::Autonomy => "Autonomy V&V",
             TabKind::Fluids => "Fluids (SPH particle sim)",
             TabKind::Ocean => "Ocean (waves + buoyancy)",
+            TabKind::Rom => "Reduced-order model (POD)",
         }
     }
 
@@ -402,6 +407,7 @@ impl TabKind {
             TabKind::Autonomy => app.show_autonomy_workbench = true,
             TabKind::Fluids => app.show_fluids_workbench = true,
             TabKind::Ocean => app.show_ocean_workbench = true,
+            TabKind::Rom => app.show_rom_workbench = true,
         }
     }
 
@@ -452,6 +458,7 @@ impl TabKind {
             "autonomy" | "vnv" => Some(TabKind::Autonomy),
             "fluids" | "sph" => Some(TabKind::Fluids),
             "ocean" | "waves" => Some(TabKind::Ocean),
+            "rom" | "pod" => Some(TabKind::Rom),
             _ => None,
         }
     }
@@ -1199,6 +1206,8 @@ pub const ALL_WORKBENCH_KINDS: &[&str] = &[
     "fluids",
     // Native Gerstner ocean wave field + buoyancy — surfaced by the Ocean workbench.
     "ocean",
+    // Native reduced-order modelling (POD / DMD / DEIM) — surfaced by the ROM workbench.
+    "rom",
     // The Mesh Toolbox is gated on `show_mesh_toolbox` (a `_toolbox`, not a
     // `_workbench`, field) but behaves like a per-tab workbench, so it is
     // mappable here under the same id the agent registry / `TabKind::from_id`
@@ -1360,6 +1369,7 @@ pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
         "autonomy" | "vnv" => app.show_autonomy_workbench = on,
         "fluids" | "sph" => app.show_fluids_workbench = on,
         "ocean" | "waves" => app.show_ocean_workbench = on,
+        "rom" | "pod" => app.show_rom_workbench = on,
         // Mesh Toolbox (a `_toolbox` flag, mapped here for parity).
         "mesh" | "meshtoolbox" => app.show_mesh_toolbox = on,
         // Unknown kind: no-op — a stale/hostile registry string is ignored.
@@ -1416,6 +1426,7 @@ fn clear_all_workbenches(app: &mut ValenxApp) {
     app.show_autonomy_workbench = false;
     app.show_fluids_workbench = false;
     app.show_ocean_workbench = false;
+    app.show_rom_workbench = false;
 }
 
 /// Reconcile the visible workbench + central viewport with the active
@@ -2908,6 +2919,7 @@ mod tests {
             ("autonomy", TabKind::Autonomy),
             ("fluids", TabKind::Fluids),
             ("ocean", TabKind::Ocean),
+            ("rom", TabKind::Rom),
         ];
         // Every TEMPLATES kind is covered by the canonical table above.
         assert_eq!(canonical.len(), TabKind::TEMPLATES.len());
@@ -4321,6 +4333,7 @@ mod tests {
             app.show_autonomy_workbench,
             app.show_fluids_workbench,
             app.show_ocean_workbench,
+            app.show_rom_workbench,
         ]
         .into_iter()
         .filter(|&b| b)
@@ -4374,6 +4387,7 @@ mod tests {
             TabKind::Autonomy => crate::autonomy_workbench::draw_autonomy_workbench(app, ctx),
             TabKind::Fluids => crate::fluids_workbench::draw_fluids_workbench(app, ctx),
             TabKind::Ocean => crate::ocean_workbench::draw_ocean_workbench(app, ctx),
+            TabKind::Rom => crate::rom_workbench::draw_rom_workbench(app, ctx),
         });
     }
 

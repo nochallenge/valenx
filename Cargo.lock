@@ -8040,6 +8040,7 @@ dependencies = [
  "valenx-rnadesign",
  "valenx-rnastruct",
  "valenx-rocket-demo",
+ "valenx-rom",
  "valenx-rotor",
  "valenx-screwthread",
  "valenx-sensors",

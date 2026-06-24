@@ -1562,6 +1562,19 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side ROM workbench (valenx-rom).
+                    if ui
+                        .checkbox(&mut self.show_rom_workbench, "Reduced-order model (POD)")
+                        .on_hover_text(
+                            "Show / hide the ROM Workbench — native reduced-order modelling \
+                             (Proper Orthogonal Decomposition: energy-optimal SVD basis of a \
+                             synthetic parametric field) computed in-process by valenx-rom. \
+                             Research / educational — exact SVD; DMD + DEIM also in valenx-rom.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Autonomy V&V workbench (valenx-autonomy-vnv).
                     if ui
                         .checkbox(&mut self.show_autonomy_workbench, "Autonomy V&V")
@@ -3316,6 +3329,10 @@ impl eframe::App for ValenxApp {
             // Ocean Workbench (right) — native Gerstner wave field + quasi-static
             // buoyancy on valenx-ocean. A no-op unless toggled on via View → Ocean.
             crate::ocean_workbench::draw_ocean_workbench(self, ctx);
+
+            // ROM Workbench (right) — native reduced-order modelling (POD / DMD /
+            // DEIM) on valenx-rom. A no-op unless toggled on via View → ROM.
+            crate::rom_workbench::draw_rom_workbench(self, ctx);
 
             // Autonomy V&V Workbench (right) — native scenario-based verification of
             // an autonomous vehicle + simulated sensors on valenx-autonomy-vnv. A

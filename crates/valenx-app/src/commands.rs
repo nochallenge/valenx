@@ -257,6 +257,7 @@ fn tab_kind_id(kind: TabKind) -> String {
         TabKind::Autonomy => "autonomy",
         TabKind::Fluids => "fluids",
         TabKind::Ocean => "ocean",
+        TabKind::Rom => "rom",
     }
     .to_string()
 }
