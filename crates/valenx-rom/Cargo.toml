@@ -1,0 +1,23 @@
+[package]
+name        = "valenx-rom"
+description = "In-house reduced-order & surrogate modelling for time-resolved state data. Proper Orthogonal Decomposition (POD) via SVD with energy-truncated bases; standard and exact Dynamic Mode Decomposition (DMD) exposing complex eigenvalues, modes, continuous-time growth rates and frequencies; Operator Inference (OpInf) least-squares identification of reduced linear (and optional quadratic) operators with reduced-state time-stepping; and a POD–Galerkin projection helper for full-order linear operators. Built on the workspace `nalgebra` linear-algebra stack (SVD / least-squares / complex eigen-solve) plus `num-complex` for DMD spectra. Fail-loud: empty, rank-deficient, or dimension-mismatched input returns a `RomError` rather than a plausible-but-wrong number. Research/educational grade textbook methods — every numerical routine is pinned to an analytic benchmark in-crate; calibrate energy tolerances and rank truncation against your data."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+readme.workspace       = true
+publish.workspace      = true
+
+[dependencies]
+thiserror   = { workspace = true }
+nalgebra    = { workspace = true }
+num-complex = { workspace = true }
+ndarray     = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

@@ -270,6 +270,7 @@ members = [
     "crates/valenx-codon-optimize",
     "crates/valenx-epitope-map",
     "crates/valenx-binder-score",
+    "crates/valenx-rom",
     "crates/valenx-fm-registry",
     "crates/valenx-lrp5",
     "crates/valenx-test-utils",
@@ -569,6 +570,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Numerics
 ndarray   = "0.15"
 nalgebra  = { version = "0.33", features = ["serde-serialize"] }
+# Complex scalars for reduced-order modelling (valenx-rom DMD spectra need
+# complex eigenvalues). Pinned to 0.4 — the version nalgebra 0.33 already
+# resolves transitively, so no new tree is pulled in.
+num-complex = "0.4"
 byteorder = "1"
 
 # ZLIB / deflate codec — used by the JT reader for ZLIB-compressed
