@@ -8895,6 +8895,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-fluids"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "nalgebra",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-flywheel"
 version = "0.1.0-alpha.1"
 dependencies = [
