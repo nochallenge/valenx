@@ -222,6 +222,10 @@ fn draw_representation_picker(app: &mut ValenxApp, ui: &mut egui::Ui) {
                          (helices/strands fatten via DSSP)."
                     }
                     Representation::Surface => "Marching-cubes molecular surface (union-of-balls).",
+                    Representation::Density => {
+                        "Marching-cubes isosurface of a Gaussian electron-density-like \
+                         field (sum of per-atom Gaussians; a smooth-blob model, not real QM)."
+                    }
                 });
         }
     });
@@ -243,6 +247,45 @@ fn draw_representation_picker(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 )
                 .on_hover_text("Probe radius inflating each atom before the isosurface.");
             });
+        }
+        Representation::Density => {
+            ui.horizontal(|ui| {
+                ui.label("Density grid:");
+                ui.add(
+                    egui::Slider::new(&mut p.molviz_params.density_grid_max, 16..=128)
+                        .text("cells"),
+                )
+                .on_hover_text(
+                    "Marching-cubes resolution along the longest axis — higher is \
+                     smoother but costs O(n³).",
+                );
+                ui.add(
+                    egui::DragValue::new(&mut p.molviz_params.density_sigma)
+                        .speed(0.05)
+                        .range(0.2..=4.0)
+                        .prefix("σ Å "),
+                )
+                .on_hover_text(
+                    "Gaussian width per atom — larger σ gives fatter, more-merged blobs.",
+                );
+                ui.add(
+                    egui::DragValue::new(&mut p.molviz_params.density_iso)
+                        .speed(0.02)
+                        .range(0.05..=0.95)
+                        .prefix("iso "),
+                )
+                .on_hover_text(
+                    "Iso-level as a fraction of one atom's peak — lower wraps more of \
+                     each Gaussian tail. (Phenomenological blob, not real electron density.)",
+                );
+            });
+            ui.checkbox(
+                &mut p.molviz_params.density_weight_by_element,
+                "Weight density by element",
+            )
+            .on_hover_text(
+                "Scale each atom's Gaussian by a crude electron count so heavy atoms read denser.",
+            );
         }
         Representation::Cartoon => {
             ui.horizontal(|ui| {
