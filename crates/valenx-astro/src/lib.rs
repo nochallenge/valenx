@@ -97,6 +97,26 @@
 //! - [`conjunction`] — **conjunction screening** (SSA): the time and distance
 //!   of closest approach of two ephemerides ([`screen_conjunction`]), flagged
 //!   against a miss-distance threshold.
+//!
+//! ## Hypersonic / atmospheric reentry
+//!
+//! For **defensive reentry-survivability analysis** — peak g-load, peak
+//! stagnation heat flux and integrated heat load for a body diving back
+//! into the atmosphere:
+//!
+//! - [`reentry`] — a planar entry integrated through the full **US Standard
+//!   Atmosphere 1976** with an optional lift-to-drag ratio (the general
+//!   engineering case), plus the [`allen_eggers_max_deceleration`] and
+//!   [`stagnation_heat_flux`] (Sutton–Graves) closed forms.
+//! - [`reentry_hypersonic`] — the **Allen–Eggers** analytic anchor over an
+//!   [`ExponentialAtmosphere`] (`ρ = ρ₀·e^(−h/H)`): the velocity–altitude
+//!   profile, the ballistic-coefficient-independent peak deceleration
+//!   `a_max = Vₑ²·sin γ/(2eH)` and its altitude in closed form, the
+//!   Sutton–Graves and [`fay_riddell_heat_flux`] heating correlations, and a
+//!   [`BallisticEntry`] integrator whose peak deceleration converges to the
+//!   closed form. This is analytic / engineering-grade physics — point-mass,
+//!   single exponential layer, optical-region heating *correlations*; **no**
+//!   coupled CFD, real-gas chemistry, ablation or radiative heating.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -132,6 +152,7 @@ pub mod propulsion;
 pub mod radec;
 pub mod recovery;
 pub mod reentry;
+pub mod reentry_hypersonic;
 pub mod rendezvous;
 pub mod result;
 pub mod rigidbody;
@@ -171,6 +192,13 @@ pub use propulsion::{
     EnginePerformance,
 };
 pub use radec::{geocentric_angular_rates, geocentric_equatorial, Equatorial};
+pub use reentry::{
+    allen_eggers_max_deceleration, stagnation_heat_flux, EntryConditions, EntryResult,
+};
+pub use reentry_hypersonic::{
+    fay_riddell_heat_flux, sutton_graves_heat_flux, BallisticEntry, BallisticEntryResult,
+    ExponentialAtmosphere,
+};
 pub use result::{AscentResult, FlightEvent, Outcome, TrajectorySample};
 pub use rigidbody::{AttitudeState, Inertia};
 pub use sim::{propagate_two_body, simulate_ascent};
