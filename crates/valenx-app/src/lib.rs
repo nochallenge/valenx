@@ -164,6 +164,7 @@ pub mod piping_workbench;
 // Science / bio / civil batch — surface valenx-retainingwall, -openchannel,
 // -weir, -thermocycle, -queueing, -radioactivity, -osmosis, -thermoreg,
 // -hemodynamics, -popdynamics as reactive right-side workbenches.
+pub mod fluids_workbench;
 pub mod hemodynamics_workbench;
 pub mod openchannel_workbench;
 pub mod osmosis_workbench;
@@ -1976,6 +1977,15 @@ pub struct ValenxApp {
     /// Form + result state for the Sensors workbench (LiDAR scan / radar
     /// measurement over the in-process `valenx-sensors` engine).
     pub sensors: crate::sensors_workbench::SensorsWorkbenchState,
+
+    /// Whether the right-side Fluids (SPH) workbench panel is visible. Defaults
+    /// to `false`; toggled from the View menu or opened by the agent bridge
+    /// under the id `"fluids"`. Wraps `valenx-fluids` (SPH particle simulation).
+    /// See [`crate::fluids_workbench`].
+    pub show_fluids_workbench: bool,
+    /// Form + result state for the Fluids (SPH) workbench (particle simulation
+    /// over the in-process `valenx-fluids` engine).
+    pub fluids: crate::fluids_workbench::FluidsWorkbenchState,
 
     /// Whether the right-side Assistant activity sidebar is visible. On by
     /// default (set in [`ValenxApp::new`]) so the app narrates its own work
