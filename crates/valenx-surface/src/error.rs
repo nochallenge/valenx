@@ -38,6 +38,18 @@ pub enum SurfaceError {
     #[error("intersection failed: {0}")]
     IntersectionFailed(String),
 
+    /// A differential-geometry quantity (normal, fundamental form,
+    /// curvature) is undefined at the requested point because the
+    /// parameterisation is locally singular — the tangents are parallel
+    /// or vanish (`|Sᵤ × Sᵥ| ≈ 0`, e.g. a pole), or the metric
+    /// determinant `EG − F²` is non-positive. The fail-loud counterpart
+    /// of the silent `0.0` returned by the infallible curvature methods.
+    #[error("degenerate geometry: {reason}")]
+    DegenerateGeometry {
+        /// Human-readable reason — included in the displayed message.
+        reason: String,
+    },
+
     /// Two boundary curves passed to `coons::fill` don't share an
     /// endpoint within tolerance.
     #[error("coons fill: {0}")]
@@ -68,6 +80,7 @@ impl SurfaceError {
             SurfaceError::BadDegree(_) => "surface.bad_degree",
             SurfaceError::EvaluationOutOfRange { .. } => "surface.evaluation_out_of_range",
             SurfaceError::IntersectionFailed(_) => "surface.intersection_failed",
+            SurfaceError::DegenerateGeometry { .. } => "surface.degenerate_geometry",
             SurfaceError::BadBoundary(_) => "surface.bad_boundary",
             SurfaceError::SewMismatch(_) => "surface.sew_mismatch",
             SurfaceError::Io(_) => "surface.io",
@@ -84,7 +97,9 @@ impl SurfaceError {
             | SurfaceError::BadDegree(_)
             | SurfaceError::EvaluationOutOfRange { .. }
             | SurfaceError::BadBoundary(_) => "input",
-            SurfaceError::IntersectionFailed(_) | SurfaceError::SewMismatch(_) => "geometry",
+            SurfaceError::IntersectionFailed(_)
+            | SurfaceError::SewMismatch(_)
+            | SurfaceError::DegenerateGeometry { .. } => "geometry",
             SurfaceError::Io(_) | SurfaceError::Ron(_) => "io",
         }
     }
@@ -123,6 +138,13 @@ mod tests {
             (
                 SurfaceError::SewMismatch("edges differ".into()),
                 "surface.sew_mismatch",
+                "geometry",
+            ),
+            (
+                SurfaceError::DegenerateGeometry {
+                    reason: "EG − F² ≤ 0".into(),
+                },
+                "surface.degenerate_geometry",
                 "geometry",
             ),
             (SurfaceError::Ron("malformed".into()), "surface.ron", "io"),
