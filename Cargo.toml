@@ -527,6 +527,12 @@ members = [
     # Defense / M&S (M4) — uncertainty quantification, surrogates, sensitivity.
     # General numerical-methods enabler: wraps any model f: inputs → outputs.
     "crates/valenx-uq",
+
+    # Phone-as-2nd-screen companion: serves the live valenx window to a phone
+    # browser (PIN-gated, LAN-bound, frame-poll JPEG) and relays touch as OS
+    # mouse input. Default build is std-only (CI-green on headless Linux);
+    # real capture/input is behind the off-by-default `live-capture` feature.
+    "crates/valenx-remote",
 ]
 
 # ---------------------------------------------------------------------------
@@ -635,6 +641,28 @@ truck-modeling = "0.6"
 # Cargo.lock confirms lz4_flex 0.11.6 is the only version present.
 truck-meshalgo = "0.4"
 truck-shapeops = { version = "0.4", default-features = false }
+
+# ---------------------------------------------------------------------------
+# valenx-remote (phone-as-2nd-screen companion) — capture + input deps.
+#
+# These are pinned here but used ONLY by `valenx-remote`, and ONLY when its
+# off-by-default `live-capture` feature is enabled. The default `valenx-remote`
+# build is std-only (the `std::net` HTTP server + served page + PIN +
+# input validation) so it compiles on headless Linux CI with no GUI libs;
+# the real screen-capture + OS input-injection compiles only on the
+# Windows/desktop machine that turns the feature on. Mirrors PR3's
+# `binary-fmu` optional-dep pattern. See crates/valenx-remote/Cargo.toml.
+#
+# xcap   — cross-platform screen capture (X11/Wayland/Windows/macOS); 0.9.6 is
+#          the version the original (privately built) valenx-remote.exe linked.
+# image  — JPEG encoding of the captured frame; 0.25 is already resolved in
+#          Cargo.lock (transitive via eframe), so this adds no new tree.
+# enigo  — cross-platform mouse/keyboard injection; relays the phone touch as
+#          an OS mouse event. 0.6 is the API verified against here; the version
+#          the original binary linked is not recoverable from its strings.
+xcap  = "0.9"
+image = "0.25"
+enigo = "0.6"
 
 # ---------------------------------------------------------------------------
 # Release and dev profiles
