@@ -80,6 +80,24 @@
 //! (exactly what Stages 3–4 supply), and the global **scale** of a pure
 //! two-view-seeded bundle remains free even with camera 0 pinned.
 //!
+//! **The incremental mapper (the orchestration capstone)** is the [`mapper`]
+//! module — the conductor that drives Stages 1–5 in order to turn a set of
+//! images and their pairwise verified matches into *one* reconstruction. It
+//! chains the pairwise matches into multi-view [`Track`]s by **union-find**
+//! ([`build_tracks`]); picks the strongest initial pair and seeds two cameras +
+//! triangulated points from the two-view essential-matrix path; then grows the
+//! model **greedily**, repeatedly registering the unregistered view with the
+//! most 2D–3D correspondences via [`solve_pnp_ransac`], triangulating the new
+//! tracks it shares with the registered views, and running [`bundle_adjust`]
+//! periodically and once globally at the end ([`incremental_sfm`] →
+//! [`Reconstruction`]). Honest caveats in the module docs: next-view selection
+//! is greedy (no backtracking; not COLMAP's full spatial-distribution scoring),
+//! the intermediate BA is global-over-the-current-model rather than a windowed
+//! local BA (this crate's `bundle_adjust` is dense), the whole reconstruction is
+//! fixed only **up to a global similarity** (rigid gauge pinned by the first
+//! registered camera; scale free), and track building is the conservative
+//! "drop any one-image-twice component" heuristic.
+//!
 //! ## Provenance / licensing
 //!
 //! This is a *clean-room* implementation written from the published
@@ -129,6 +147,7 @@ pub mod descriptor;
 pub mod fast;
 pub mod geometry;
 pub mod image;
+pub mod mapper;
 pub mod matching;
 pub mod pnp;
 pub mod twoview;
@@ -148,6 +167,9 @@ pub use fast::detect_fast;
 pub use geometry::{verify_two_view, RansacParams, TwoViewResult};
 pub use image::GrayImage;
 pub use keypoint::Keypoint;
+pub use mapper::{
+    build_tracks, incremental_sfm, ImageFeatures, MapperParams, PairMatches, Reconstruction, Track,
+};
 pub use matching::{match_descriptors, Match};
 pub use pnp::{project_point, solve_pnp, solve_pnp_ransac, CameraPose, PnpRansacParams, PnpResult};
 pub use twoview::{
