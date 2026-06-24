@@ -16,8 +16,14 @@
 //! * [`PciSphSolver`] — **predictive-corrective incompressible SPH**
 //!   (**Solenthaler & Pajarola 2009**): instead of a stiff EOS it iteratively
 //!   *solves* for the pressure that cancels the predicted density error,
-//!   enforcing near-incompressibility at a larger stable time step. This is the
-//!   one method implemented "beyond plain SPH".
+//!   enforcing near-incompressibility at a larger stable time step.
+//! * [`PicFlipSolver`] — **PIC/FLIP particle-in-cell** hybrid
+//!   Lagrangian–Eulerian solver (Harlow & Welch 1965; Brackbill & Ruppel 1986;
+//!   Zhu & Bridson 2005): particles deposit velocity onto a background MAC grid
+//!   (P→G), the grid applies gravity and a single-pass divergence step, then
+//!   the updated grid velocity is blended back to particles via the PIC/FLIP
+//!   mix `v_new = α·v_grid + (1−α)·(v_particle + Δv_grid)`.  See
+//!   [`pic_flip`] for the full exposition.
 //!
 //! ## Clean-room provenance
 //!
@@ -131,6 +137,7 @@ pub mod grid;
 pub mod kernels;
 pub mod particle;
 pub mod pcisph;
+pub mod pic_flip;
 pub mod sph;
 
 mod error;
@@ -142,4 +149,5 @@ pub use grid::SpatialHash;
 pub use kernels::SmoothingKernels;
 pub use particle::{Particle, ParticleSystem};
 pub use pcisph::{PciSphConfig, PciSphSolver};
+pub use pic_flip::{PicFlipConfig, PicFlipSolver};
 pub use sph::{SphConfig, SphSolver};
