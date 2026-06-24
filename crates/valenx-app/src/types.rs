@@ -28,6 +28,48 @@ pub struct LoadedStl {
     pub path: PathBuf,
     /// Parsed triangle mesh.
     pub mesh: TriangleMesh,
+    /// Optional **per-vertex colours** for the shaded viewport, one
+    /// `[r, g, b]` in `0.0..=1.0` per surface vertex — laid out
+    /// triangle-major then vertex-within-triangle (`3 ×
+    /// mesh.triangle_count()` entries, the exact order
+    /// [`crate::wgpu_renderer::triangles_to_vertices`] emits). `None`
+    /// keeps the default single-material brushed-metal shading the STL
+    /// importer has always used.
+    ///
+    /// Set by the molecular viewer ([`crate::genetics::molecule_view`])
+    /// when a non-default colour scheme (chain / residue / B-factor /
+    /// element) is selected, so the shaded central viewport tints each
+    /// atom rather than rendering monochrome. The viewport length-guards
+    /// this against the triangle count and falls back to metal on any
+    /// mismatch, so a stale or wrong-length colour vec never produces a
+    /// half-coloured mesh.
+    pub colors: Option<Vec<[f32; 3]>>,
+}
+
+impl LoadedStl {
+    /// A loaded STL with no per-vertex colour override (the default
+    /// single-material shaded look). Use [`LoadedStl::with_colors`] to
+    /// attach a per-vertex colour buffer.
+    pub fn new(path: PathBuf, mesh: TriangleMesh) -> Self {
+        LoadedStl {
+            path,
+            mesh,
+            colors: None,
+        }
+    }
+
+    /// A loaded STL carrying a **per-vertex colour** buffer (one
+    /// `[r, g, b]` per surface vertex, `3 × mesh.triangle_count()`
+    /// entries in `triangles_to_vertices` order). The shaded viewport
+    /// uses it when its length matches; otherwise it falls back to the
+    /// neutral metal shading.
+    pub fn with_colors(path: PathBuf, mesh: TriangleMesh, colors: Vec<[f32; 3]>) -> Self {
+        LoadedStl {
+            path,
+            mesh,
+            colors: Some(colors),
+        }
+    }
 }
 
 /// One entry in `ValenxApp::run_history` — the outcome of the

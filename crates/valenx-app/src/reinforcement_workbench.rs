@@ -182,10 +182,7 @@ pub fn draw_reinforcement_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     app.reinforcement.status = "cage produced no geometry".to_string();
                 } else {
                     app.mesh = None;
-                    app.stl = Some(LoadedStl {
-                        path: PathBuf::from("<reinforcement>/cage"),
-                        mesh: soup,
-                    });
+                    app.stl = Some(LoadedStl::new(PathBuf::from("<reinforcement>/cage"), soup));
                     app.frame_current_stl();
                     app.reinforcement.status = format!("{n} triangles in the viewport");
                 }

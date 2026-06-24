@@ -14039,10 +14039,7 @@ mod tests {
     #[test]
     fn apply_translate_with_stl_shifts_vertices() {
         let mut app = ValenxApp {
-            stl: Some(LoadedStl {
-                path: PathBuf::from("tri.stl"),
-                mesh: one_triangle(),
-            }),
+            stl: Some(LoadedStl::new(PathBuf::from("tri.stl"), one_triangle())),
             ..Default::default()
         };
         app.apply_translate(2.0, 3.0, 4.0);
@@ -14054,10 +14051,7 @@ mod tests {
     #[test]
     fn apply_scale_uniform_with_stl_multiplies_vertices() {
         let mut app = ValenxApp {
-            stl: Some(LoadedStl {
-                path: PathBuf::from("tri.stl"),
-                mesh: one_triangle(),
-            }),
+            stl: Some(LoadedStl::new(PathBuf::from("tri.stl"), one_triangle())),
             ..Default::default()
         };
         app.apply_scale_uniform(3.0);
@@ -14068,10 +14062,7 @@ mod tests {
     #[test]
     fn apply_scale_uniform_zero_or_nan_errors() {
         let mut app = ValenxApp {
-            stl: Some(LoadedStl {
-                path: PathBuf::from("tri.stl"),
-                mesh: one_triangle(),
-            }),
+            stl: Some(LoadedStl::new(PathBuf::from("tri.stl"), one_triangle())),
             ..Default::default()
         };
         app.apply_scale_uniform(0.0);
@@ -14081,10 +14072,7 @@ mod tests {
     #[test]
     fn apply_mirror_reverses_triangle_winding() {
         let mut app = ValenxApp {
-            stl: Some(LoadedStl {
-                path: PathBuf::from("tri.stl"),
-                mesh: one_triangle(),
-            }),
+            stl: Some(LoadedStl::new(PathBuf::from("tri.stl"), one_triangle())),
             ..Default::default()
         };
         app.apply_mirror(ToolboxAxis::Y);
@@ -14098,10 +14086,7 @@ mod tests {
     #[test]
     fn apply_cut_plane_with_zero_normal_errors() {
         let mut app = ValenxApp {
-            stl: Some(LoadedStl {
-                path: PathBuf::from("tri.stl"),
-                mesh: one_triangle(),
-            }),
+            stl: Some(LoadedStl::new(PathBuf::from("tri.stl"), one_triangle())),
             ..Default::default()
         };
         app.apply_cut_plane([0.0, 0.0, 0.0], [0.0, 0.0, 0.0]);
@@ -14116,10 +14101,7 @@ mod tests {
         // Centroid of the only triangle is (1/3, 1/3, 0). Plane at
         // origin with normal -x: dot = -1/3 < 0 → discard.
         let mut app = ValenxApp {
-            stl: Some(LoadedStl {
-                path: PathBuf::from("tri.stl"),
-                mesh: one_triangle(),
-            }),
+            stl: Some(LoadedStl::new(PathBuf::from("tri.stl"), one_triangle())),
             ..Default::default()
         };
         app.apply_cut_plane([0.0, 0.0, 0.0], [-1.0, 0.0, 0.0]);
@@ -14132,10 +14114,7 @@ mod tests {
         // operation surfaces an honest error instead of silently
         // no-op'ing.
         let mut app = ValenxApp {
-            stl: Some(LoadedStl {
-                path: PathBuf::from("tri.stl"),
-                mesh: one_triangle(),
-            }),
+            stl: Some(LoadedStl::new(PathBuf::from("tri.stl"), one_triangle())),
             ..Default::default()
         };
         app.apply_merge_coincident(1e-6);
