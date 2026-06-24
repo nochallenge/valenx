@@ -28,12 +28,31 @@ pub mod lj;
 pub mod neighbor;
 pub mod pme;
 pub mod scaled14;
+pub mod wolf;
 
 pub use scaled14::ScaledPairs14;
+pub use wolf::Wolf;
 
 use std::collections::HashSet;
 
 use crate::system::Topology;
+
+/// `erf` / `erfc` via the Abramowitz-&-Stegun 7.1.26 rational
+/// approximation (max abs error ~1.5e-7) — enough for an MD force field
+/// and dependency-free. Shared by the damped electrostatics terms
+/// ([`pme`] and [`wolf`]) so they agree to the bit.
+pub(crate) fn erfc(x: f64) -> f64 {
+    let sign = if x < 0.0 { -1.0 } else { 1.0 };
+    let ax = x.abs();
+    let t = 1.0 / (1.0 + 0.327_591_1 * ax);
+    let y = 1.0
+        - (((((1.061_405_429 * t - 1.453_152_027) * t) + 1.421_413_741) * t - 0.284_496_736) * t
+            + 0.254_829_592)
+            * t
+            * (-ax * ax).exp();
+    // y is erf(ax); erf is odd.
+    1.0 - sign * y
+}
 
 /// A set of atom-index pairs excluded from the nonbonded sum.
 ///
