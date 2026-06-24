@@ -1,0 +1,34 @@
+[package]
+name        = "valenx-adapter-fmi"
+description  = "Native co-simulation master for Valenx — an in-house multi-rate coupling engine with Jacobi / Gauss-Seidel schemes over a `Subsystem` graph, FMI 2.0/3.0 co-simulation `modelDescription.xml` import (hand-parsed, no external XML dep), and an IEEE 1278.1 DIS Entity State PDU codec. The default path is a fully native in-process `Subsystem`; loading a binary `.so/.dll` FMU sits behind the off-by-default `binary-fmu` feature. Co-simulation import only (NOT model-exchange); DIS = Entity State PDU only (NOT the full PDU family)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme.workspace       = true
+
+publish.workspace      = true
+
+[features]
+default = []
+# Off by default: dynamic loading of a real binary co-sim FMU (`.so` /
+# `.dll` / `.dylib`) via `libloading`. The native in-process `Subsystem`
+# path needs none of this and is what every test exercises — a real FMU
+# binary is not available in CI, so this path is compiled but untested
+# here. Enabling it pulls in `libloading` (already a workspace dep).
+binary-fmu = ["dep:libloading"]
+
+[dependencies]
+thiserror = { workspace = true }
+# Big-endian (network-order) primitive read/write for the DIS Entity
+# State PDU codec. Already pinned at workspace level.
+byteorder = { workspace = true }
+# Optional: only compiled when the `binary-fmu` feature is on.
+libloading = { workspace = true, optional = true }
+
+[lints.rust]
+missing_docs   = "warn"
+unused_imports = "warn"

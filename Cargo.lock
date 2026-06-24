@@ -5259,6 +5259,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-adapter-fmi"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "byteorder",
+ "libloading 0.8.9",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-adapter-foldseek"
 version = "0.1.0-alpha.1"
 dependencies = [
