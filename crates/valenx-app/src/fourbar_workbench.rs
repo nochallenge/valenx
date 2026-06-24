@@ -90,27 +90,32 @@ pub fn draw_fourbar_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Link lengths").strong());
                     ui.horizontal(|ui| {
-                        ui.label("ground r1");
-                        ui.add(egui::DragValue::new(&mut s.ground).speed(0.05));
+                        let g = ui.label("ground r1");
+                        ui.add(egui::DragValue::new(&mut s.ground).speed(0.05))
+                            .labelled_by(g.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("crank r2");
-                        ui.add(egui::DragValue::new(&mut s.crank).speed(0.05));
+                        let cr = ui.label("crank r2");
+                        ui.add(egui::DragValue::new(&mut s.crank).speed(0.05))
+                            .labelled_by(cr.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("coupler r3");
-                        ui.add(egui::DragValue::new(&mut s.coupler).speed(0.05));
+                        let co = ui.label("coupler r3");
+                        ui.add(egui::DragValue::new(&mut s.coupler).speed(0.05))
+                            .labelled_by(co.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("rocker r4");
-                        ui.add(egui::DragValue::new(&mut s.rocker).speed(0.05));
+                        let ro = ui.label("rocker r4");
+                        ui.add(egui::DragValue::new(&mut s.rocker).speed(0.05))
+                            .labelled_by(ro.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Pose").strong());
                     ui.horizontal(|ui| {
-                        ui.label("crank angle θ2 (°)");
-                        ui.add(egui::DragValue::new(&mut s.crank_angle_deg).speed(1.0));
+                        let th = ui.label("crank angle θ2 (°)");
+                        ui.add(egui::DragValue::new(&mut s.crank_angle_deg).speed(1.0))
+                            .labelled_by(th.id);
                     });
                     ui.checkbox(&mut s.crossed, "crossed assembly branch");
 
@@ -469,12 +474,25 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_fourbar_workbench(app, ctx);
         });
+    }
+
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_fourbar_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -490,5 +508,32 @@ mod headless_ui_tests {
         app.show_fourbar_workbench = true;
         run_fourbar(&mut app.fourbar);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        let mut app = ValenxApp::default();
+        app.show_fourbar_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 5,
+            "expected numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+        for caption in ["ground r1", "crank r2", "crank angle θ2 (°)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

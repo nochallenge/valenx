@@ -101,31 +101,37 @@ pub fn draw_drone_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Rotors + airframe").strong());
                     ui.horizontal(|ui| {
-                        ui.label("rotor count n");
-                        ui.add(egui::DragValue::new(&mut s.rotor_count).speed(0.1));
+                        let rc = ui.label("rotor count n");
+                        ui.add(egui::DragValue::new(&mut s.rotor_count).speed(0.1))
+                            .labelled_by(rc.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("rotor radius R (m)");
-                        ui.add(egui::DragValue::new(&mut s.rotor_radius_m).speed(0.005));
+                        let rr = ui.label("rotor radius R (m)");
+                        ui.add(egui::DragValue::new(&mut s.rotor_radius_m).speed(0.005))
+                            .labelled_by(rr.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("all-up mass (kg)");
-                        ui.add(egui::DragValue::new(&mut s.mass_kg).speed(0.05));
+                        let mm = ui.label("all-up mass (kg)");
+                        ui.add(egui::DragValue::new(&mut s.mass_kg).speed(0.05))
+                            .labelled_by(mm.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("figure of merit");
-                        ui.add(egui::DragValue::new(&mut s.figure_of_merit).speed(0.01));
+                        let fm = ui.label("figure of merit");
+                        ui.add(egui::DragValue::new(&mut s.figure_of_merit).speed(0.01))
+                            .labelled_by(fm.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Air + battery").strong());
                     ui.horizontal(|ui| {
-                        ui.label("air ρ (kg/m³)");
-                        ui.add(egui::DragValue::new(&mut s.air_density).speed(0.01));
+                        let rho = ui.label("air ρ (kg/m³)");
+                        ui.add(egui::DragValue::new(&mut s.air_density).speed(0.01))
+                            .labelled_by(rho.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("battery (Wh)");
-                        ui.add(egui::DragValue::new(&mut s.battery_wh).speed(1.0));
+                        let bat = ui.label("battery (Wh)");
+                        ui.add(egui::DragValue::new(&mut s.battery_wh).speed(1.0))
+                            .labelled_by(bat.id);
                     });
 
                     ui.add_space(6.0);
@@ -622,12 +628,25 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_drone_workbench(app, ctx);
         });
+    }
+
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_drone_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -643,5 +662,32 @@ mod headless_ui_tests {
         app.show_drone_workbench = true;
         run_drone(&mut app.drone);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        let mut app = ValenxApp::default();
+        app.show_drone_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 6,
+            "expected numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+        for caption in ["rotor count n", "all-up mass (kg)", "battery (Wh)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }
