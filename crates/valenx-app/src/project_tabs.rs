@@ -236,12 +236,14 @@ pub enum TabKind {
     Fluids,
     // -- Ocean --
     Ocean,
+    // -- Autonomy --
+    Autonomy,
 }
 
 impl TabKind {
     /// Every *template* kind (i.e. excluding [`TabKind::Blank`]), in
     /// `＋ from template`-menu order (grouped via [`Self::group`]).
-    pub const TEMPLATES: [TabKind; 34] = [
+    pub const TEMPLATES: [TabKind; 35] = [
         TabKind::Rocket,
         TabKind::Engine,
         TabKind::Astro,
@@ -276,6 +278,7 @@ impl TabKind {
         TabKind::Sensors,
         TabKind::Fluids,
         TabKind::Ocean,
+        TabKind::Autonomy,
     ];
 
     /// Group header shown in the `＋ from template` new-tab menu. Blank is
@@ -310,6 +313,7 @@ impl TabKind {
             | TabKind::Geomatics => "Civil & AEC",
             TabKind::Genetics | TabKind::Neuro | TabKind::VariantEffect => "Life sciences",
             TabKind::Sensors => "Sensors",
+            TabKind::Autonomy => "Sensors",
             TabKind::Fluids => "Simulation",
             TabKind::Ocean => "Simulation",
         }
@@ -351,6 +355,7 @@ impl TabKind {
             TabKind::Neuro => "Neural interface",
             TabKind::VariantEffect => "Variant effect",
             TabKind::Sensors => "Sensors (LiDAR / Radar)",
+            TabKind::Autonomy => "Autonomy V&V",
             TabKind::Fluids => "Fluids (SPH particle sim)",
             TabKind::Ocean => "Ocean (waves + buoyancy)",
         }
@@ -394,6 +399,7 @@ impl TabKind {
             TabKind::Neuro => app.show_neuro_workbench = true,
             TabKind::VariantEffect => app.show_variant_effect_workbench = true,
             TabKind::Sensors => app.show_sensors_workbench = true,
+            TabKind::Autonomy => app.show_autonomy_workbench = true,
             TabKind::Fluids => app.show_fluids_workbench = true,
             TabKind::Ocean => app.show_ocean_workbench = true,
         }
@@ -443,6 +449,7 @@ impl TabKind {
             "neuro" => Some(TabKind::Neuro),
             "variant" | "varianteffect" => Some(TabKind::VariantEffect),
             "sensors" => Some(TabKind::Sensors),
+            "autonomy" | "vnv" => Some(TabKind::Autonomy),
             "fluids" | "sph" => Some(TabKind::Fluids),
             "ocean" | "waves" => Some(TabKind::Ocean),
             _ => None,
@@ -1186,6 +1193,8 @@ pub const ALL_WORKBENCH_KINDS: &[&str] = &[
     "car",
     // Native sensor suite (LiDAR + radar) — surfaced by the Sensors workbench.
     "sensors",
+    // Native autonomy V&V framework — surfaced by the Autonomy V&V workbench.
+    "autonomy",
     // Native SPH particle fluid simulation — surfaced by the Fluids workbench.
     "fluids",
     // Native Gerstner ocean wave field + buoyancy — surfaced by the Ocean workbench.
@@ -1348,6 +1357,7 @@ pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
         "heatexchanger" => app.show_heatexchanger_workbench = on,
         "car" => app.show_car_workbench = on,
         "sensors" => app.show_sensors_workbench = on,
+        "autonomy" | "vnv" => app.show_autonomy_workbench = on,
         "fluids" | "sph" => app.show_fluids_workbench = on,
         "ocean" | "waves" => app.show_ocean_workbench = on,
         // Mesh Toolbox (a `_toolbox` flag, mapped here for parity).
@@ -1403,6 +1413,7 @@ fn clear_all_workbenches(app: &mut ValenxApp) {
     app.show_neuro_workbench = false;
     app.show_variant_effect_workbench = false;
     app.show_sensors_workbench = false;
+    app.show_autonomy_workbench = false;
     app.show_fluids_workbench = false;
     app.show_ocean_workbench = false;
 }
@@ -2894,6 +2905,7 @@ mod tests {
             ("neuro", TabKind::Neuro),
             ("varianteffect", TabKind::VariantEffect),
             ("sensors", TabKind::Sensors),
+            ("autonomy", TabKind::Autonomy),
             ("fluids", TabKind::Fluids),
             ("ocean", TabKind::Ocean),
         ];
@@ -4306,6 +4318,7 @@ mod tests {
             app.show_neuro_workbench,
             app.show_variant_effect_workbench,
             app.show_sensors_workbench,
+            app.show_autonomy_workbench,
             app.show_fluids_workbench,
             app.show_ocean_workbench,
         ]
@@ -4358,6 +4371,7 @@ mod tests {
                 crate::variant_effect_workbench::draw_variant_effect_workbench(app, ctx)
             }
             TabKind::Sensors => crate::sensors_workbench::draw_sensors_workbench(app, ctx),
+            TabKind::Autonomy => crate::autonomy_workbench::draw_autonomy_workbench(app, ctx),
             TabKind::Fluids => crate::fluids_workbench::draw_fluids_workbench(app, ctx),
             TabKind::Ocean => crate::ocean_workbench::draw_ocean_workbench(app, ctx),
         });
@@ -4654,8 +4668,8 @@ mod headless_ui_tests {
         }
         assert_eq!(
             ALL_WORKBENCH_KINDS.len(),
-            137,
-            "136 `show_*_workbench` fields + the meshtoolbox alias"
+            138,
+            "137 `show_*_workbench` fields + the meshtoolbox alias"
         );
         assert!(ALL_WORKBENCH_KINDS.contains(&"meshtoolbox"));
         // A couple of representative kinds are present.

@@ -1562,6 +1562,21 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Autonomy V&V workbench (valenx-autonomy-vnv).
+                    if ui
+                        .checkbox(&mut self.show_autonomy_workbench, "Autonomy V&V")
+                        .on_hover_text(
+                            "Show / hide the Autonomy V&V Workbench — native scenario-based \
+                             verification of a kinematic autonomous vehicle carrying simulated \
+                             sensors, computed in-process by valenx-autonomy-vnv (run a scenario \
+                             into a trace, score MinClearance / NoCollision / StayInBounds \
+                             requirements). V&V methodology over model-grade sensors — NOT a \
+                             certified safety case.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Plate Bending workbench (valenx-plate).
                     if ui
                         .checkbox(&mut self.show_plate_workbench, "Plate Bending")
@@ -3301,6 +3316,11 @@ impl eframe::App for ValenxApp {
             // Ocean Workbench (right) — native Gerstner wave field + quasi-static
             // buoyancy on valenx-ocean. A no-op unless toggled on via View → Ocean.
             crate::ocean_workbench::draw_ocean_workbench(self, ctx);
+
+            // Autonomy V&V Workbench (right) — native scenario-based verification of
+            // an autonomous vehicle + simulated sensors on valenx-autonomy-vnv. A
+            // no-op unless toggled on via View → Autonomy V&V.
+            crate::autonomy_workbench::draw_autonomy_workbench(self, ctx);
             crate::plate_workbench::draw_plate_workbench(self, ctx);
             crate::strainrosette_workbench::draw_strainrosette_workbench(self, ctx);
             crate::transformer_workbench::draw_transformer_workbench(self, ctx);

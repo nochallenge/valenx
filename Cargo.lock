@@ -7905,6 +7905,7 @@ dependencies = [
  "valenx-assembly",
  "valenx-astro",
  "valenx-audit",
+ "valenx-autonomy-vnv",
  "valenx-battery-ecm",
  "valenx-batterypack",
  "valenx-beam",

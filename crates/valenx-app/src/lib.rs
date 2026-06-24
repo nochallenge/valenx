@@ -164,6 +164,7 @@ pub mod piping_workbench;
 // Science / bio / civil batch — surface valenx-retainingwall, -openchannel,
 // -weir, -thermocycle, -queueing, -radioactivity, -osmosis, -thermoreg,
 // -hemodynamics, -popdynamics as reactive right-side workbenches.
+pub mod autonomy_workbench;
 pub mod fluids_workbench;
 pub mod hemodynamics_workbench;
 pub mod ocean_workbench;
@@ -1996,6 +1997,16 @@ pub struct ValenxApp {
     /// Form + result state for the Ocean workbench (wave-height profile +
     /// floating-body settle over the in-process `valenx-ocean` engine).
     pub ocean: crate::ocean_workbench::OceanWorkbenchState,
+
+    /// Whether the right-side Autonomy V&V workbench panel is visible. Defaults
+    /// to `false`; toggled from the View menu or opened by the agent bridge
+    /// under the id `"autonomy"`. Wraps `valenx-autonomy-vnv` (scenario-based
+    /// verification of an autonomous vehicle with simulated sensors). See
+    /// [`crate::autonomy_workbench`].
+    pub show_autonomy_workbench: bool,
+    /// Form + result state for the Autonomy V&V workbench (scenario → trace →
+    /// requirement report over the in-process `valenx-autonomy-vnv` framework).
+    pub autonomy: crate::autonomy_workbench::AutonomyWorkbenchState,
 
     /// Whether the right-side Assistant activity sidebar is visible. On by
     /// default (set in [`ValenxApp::new`]) so the app narrates its own work
