@@ -208,6 +208,9 @@ valenx-drone         = { path = "../valenx-drone" }
 # the Sensors workbench (src/sensors_workbench.rs). Pure-Rust ray-cast and
 # link-budget models; the workbench calls its real API directly (no subprocess).
 valenx-sensors       = { path = "../valenx-sensors" }
+# Native particle-based SPH fluid simulation — surfaced by the Fluids (SPH)
+# workbench (src/fluids_workbench.rs). Pure-Rust; no new external deps.
+valenx-fluids        = { path = "../valenx-fluids" }
 # Native propeller / rotor blade-element-momentum (BEMT) performance —
 # surfaced by the Rotor / Drone (BEMT) workbench (src/rotor_workbench.rs).
 # Pure-Rust solver; the workbench calls its real API directly (no subprocess).

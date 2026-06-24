@@ -254,6 +254,7 @@ fn tab_kind_id(kind: TabKind) -> String {
         TabKind::Neuro => "neuro",
         TabKind::VariantEffect => "varianteffect",
         TabKind::Sensors => "sensors",
+        TabKind::Fluids => "fluids",
     }
     .to_string()
 }

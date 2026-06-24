@@ -7958,6 +7958,7 @@ dependencies = [
  "valenx-first-run",
  "valenx-fixedwing",
  "valenx-fluid-statics",
+ "valenx-fluids",
  "valenx-flywheel",
  "valenx-fonts",
  "valenx-fracture",

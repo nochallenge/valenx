@@ -1537,6 +1537,18 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side SPH Fluids workbench (valenx-fluids).
+                    if ui
+                        .checkbox(&mut self.show_fluids_workbench, "SPH Fluids")
+                        .on_hover_text(
+                            "Show / hide the Fluids (SPH) Workbench — native particle-based \
+                             SPH fluid simulation (Müller et al. 2003), computed in-process by \
+                             valenx-fluids. Graphics / real-time-grade — NOT validated CFD.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Plate Bending workbench (valenx-plate).
                     if ui
                         .checkbox(&mut self.show_plate_workbench, "Plate Bending")
@@ -3268,6 +3280,10 @@ impl eframe::App for ValenxApp {
             crate::projectile_workbench::draw_projectile_workbench(self, ctx);
             crate::conveyor_workbench::draw_conveyor_workbench(self, ctx);
             crate::fluidstatics_workbench::draw_fluidstatics_workbench(self, ctx);
+
+            // Fluids (SPH) Workbench (right) — native particle-based SPH simulation
+            // on valenx-fluids. A no-op unless toggled on via View → SPH Fluids.
+            crate::fluids_workbench::draw_fluids_workbench(self, ctx);
             crate::plate_workbench::draw_plate_workbench(self, ctx);
             crate::strainrosette_workbench::draw_strainrosette_workbench(self, ctx);
             crate::transformer_workbench::draw_transformer_workbench(self, ctx);
