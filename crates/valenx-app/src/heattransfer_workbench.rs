@@ -94,38 +94,45 @@ pub fn draw_heattransfer_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Wall").strong());
                     ui.horizontal(|ui| {
-                        ui.label("area (m²)");
-                        ui.add(egui::DragValue::new(&mut s.area_m2).speed(0.5));
+                        let l = ui.label("area (m²)");
+                        ui.add(egui::DragValue::new(&mut s.area_m2).speed(0.5))
+                            .labelled_by(l.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("thickness (m)");
-                        ui.add(egui::DragValue::new(&mut s.thickness_m).speed(0.01));
+                        let l = ui.label("thickness (m)");
+                        ui.add(egui::DragValue::new(&mut s.thickness_m).speed(0.01))
+                            .labelled_by(l.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("conductivity k (W/m·K)");
-                        ui.add(egui::DragValue::new(&mut s.conductivity_w_per_mk).speed(0.005));
+                        let l = ui.label("conductivity k (W/m·K)");
+                        ui.add(egui::DragValue::new(&mut s.conductivity_w_per_mk).speed(0.005))
+                            .labelled_by(l.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Convective films").strong());
                     ui.horizontal(|ui| {
-                        ui.label("inside h (W/m²K)");
-                        ui.add(egui::DragValue::new(&mut s.h_in).speed(0.5));
+                        let l = ui.label("inside h (W/m²K)");
+                        ui.add(egui::DragValue::new(&mut s.h_in).speed(0.5))
+                            .labelled_by(l.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("outside h (W/m²K)");
-                        ui.add(egui::DragValue::new(&mut s.h_out).speed(0.5));
+                        let l = ui.label("outside h (W/m²K)");
+                        ui.add(egui::DragValue::new(&mut s.h_out).speed(0.5))
+                            .labelled_by(l.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Temperatures").strong());
                     ui.horizontal(|ui| {
-                        ui.label("inside (°C)");
-                        ui.add(egui::DragValue::new(&mut s.t_in_c).speed(0.5));
+                        let l = ui.label("inside (°C)");
+                        ui.add(egui::DragValue::new(&mut s.t_in_c).speed(0.5))
+                            .labelled_by(l.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("outside (°C)");
-                        ui.add(egui::DragValue::new(&mut s.t_out_c).speed(0.5));
+                        let l = ui.label("outside (°C)");
+                        ui.add(egui::DragValue::new(&mut s.t_out_c).speed(0.5))
+                            .labelled_by(l.id);
                     });
 
                     ui.add_space(6.0);
@@ -447,6 +454,7 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
@@ -468,5 +476,52 @@ mod headless_ui_tests {
         app.show_heattransfer_workbench = true;
         run_wall(&mut app.heattransfer);
         draw_workbench(&mut app);
+    }
+
+    /// As [`draw_workbench`], but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_heattransfer_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // Every DragValue is a SpinButton that must be `labelled_by` its caption
+        // (egui clears a DragValue's own Name), so an AI / screen reader can find
+        // the control by the caption text.
+        let mut app = ValenxApp::default();
+        app.show_heattransfer_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 7,
+            "expected the numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["area (m²)", "thickness (m)", "conductivity k (W/m·K)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }
