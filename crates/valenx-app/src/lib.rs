@@ -199,6 +199,7 @@ pub mod rotor_workbench;
 pub mod run;
 pub mod scene_overlay;
 pub mod screwthread_workbench;
+pub mod sensors_workbench;
 pub mod settings;
 pub mod setup;
 pub mod shaftdesign_workbench;
@@ -1966,6 +1967,15 @@ pub struct ValenxApp {
     /// Form + result state for the Car workbench (design → simulate over
     /// `valenx-vehicle`).
     pub car: crate::car_workbench::CarWorkbenchState,
+
+    /// Whether the right-side Sensors workbench panel is visible. Defaults to
+    /// `false`; toggled from the View menu or opened by the agent bridge under
+    /// the id `"sensors"`. Wraps `valenx-sensors` (LiDAR + radar).
+    /// See [`crate::sensors_workbench`].
+    pub show_sensors_workbench: bool,
+    /// Form + result state for the Sensors workbench (LiDAR scan / radar
+    /// measurement over the in-process `valenx-sensors` engine).
+    pub sensors: crate::sensors_workbench::SensorsWorkbenchState,
 
     /// Whether the right-side Assistant activity sidebar is visible. On by
     /// default (set in [`ValenxApp::new`]) so the app narrates its own work
