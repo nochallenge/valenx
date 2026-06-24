@@ -552,7 +552,7 @@ pub fn bundle_adjust(problem: &BundleProblem, params: &BundleParams) -> BundleRe
 
 /// Assemble the [`BundleResult`] from the working state (rebuilding the
 /// [`CameraPose`] list from the angle-axis + translation parameters; camera 0
-/// is rebuilt from its untouched parameters and is therefore identical to the
+/// is copied through verbatim and is therefore bit-exact identical to the
 /// input).
 fn finish(
     problem: &BundleProblem,
@@ -564,9 +564,18 @@ fn finish(
     iterations: usize,
 ) -> BundleResult {
     let cameras = (0..problem.cameras.len())
-        .map(|j| CameraPose {
-            rotation: rodrigues_exp(&cam_rot[j]),
-            translation: cam_trans[j],
+        .map(|j| {
+            // Camera 0 is the fixed gauge reference: return it bit-exact rather
+            // than round-tripping through log->exp (which perturbs it ~1e-11),
+            // so the reconstruction's reference frame is genuinely unchanged.
+            if j == 0 {
+                problem.cameras[0]
+            } else {
+                CameraPose {
+                    rotation: rodrigues_exp(&cam_rot[j]),
+                    translation: cam_trans[j],
+                }
+            }
         })
         .collect();
     BundleResult {
