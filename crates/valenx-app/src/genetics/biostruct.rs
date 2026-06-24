@@ -15,9 +15,238 @@ use valenx_biostruct::structure::Structure;
 use valenx_biostruct::superpose::{kabsch, rmsd};
 
 use super::common;
-use super::molecule_view::{self, ViewMolecule};
+use super::molecule_view::{self, ViewAtom, ViewMolecule};
 use crate::molviz::{self, AtomAttr, BackbonePoint, ColorScheme, MolvizParams, Representation};
 use crate::ValenxApp;
+
+/// MD coordinates are nanometres; the molecular viewer (biostruct / cheminf)
+/// works in ångström. A loaded [`valenx_md::io::trajectory::Trajectory`] is
+/// scaled by this factor on attach so every frame shares the viewer length
+/// scale, exactly as [`ViewMolecule::from_md_system`] does.
+const ANGSTROM_PER_NM: f32 = 10.0;
+
+/// MD-trajectory playback state for the molecular viewer — **roadmap
+/// feature**: animate the currently-shown structure across a series of
+/// coordinate frames (the MolecularNodes-style playback).
+///
+/// The structure is parsed **once** into a base [`ViewMolecule`] (atoms in the
+/// exact [`ViewMolecule::from_biostruct`] order) plus its per-atom [`AtomAttr`]
+/// and Cα backbone, so each frame only overwrites the atom positions and
+/// re-meshes — the connectivity/colour metadata is reused. Frames are stored in
+/// **ångström** (`[f32; 3]` per atom), so applying a frame is a unit-correct
+/// position copy regardless of whether it came from the synthetic generator or
+/// a loaded `valenx-md` trajectory (which is converted from nm on attach).
+///
+/// Fail-loud, never panic: a frame whose atom count differs from the base
+/// structure sets [`note`](Self::note) and is skipped; an empty trajectory is a
+/// no-op (nothing to attach / play).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct TrajectoryPlayback {
+    /// The base molecule (atoms in `from_biostruct` order) the frames animate.
+    /// `None` until a trajectory is attached.
+    base: Option<ViewMolecule>,
+    /// Per-atom colour attributes for the base molecule, in lockstep with
+    /// `base.atoms` — reused for every frame's coloured rebuild.
+    attrs: Vec<AtomAttr>,
+    /// Cα backbone control points (DSSP-tagged) of the base structure — reused
+    /// for the cartoon / ribbon representations. (Static across frames: only
+    /// atom positions move per frame, the secondary-structure track is from the
+    /// reference structure.)
+    backbone: Vec<BackbonePoint>,
+    /// The coordinate frames, each `base.atoms.len()` positions in **ångström**.
+    frames: Vec<Vec<[f32; 3]>>,
+    /// Currently-displayed frame index (clamped to `0..frames.len()`).
+    frame: usize,
+    /// Whether playback is advancing each repaint.
+    playing: bool,
+    /// Frames advanced per second while playing.
+    speed: f32,
+    /// Fractional-frame accumulator so a non-integer `speed × dt` advances
+    /// smoothly (carries the leftover between repaints).
+    accum: f32,
+    /// A human-readable label for where the trajectory came from (synthetic /
+    /// loaded), shown next to the controls.
+    source: String,
+    /// In-panel note (atom-count mismatch, etc.) — surfaced instead of a panic.
+    note: Option<String>,
+}
+
+impl TrajectoryPlayback {
+    /// Number of attached frames (0 when nothing is attached).
+    pub(crate) fn n_frames(&self) -> usize {
+        self.frames.len()
+    }
+
+    /// Whether a trajectory is attached and has at least one frame.
+    pub(crate) fn is_attached(&self) -> bool {
+        self.base.is_some() && !self.frames.is_empty()
+    }
+
+    /// Drop any attached trajectory and reset playback.
+    fn clear(&mut self) {
+        *self = TrajectoryPlayback::default();
+    }
+
+    /// Attach an explicit set of ångström frames to a base molecule.
+    ///
+    /// Fail-loud: an empty `frames` list is a no-op (nothing is attached); any
+    /// frame whose atom count differs from `base.atoms` sets [`note`] and the
+    /// whole attach is rejected (so playback never indexes a short frame).
+    fn attach(
+        &mut self,
+        base: ViewMolecule,
+        attrs: Vec<AtomAttr>,
+        backbone: Vec<BackbonePoint>,
+        frames: Vec<Vec<[f32; 3]>>,
+        source: impl Into<String>,
+    ) {
+        if frames.is_empty() {
+            // Empty trajectory -> no-op, leave any prior attachment untouched.
+            return;
+        }
+        let n = base.atoms.len();
+        if let Some(bad) = frames.iter().position(|f| f.len() != n) {
+            self.note = Some(format!(
+                "trajectory not attached: frame {} has {} atoms but the structure \
+                 has {} — atom counts must match",
+                bad,
+                frames[bad].len(),
+                n,
+            ));
+            return;
+        }
+        self.base = Some(base);
+        self.attrs = attrs;
+        self.backbone = backbone;
+        self.frames = frames;
+        self.frame = 0;
+        self.playing = false;
+        self.accum = 0.0;
+        self.source = source.into();
+        self.note = None;
+    }
+
+    /// Build the base molecule + frames from a parsed [`Structure`] by
+    /// generating a small **synthetic wobble** — each atom oscillates about its
+    /// reference position with a per-atom phase, so there is a real, deterministic
+    /// trajectory to play with no external file. `n_frames` frames over one full
+    /// period; `amplitude` is the ångström displacement.
+    fn attach_synthetic(&mut self, s: &Structure, n_frames: usize, amplitude: f32) {
+        let base = ViewMolecule::from_biostruct(s);
+        if base.atoms.is_empty() {
+            self.note = Some("no atoms to animate".to_string());
+            return;
+        }
+        let attrs = structure_atom_attrs(s);
+        let backbone = ca_backbone(s);
+        let frames = synthetic_wobble_frames(&base, n_frames.max(2), amplitude);
+        self.attach(base, attrs, backbone, frames, "synthetic wobble");
+    }
+
+    /// Attach a loaded `valenx-md` [`Trajectory`](valenx_md::io::trajectory::Trajectory)
+    /// to a parsed [`Structure`]. The MD positions (nm) are converted to ångström.
+    ///
+    /// Fail-loud: an empty trajectory is a no-op; an atom-count mismatch between
+    /// the structure and the trajectory's per-frame atom count sets [`note`] and
+    /// attaches nothing.
+    fn attach_md(&mut self, s: &Structure, traj: &valenx_md::io::trajectory::Trajectory) {
+        let base = ViewMolecule::from_biostruct(s);
+        if base.atoms.is_empty() {
+            self.note = Some("no atoms to animate".to_string());
+            return;
+        }
+        if traj.is_empty() {
+            return; // empty trajectory -> no-op
+        }
+        if traj.n_atoms() != base.atoms.len() {
+            self.note = Some(format!(
+                "trajectory not attached: it has {} atoms per frame but the \
+                 structure has {} — atom counts must match",
+                traj.n_atoms(),
+                base.atoms.len(),
+            ));
+            return;
+        }
+        let attrs = structure_atom_attrs(s);
+        let backbone = ca_backbone(s);
+        let frames: Vec<Vec<[f32; 3]>> = (0..traj.len())
+            .filter_map(|i| traj.frame(i))
+            .map(|frame| {
+                frame
+                    .iter()
+                    .map(|p| {
+                        [
+                            p.x as f32 * ANGSTROM_PER_NM,
+                            p.y as f32 * ANGSTROM_PER_NM,
+                            p.z as f32 * ANGSTROM_PER_NM,
+                        ]
+                    })
+                    .collect()
+            })
+            .collect();
+        self.attach(base, attrs, backbone, frames, "loaded valenx-md trajectory");
+    }
+
+    /// The base molecule with the positions of frame `index` applied, or `None`
+    /// if nothing is attached / `index` is out of range. The returned molecule
+    /// has **freshly detected bonds** for that frame's geometry, so a trajectory
+    /// in which atoms move apart/together re-bonds correctly each frame.
+    fn molecule_at(&self, index: usize) -> Option<ViewMolecule> {
+        let base = self.base.as_ref()?;
+        let frame = self.frames.get(index)?;
+        if frame.len() != base.atoms.len() {
+            return None; // guarded at attach, but never index a short frame
+        }
+        let atoms: Vec<ViewAtom> = base
+            .atoms
+            .iter()
+            .zip(frame)
+            .map(|(a, &pos)| ViewAtom::new(pos, a.element.clone()))
+            .collect();
+        let bonds = molecule_view::detect_bonds(&atoms);
+        Some(ViewMolecule { atoms, bonds })
+    }
+}
+
+/// Generate a deterministic synthetic wobble: `n_frames` frames in which every
+/// atom oscillates about its reference position. The displacement is
+/// `amplitude · sin(t) · dir(i)` where `t` sweeps one full period over the
+/// frames and `dir(i)` is a fixed per-atom direction (decorrelated by the atom
+/// index) — so the cloud *breathes* (atoms move along different axes) rather
+/// than translating rigidly, giving a visibly animated but reproducible
+/// trajectory with no external data.
+///
+/// Because the envelope is `sin(t)` (not `sin(t + phase)`), **frame 0 is the
+/// reference structure exactly** (`sin 0 == 0`), so attaching a synthetic
+/// trajectory shows the input structure before playback starts.
+fn synthetic_wobble_frames(
+    base: &ViewMolecule,
+    n_frames: usize,
+    amplitude: f32,
+) -> Vec<Vec<[f32; 3]>> {
+    let n_frames = n_frames.max(1);
+    (0..n_frames)
+        .map(|f| {
+            let t = 2.0 * std::f32::consts::PI * f as f32 / n_frames as f32;
+            let env = amplitude * t.sin(); // 0 at frame 0; same scalar for all atoms
+            base.atoms
+                .iter()
+                .enumerate()
+                .map(|(i, atom)| {
+                    // Per-atom unit-ish direction, fixed across frames so each
+                    // atom oscillates along its own axis (decorrelated breathing).
+                    let a = i as f32 * 0.7;
+                    let dir = [a.sin(), (a + 2.094).sin(), (a + 4.189).sin()];
+                    [
+                        atom.pos[0] + env * dir[0],
+                        atom.pos[1] + env * dir[1],
+                        atom.pos[2] + env * dir[2],
+                    ]
+                })
+                .collect()
+        })
+        .collect()
+}
 
 /// Which structure sub-tool is showing.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
@@ -62,6 +291,10 @@ pub struct BiostructPanel {
     /// Per-representation mesh-generation tunables (surface grid resolution,
     /// cartoon tube, ball/stick radii). Mutated by the picker's sliders.
     pub(crate) molviz_params: MolvizParams,
+    /// MD-trajectory playback over the currently-shown structure — animate the
+    /// atoms across coordinate frames (synthetic wobble or a loaded `valenx-md`
+    /// trajectory). Empty until a trajectory is attached.
+    pub(crate) trajectory: TrajectoryPlayback,
 }
 
 impl BiostructPanel {
@@ -136,6 +369,7 @@ impl Default for BiostructPanel {
             representation: Representation::default(),
             color_scheme: ColorScheme::default(),
             molviz_params: MolvizParams::default(),
+            trajectory: TrajectoryPlayback::default(),
         }
     }
 }
@@ -199,6 +433,7 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
         if ui.button("Show in 3D viewport").clicked() {
             show_in_viewport(app);
         }
+        draw_trajectory_controls(app, ui);
     }
 
     let p = &app.genetics.biostruct;
@@ -431,6 +666,279 @@ fn show_in_viewport(app: &mut ValenxApp) {
             }
         }
         Err(e) => app.genetics.biostruct.error = Some(e.to_string()),
+    }
+}
+
+/// Draw the **MD-trajectory playback** controls (the MolecularNodes-style
+/// animation) and run the per-frame update.
+///
+/// All controls carry an accessibility Name and are `labelled_by` their caption
+/// so the playback is AI-drivable (an agent finds the frame slider / Play /
+/// speed by name in the accessibility tree). When playing, the panel advances
+/// the frame index by `speed × dt` each repaint and requests another repaint so
+/// the animation is self-driving from inside the panel's `update`.
+fn draw_trajectory_controls(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    common::section(ui, "MD trajectory playback");
+
+    // --- attach buttons -------------------------------------------------
+    ui.horizontal_wrapped(|ui| {
+        if ui
+            .button("Generate demo trajectory")
+            .on_hover_text(
+                "Build a small synthetic wobble of the current atoms over 60 \
+                 frames — a real, deterministic trajectory to play with no \
+                 external file.",
+            )
+            .clicked()
+        {
+            attach_synthetic_trajectory(app);
+        }
+        if ui
+            .button("Load valenx-md trajectory…")
+            .on_hover_text(
+                "Load a binary (.dcd-class) or framed-text valenx-md trajectory \
+                 and animate the current structure across its frames (atom counts \
+                 must match).",
+            )
+            .clicked()
+        {
+            load_md_trajectory(app);
+        }
+        if app.genetics.biostruct.trajectory.is_attached()
+            && ui.button("Clear trajectory").clicked()
+        {
+            app.genetics.biostruct.trajectory.clear();
+        }
+    });
+
+    // --- playback transport (only once a trajectory is attached) --------
+    if app.genetics.biostruct.trajectory.is_attached() {
+        let n_frames = app.genetics.biostruct.trajectory.n_frames();
+        let last = n_frames.saturating_sub(1);
+
+        // Advance the clock while playing BEFORE drawing the slider so the
+        // slider reflects the frame we are about to render this repaint.
+        if app.genetics.biostruct.trajectory.playing && n_frames > 1 {
+            // `stable_dt` is the real frame time; fall back to ~60 FPS on the
+            // first frame (when egui reports 0) so playback still advances.
+            let dt = {
+                let d = ui.ctx().input(|i| i.stable_dt);
+                if d.is_finite() && d > 0.0 {
+                    d.min(0.1) // clamp a long stall so we don't jump the whole reel
+                } else {
+                    1.0 / 60.0
+                }
+            };
+            let tj = &mut app.genetics.biostruct.trajectory;
+            tj.accum += tj.speed * dt;
+            while tj.accum >= 1.0 {
+                tj.accum -= 1.0;
+                tj.frame = (tj.frame + 1) % n_frames; // loop
+            }
+        }
+
+        ui.horizontal(|ui| {
+            let caption = ui.label("Frame");
+            let mut frame = app.genetics.biostruct.trajectory.frame;
+            let changed = ui
+                .add(egui::Slider::new(&mut frame, 0..=last).clamp_to_range(true))
+                .labelled_by(caption.id)
+                .changed();
+            let dv_changed = ui
+                .add(egui::DragValue::new(&mut frame).range(0..=last))
+                .labelled_by(caption.id)
+                .changed();
+            ui.label(format!("/ {n_frames}"));
+            if changed || dv_changed {
+                // Scrubbing pauses auto-play so the user keeps control.
+                app.genetics.biostruct.trajectory.playing = false;
+            }
+            app.genetics.biostruct.trajectory.frame = frame.min(last);
+        });
+
+        ui.horizontal(|ui| {
+            let caption = ui.label("Transport");
+            let playing = app.genetics.biostruct.trajectory.playing;
+            let label = if playing { "Pause" } else { "Play" };
+            if ui
+                .add(egui::Button::new(label))
+                .labelled_by(caption.id)
+                .on_hover_text("Start / stop animating the structure across frames.")
+                .clicked()
+            {
+                app.genetics.biostruct.trajectory.playing = !playing;
+            }
+            if ui
+                .add(egui::Button::new("⏮ Reset"))
+                .labelled_by(caption.id)
+                .on_hover_text("Jump back to frame 0.")
+                .clicked()
+            {
+                app.genetics.biostruct.trajectory.frame = 0;
+                app.genetics.biostruct.trajectory.accum = 0.0;
+            }
+            ui.separator();
+            let speed_caption = ui.label("Speed (fps)");
+            ui.add(
+                egui::Slider::new(&mut app.genetics.biostruct.trajectory.speed, 0.5..=60.0)
+                    .text("fps"),
+            )
+            .labelled_by(speed_caption.id)
+            .on_hover_text("Frames advanced per second during playback.");
+        });
+
+        let tj = &app.genetics.biostruct.trajectory;
+        ui.label(
+            egui::RichText::new(format!(
+                "{} · frame {}/{}",
+                tj.source,
+                tj.frame + 1,
+                n_frames
+            ))
+            .weak(),
+        );
+
+        // Render the current frame into the viewport every repaint (so the
+        // slider and the auto-advancing clock both show live geometry).
+        render_trajectory_frame(app);
+
+        // Keep the animation alive: a playing trajectory must keep repainting
+        // even with no input events.
+        if app.genetics.biostruct.trajectory.playing {
+            ui.ctx().request_repaint();
+        }
+    }
+
+    // Surface any attach-time / playback note (atom-count mismatch, no atoms…).
+    if let Some(note) = &app.genetics.biostruct.trajectory.note {
+        ui.label(
+            egui::RichText::new(format!("trajectory: {note}"))
+                .italics()
+                .color(egui::Color32::from_rgb(0xB0, 0x60, 0x20)),
+        );
+    }
+}
+
+/// Parse the current structure text and attach a synthetic-wobble trajectory.
+fn attach_synthetic_trajectory(app: &mut ValenxApp) {
+    match read_structure(&app.genetics.biostruct.structure_a, "viewer") {
+        Ok(s) => {
+            app.genetics.biostruct.trajectory.speed = 12.0;
+            // 60 frames, 0.4 Å wobble — enough motion to read on screen.
+            app.genetics
+                .biostruct
+                .trajectory
+                .attach_synthetic(&s, 60, 0.4);
+            // Show frame 0 immediately so the viewport isn't stale.
+            if app.genetics.biostruct.trajectory.is_attached() {
+                render_trajectory_frame(app);
+            }
+        }
+        Err(e) => {
+            app.genetics.biostruct.trajectory.note =
+                Some(format!("could not parse structure: {e}"));
+        }
+    }
+}
+
+/// Pick a `valenx-md` trajectory file (binary or framed-text), parse it, and
+/// attach it to the current structure. Fail-loud: a bad file / atom-count
+/// mismatch sets an in-panel note, never panics.
+fn load_md_trajectory(app: &mut ValenxApp) {
+    use valenx_md::io::trajectory::{read_binary, read_text};
+
+    let Some(path) = rfd::FileDialog::new()
+        .add_filter("valenx-md trajectory", &["dcd", "trj", "traj", "txt"])
+        .pick_file()
+    else {
+        return;
+    };
+    // Cap the read so a huge picked file can't OOM the renderer before parsing.
+    let bytes = match valenx_core::io_caps::read_capped_to_bytes(
+        &path,
+        valenx_core::io_caps::MAX_GENETICS_FILE_BYTES,
+    ) {
+        Ok(b) => b,
+        Err(e) => {
+            app.genetics.biostruct.trajectory.note = Some(format!("read: {e}"));
+            return;
+        }
+    };
+    // Try the binary format first, then fall back to the framed-text format.
+    let traj = read_binary(&bytes).or_else(|_| {
+        std::str::from_utf8(&bytes)
+            .map_err(|_| valenx_md::error::MdError::parse("trajectory", "not UTF-8 text"))
+            .and_then(read_text)
+    });
+    match traj {
+        Ok(traj) => match read_structure(&app.genetics.biostruct.structure_a, "viewer") {
+            Ok(s) => {
+                app.genetics.biostruct.trajectory.attach_md(&s, &traj);
+                if app.genetics.biostruct.trajectory.is_attached() {
+                    render_trajectory_frame(app);
+                }
+            }
+            Err(e) => {
+                app.genetics.biostruct.trajectory.note =
+                    Some(format!("could not parse structure: {e}"));
+            }
+        },
+        Err(e) => {
+            app.genetics.biostruct.trajectory.note =
+                Some(format!("could not read trajectory: {e}"));
+        }
+    }
+}
+
+/// Mesh the current trajectory frame with the panel's selected representation +
+/// colour scheme and push it into the 3-D viewport.
+///
+/// This is the per-frame update the slider / playback drive: it overwrites the
+/// base molecule's atom positions with the current frame (via
+/// [`TrajectoryPlayback::molecule_at`], which also re-detects bonds), rebuilds
+/// the representation mesh, and shows it through the same
+/// [`molecule_view::show_molecule`] / [`molecule_view::show_molecule_colored`]
+/// path as the static "Show in 3D viewport" button — so a frame renders
+/// identically to a freshly-shown structure at those coordinates.
+///
+/// Fail-loud, never panic: nothing attached / a short frame is a silent no-op;
+/// a backbone representation with too few Cα points sets the in-panel note (the
+/// secondary-structure backbone is the reference structure's, static across
+/// frames).
+fn render_trajectory_frame(app: &mut ValenxApp) {
+    let rep = app.genetics.biostruct.representation;
+    let scheme = app.genetics.biostruct.color_scheme;
+    let params = app.genetics.biostruct.molviz_params;
+    let frame = app.genetics.biostruct.trajectory.frame;
+
+    let Some(view) = app.genetics.biostruct.trajectory.molecule_at(frame) else {
+        return; // nothing attached, or a guarded short frame
+    };
+    let backbone = if rep.needs_backbone() {
+        app.genetics.biostruct.trajectory.backbone.clone()
+    } else {
+        Vec::new()
+    };
+    if rep.needs_backbone() && backbone.len() < 2 {
+        app.genetics.biostruct.trajectory.note = Some(format!(
+            "{} needs a protein backbone (≥ 2 Cα atoms) — this structure has \
+             none; pick ball-and-stick or surface to animate it",
+            rep.label().to_ascii_lowercase()
+        ));
+        return;
+    }
+    let label = format!("trajectory.{}.{}.frame{frame}", rep.token(), scheme.token());
+    let result = if scheme == ColorScheme::Element {
+        let mesh = molviz::build_mesh(&view, rep, &backbone, &params);
+        molecule_view::show_molecule(app, mesh, &label)
+    } else {
+        let attrs = &app.genetics.biostruct.trajectory.attrs;
+        let (mesh, per_tri_colors) =
+            molviz::build_mesh_colored(&view, rep, &backbone, &params, scheme, attrs);
+        molecule_view::show_molecule_colored(app, mesh, &per_tri_colors, &label)
+    };
+    if let Err(e) = result {
+        app.genetics.biostruct.trajectory.note = Some(e);
     }
 }
 
@@ -1061,5 +1569,195 @@ END
                 "colour scheme '{label}' button must be labelled_by its caption (AI-drivable)"
             );
         }
+    }
+
+    // ---- MD-trajectory playback ----------------------------------------
+
+    /// Build a 3-frame `valenx-md` trajectory whose atom count matches the demo
+    /// glycine peptide (12 atoms), so it attaches cleanly. Frame `f` shifts
+    /// every atom by `f` Å on x, giving frames that are trivially distinguishable.
+    fn matching_traj(natoms: usize) -> valenx_md::io::trajectory::Trajectory {
+        use nalgebra::Vector3;
+        let mut traj = valenx_md::io::trajectory::Trajectory::new(natoms, 0.002).unwrap();
+        for f in 0..3 {
+            let frame: Vec<Vector3<f64>> = (0..natoms)
+                // nm here; ×10 → ångström on attach. `f` nm → 10·f Å shift.
+                .map(|i| Vector3::new(f as f64 + 0.1 * i as f64, 0.0, 0.0))
+                .collect();
+            traj.push_frame(frame).unwrap();
+        }
+        traj
+    }
+
+    #[test]
+    fn synthetic_trajectory_attaches_and_frame0_is_the_reference() {
+        // Generating the demo trajectory attaches a multi-frame wobble whose
+        // frame 0 is the reference structure exactly (sin 0 == 0).
+        let mut app = app_with_panel();
+        super::attach_synthetic_trajectory(&mut app);
+        let tj = &app.genetics.biostruct.trajectory;
+        assert!(tj.is_attached(), "synthetic trajectory must attach");
+        assert!(tj.n_frames() >= 2, "needs ≥ 2 frames to animate");
+        assert!(tj.note.is_none(), "clean attach has no note: {:?}", tj.note);
+        // Frame 0 reproduces the base atom positions exactly.
+        let base = tj.base.as_ref().unwrap();
+        let f0 = tj.molecule_at(0).unwrap();
+        assert_eq!(f0.atoms.len(), base.atoms.len());
+        for (a, b) in f0.atoms.iter().zip(&base.atoms) {
+            assert_eq!(a.pos, b.pos, "frame 0 must equal the reference structure");
+        }
+    }
+
+    #[test]
+    fn stepping_the_frame_index_changes_atom_positions_exactly() {
+        // The core playback contract: stepping the frame index sets the
+        // displayed atom positions to that frame's coordinates, exactly.
+        let s = read_structure(DEMO_PDB, "demo").unwrap();
+        let natoms = ViewMolecule::from_biostruct(&s).atoms.len();
+        let traj = matching_traj(natoms);
+        let mut tj = TrajectoryPlayback::default();
+        tj.attach_md(&s, &traj);
+        assert!(tj.is_attached());
+        assert_eq!(tj.n_frames(), 3);
+
+        // Frame f shifts atom i to x = 10·(f + 0.1·i) Å (nm→Å on attach).
+        for f in 0..3 {
+            let mol = tj.molecule_at(f).expect("frame in range");
+            assert_eq!(mol.atoms.len(), natoms);
+            for (i, atom) in mol.atoms.iter().enumerate() {
+                let expect_x = 10.0 * (f as f32 + 0.1 * i as f32);
+                assert!(
+                    (atom.pos[0] - expect_x).abs() < 1e-3,
+                    "frame {f} atom {i}: x {} != {expect_x}",
+                    atom.pos[0]
+                );
+                assert_eq!(atom.pos[1], 0.0);
+                assert_eq!(atom.pos[2], 0.0);
+            }
+        }
+        // Consecutive frames differ (the motion is real, not static).
+        let a = tj.molecule_at(0).unwrap();
+        let b = tj.molecule_at(1).unwrap();
+        assert_ne!(a.atoms[0].pos, b.atoms[0].pos);
+        // Out-of-range frame is None, never a panic.
+        assert!(tj.molecule_at(99).is_none());
+    }
+
+    #[test]
+    fn atom_count_mismatch_is_handled_without_panic() {
+        // A trajectory whose per-frame atom count differs from the structure
+        // must NOT attach and must leave an in-panel note (no panic).
+        let s = read_structure(DEMO_PDB, "demo").unwrap();
+        let natoms = ViewMolecule::from_biostruct(&s).atoms.len();
+        let wrong = matching_traj(natoms + 5); // deliberately too many atoms
+        let mut tj = TrajectoryPlayback::default();
+        tj.attach_md(&s, &wrong);
+        assert!(!tj.is_attached(), "a mismatched trajectory must not attach");
+        assert!(
+            tj.note
+                .as_deref()
+                .unwrap_or("")
+                .contains("atom counts must match"),
+            "mismatch must leave an explanatory note: {:?}",
+            tj.note
+        );
+
+        // The same guard via the explicit-frames path: a short frame is rejected.
+        let base = ViewMolecule::from_biostruct(&s);
+        let mut tj2 = TrajectoryPlayback::default();
+        tj2.attach(
+            base,
+            Vec::new(),
+            Vec::new(),
+            vec![vec![[0.0; 3]; natoms], vec![[0.0; 3]; natoms - 1]],
+            "test",
+        );
+        assert!(!tj2.is_attached());
+        assert!(tj2.note.is_some());
+    }
+
+    #[test]
+    fn empty_trajectory_is_a_noop() {
+        // An empty `valenx-md` trajectory attaches nothing (no-op), no panic.
+        let s = read_structure(DEMO_PDB, "demo").unwrap();
+        let natoms = ViewMolecule::from_biostruct(&s).atoms.len();
+        let empty = valenx_md::io::trajectory::Trajectory::new(natoms, 0.002).unwrap();
+        let mut tj = TrajectoryPlayback::default();
+        tj.attach_md(&s, &empty);
+        assert!(!tj.is_attached(), "empty trajectory must not attach");
+    }
+
+    #[test]
+    fn render_trajectory_frame_pushes_the_frames_geometry_to_the_viewport() {
+        // The per-frame update meshes the current frame and pushes it into the
+        // viewport; switching frames re-renders without panic.
+        let mut app = app_with_panel();
+        super::attach_synthetic_trajectory(&mut app);
+        assert!(app.genetics.biostruct.trajectory.is_attached());
+        // Render a couple of distinct frames — each must populate the viewport.
+        for f in [0usize, 1, 30] {
+            app.genetics.biostruct.trajectory.frame =
+                f.min(app.genetics.biostruct.trajectory.n_frames() - 1);
+            super::render_trajectory_frame(&mut app);
+            assert!(
+                app.stl.is_some(),
+                "frame {f} should have pushed a mesh to the viewport"
+            );
+            assert!(
+                app.genetics.biostruct.trajectory.note.is_none(),
+                "frame {f} render errored: {:?}",
+                app.genetics.biostruct.trajectory.note
+            );
+        }
+    }
+
+    #[test]
+    fn draws_at_a_mid_frame_without_panic() {
+        // The full panel (with the playback transport) must draw at a mid-frame,
+        // both paused and playing, without panic.
+        let mut app = app_with_panel();
+        super::attach_synthetic_trajectory(&mut app);
+        let mid = app.genetics.biostruct.trajectory.n_frames() / 2;
+        app.genetics.biostruct.trajectory.frame = mid;
+        draw_headless(&mut app); // paused
+        app.genetics.biostruct.trajectory.playing = true;
+        draw_headless(&mut app); // playing (advances the clock + repaints)
+    }
+
+    #[test]
+    fn playback_controls_are_labelled_for_ai_driving() {
+        // The frame slider, Play/Pause and speed controls must be AI-drivable:
+        // each carries its caption as an accessibility Name and is `labelled_by`
+        // that caption. Attach a trajectory first so the transport is shown.
+        use egui::accesskit::Node;
+        let mut app = app_with_panel();
+        super::attach_synthetic_trajectory(&mut app);
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        // The captions that name the playback groups.
+        for caption in ["Frame", "Transport", "Speed (fps)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "playback caption '{caption}' must appear as a named accesskit node"
+            );
+        }
+        // At least some control is `labelled_by` a caption (the slider / drag /
+        // buttons are associated to their captions) — the AI-drivable handle.
+        let labelled: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| !n.labelled_by().is_empty())
+            .collect();
+        assert!(
+            !labelled.is_empty(),
+            "playback transport must expose labelled_by-associated controls"
+        );
+        // The Play button is reachable by name.
+        assert!(
+            nodes
+                .iter()
+                .any(|(_, n)| n.name() == Some("Play") || n.name() == Some("Pause")),
+            "the Play/Pause button must be a named accesskit node"
+        );
     }
 }
