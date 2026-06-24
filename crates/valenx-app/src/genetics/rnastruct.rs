@@ -118,12 +118,13 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
 
     if p.tool == Tool::Partition {
         ui.horizontal(|ui| {
-            ui.label("BPP threshold:");
+            let lbl = ui.label("BPP threshold:");
             ui.add(
                 egui::DragValue::new(&mut p.bpp_threshold)
                     .speed(0.01)
                     .range(0.0..=1.0),
-            );
+            )
+            .labelled_by(lbl.id);
         });
     }
 
@@ -329,5 +330,39 @@ mod headless_ui_tests {
         };
         run_fold(&mut p);
         assert!(p.error.is_some(), "fold should error on malformed input");
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::Role;
+        // The BPP threshold DragValue is only visible in Partition mode.
+        let mut app = app_with_panel();
+        app.genetics.rnastruct.tool = Tool::Partition;
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                super::draw(&mut app, ui);
+            });
+        });
+        let nodes = out
+            .platform_output
+            .accesskit_update
+            .expect("accesskit tree produced")
+            .nodes;
+        let spin_buttons: Vec<_> = nodes
+            .iter()
+            .filter(|(_, n)| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            !spin_buttons.is_empty(),
+            "rnastruct Partition mode should expose at least one SpinButton"
+        );
+        assert!(
+            spin_buttons
+                .iter()
+                .all(|(_, n)| !n.labelled_by().is_empty()),
+            "every rnastruct DragValue must be labelled_by its caption (AI-drivable name)"
+        );
     }
 }

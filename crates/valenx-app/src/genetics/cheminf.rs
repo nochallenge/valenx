@@ -327,8 +327,9 @@ fn draw_similarity(p: &mut CheminfPanel, ui: &mut egui::Ui) {
             .desired_rows(2),
     );
     ui.horizontal(|ui| {
-        ui.label("ECFP radius:");
-        ui.add(egui::DragValue::new(&mut p.fp_radius).range(1..=4));
+        let lbl = ui.label("ECFP radius:");
+        ui.add(egui::DragValue::new(&mut p.fp_radius).range(1..=4))
+            .labelled_by(lbl.id);
     });
     if common::run_button(ui, "Compute Tanimoto similarity") {
         let snap = p.snapshot();
@@ -478,5 +479,39 @@ mod headless_ui_tests {
         };
         run_similarity(&mut p);
         assert!(p.error.is_some(), "similarity should error on bad SMILES");
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::Role;
+        // The ECFP radius DragValue is only visible in Similarity mode.
+        let mut app = app_with_panel();
+        app.genetics.cheminf.tool = Tool::Similarity;
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                super::draw(&mut app, ui);
+            });
+        });
+        let nodes = out
+            .platform_output
+            .accesskit_update
+            .expect("accesskit tree produced")
+            .nodes;
+        let spin_buttons: Vec<_> = nodes
+            .iter()
+            .filter(|(_, n)| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            !spin_buttons.is_empty(),
+            "cheminf Similarity mode should expose at least one SpinButton"
+        );
+        assert!(
+            spin_buttons
+                .iter()
+                .all(|(_, n)| !n.labelled_by().is_empty()),
+            "every cheminf DragValue must be labelled_by its caption (AI-drivable name)"
+        );
     }
 }

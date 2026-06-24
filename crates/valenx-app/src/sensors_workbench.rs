@@ -185,13 +185,17 @@ impl Default for SensorsWorkbenchState {
 
 impl SensorsWorkbenchState {
     /// Build the shared [`Scene`] from the current scene parameters.
-    fn build_scene(&self) -> Scene {
+    ///
+    /// Returns `Err` (instead of panicking) when a geometry constructor rejects
+    /// the current parameter values — most commonly when the user has dragged
+    /// `sphere_radius_m` to ≤ 0 or to NaN.
+    fn build_scene(&self) -> Result<Scene, String> {
         use nalgebra::Vector3;
         let mut scene = Scene::new();
         // Ground plane at Y = -1.0, normal pointing up.
         scene.push_plane(
             Plane::new(Vector3::new(0.0, -1.0, 0.0), Vector3::new(0.0, 1.0, 0.0))
-                .expect("ground plane params are valid"),
+                .map_err(|e| e.to_string())?,
         );
         // Sphere at the user's position.
         scene.push_sphere(
@@ -199,9 +203,9 @@ impl SensorsWorkbenchState {
                 Vector3::new(self.scene.sphere_x_m, 0.0, self.scene.sphere_z_m),
                 self.scene.sphere_radius_m,
             )
-            .expect("sphere params are valid"),
+            .map_err(|e| e.to_string())?,
         );
-        scene
+        Ok(scene)
     }
 
     /// Run a LiDAR scan. Returns the populated [`LidarResult`] or an error string.
@@ -217,7 +221,7 @@ impl SensorsWorkbenchState {
             range_noise_std: 0.01,
         };
         let mut sensor = Lidar::new(cfg, 42).map_err(|e| e.to_string())?;
-        let scene = self.build_scene();
+        let scene = self.build_scene()?;
         let scan = sensor.scan(&scene, Vector3::zeros(), UnitQuaternion::identity());
 
         let ranges: Vec<f64> = scan.beams.iter().filter_map(|b| b.range).collect();
@@ -964,6 +968,23 @@ mod headless_ui_tests {
                 n.role() == Role::Button && n.name().is_some_and(|s| s.contains("Measure"))
             }),
             "the Measure button must be a named, invokable node"
+        );
+    }
+
+    #[test]
+    fn invalid_sphere_radius_returns_err_not_panic() {
+        // When the user drags sphere_radius_m to <= 0, build_scene must return
+        // Err and scan_lidar must propagate it — NOT panic.
+        let mut state = SensorsWorkbenchState::default();
+        state.scene.sphere_radius_m = 0.0;
+        assert!(
+            state.scan_lidar().is_err(),
+            "sphere_radius_m = 0 must produce Err, not panic"
+        );
+        state.scene.sphere_radius_m = -1.5;
+        assert!(
+            state.scan_lidar().is_err(),
+            "sphere_radius_m < 0 must produce Err, not panic"
         );
     }
 

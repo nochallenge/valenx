@@ -233,10 +233,12 @@ fn draw_pairwise(p: &mut AlignmentPanel, ui: &mut egui::Ui) {
             });
     });
     ui.horizontal(|ui| {
-        ui.label("Gap open:");
-        ui.add(egui::DragValue::new(&mut p.gap_open).range(0..=50));
-        ui.label("extend:");
-        ui.add(egui::DragValue::new(&mut p.gap_extend).range(0..=50));
+        let lbl = ui.label("Gap open:");
+        ui.add(egui::DragValue::new(&mut p.gap_open).range(0..=50))
+            .labelled_by(lbl.id);
+        let lbl = ui.label("extend:");
+        ui.add(egui::DragValue::new(&mut p.gap_extend).range(0..=50))
+            .labelled_by(lbl.id);
     });
 
     if common::run_button(ui, "Align") {
@@ -355,8 +357,9 @@ fn draw_kmer(p: &mut AlignmentPanel, ui: &mut egui::Ui) {
     );
     common::seq_input(ui, "align_kmer_query", "Query:", &mut p.kmer_query, 2);
     ui.horizontal(|ui| {
-        ui.label("k:");
-        ui.add(egui::DragValue::new(&mut p.kmer_k).range(2..=31));
+        let lbl = ui.label("k:");
+        ui.add(egui::DragValue::new(&mut p.kmer_k).range(2..=31))
+            .labelled_by(lbl.id);
     });
     if common::run_button(ui, "Seed search") {
         run_kmer(p);
@@ -439,6 +442,22 @@ mod headless_ui_tests {
                 super::draw(app, ui);
             });
         });
+    }
+
+    fn draw_and_collect_nodes(
+        app: &mut ValenxApp,
+    ) -> Vec<(egui::accesskit::NodeId, egui::accesskit::Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                super::draw(app, ui);
+            });
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree produced when enabled")
+            .nodes
     }
 
     fn app_with_panel() -> ValenxApp {
@@ -530,5 +549,30 @@ mod headless_ui_tests {
             p.error.is_some(),
             "k-mer search should error on empty query"
         );
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::Role;
+        // Render each tool variant so all DragValues are covered.
+        for tool in [Tool::Pairwise, Tool::KmerSearch] {
+            let mut app = app_with_panel();
+            app.genetics.alignment.tool = tool;
+            let nodes = draw_and_collect_nodes(&mut app);
+            let spin_buttons: Vec<_> = nodes
+                .iter()
+                .filter(|(_, n)| n.role() == Role::SpinButton)
+                .collect();
+            assert!(
+                !spin_buttons.is_empty(),
+                "alignment tool {tool:?} should expose at least one SpinButton"
+            );
+            assert!(
+                spin_buttons
+                    .iter()
+                    .all(|(_, n)| !n.labelled_by().is_empty()),
+                "every alignment DragValue ({tool:?}) must be labelled_by its caption"
+            );
+        }
     }
 }

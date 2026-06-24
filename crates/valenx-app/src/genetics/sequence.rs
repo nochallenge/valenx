@@ -562,10 +562,12 @@ fn run_translate(p: &mut SequencePanel) {
 
 fn draw_orf(p: &mut SequencePanel, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
-        ui.label("Min protein length:");
-        ui.add(egui::DragValue::new(&mut p.orf_min_len).range(1..=10_000));
-        ui.label("code:");
-        ui.add(egui::DragValue::new(&mut p.code_id).range(1..=33));
+        let lbl = ui.label("Min protein length:");
+        ui.add(egui::DragValue::new(&mut p.orf_min_len).range(1..=10_000))
+            .labelled_by(lbl.id);
+        let lbl = ui.label("code:");
+        ui.add(egui::DragValue::new(&mut p.code_id).range(1..=33))
+            .labelled_by(lbl.id);
     });
     if common::run_button(ui, "Find ORFs (6 frames)") {
         run_orf(p);
@@ -683,17 +685,20 @@ fn run_restriction(p: &mut SequencePanel) {
 
 fn draw_primers(p: &mut SequencePanel, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
-        ui.label("Target window:");
-        ui.add(egui::DragValue::new(&mut p.primer_start).prefix("start "));
-        ui.add(egui::DragValue::new(&mut p.primer_end).prefix("end "));
+        let lbl_win = ui.label("Target window:");
+        ui.add(egui::DragValue::new(&mut p.primer_start).prefix("start "))
+            .labelled_by(lbl_win.id);
+        ui.add(egui::DragValue::new(&mut p.primer_end).prefix("end "))
+            .labelled_by(lbl_win.id);
     });
     ui.horizontal(|ui| {
-        ui.label("Target Tm (°C):");
+        let lbl = ui.label("Target Tm (°C):");
         ui.add(
             egui::DragValue::new(&mut p.primer_target_tm)
                 .range(40.0..=80.0)
                 .speed(0.5),
-        );
+        )
+        .labelled_by(lbl.id);
     });
     if common::run_button(ui, "Design primer pair") {
         run_primers(p);
@@ -1045,5 +1050,41 @@ mod headless_ui_tests {
         let mut p = protein();
         run_restriction(&mut p);
         assert!(p.error.is_some());
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::Role;
+        // Orf renders orf_min_len + code_id; Primers renders primer_start/end + target_tm.
+        for tool in [Tool::Orf, Tool::Primers] {
+            let mut app = app_with_panel();
+            app.genetics.sequence.tool = tool;
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            let out = ctx.run(egui::RawInput::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    super::draw(&mut app, ui);
+                });
+            });
+            let nodes = out
+                .platform_output
+                .accesskit_update
+                .expect("accesskit tree produced")
+                .nodes;
+            let spin_buttons: Vec<_> = nodes
+                .iter()
+                .filter(|(_, n)| n.role() == Role::SpinButton)
+                .collect();
+            assert!(
+                !spin_buttons.is_empty(),
+                "sequence tool {tool:?} should expose at least one SpinButton"
+            );
+            assert!(
+                spin_buttons
+                    .iter()
+                    .all(|(_, n)| !n.labelled_by().is_empty()),
+                "every sequence DragValue ({tool:?}) must be labelled_by its caption"
+            );
+        }
     }
 }

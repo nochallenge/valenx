@@ -368,15 +368,17 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
     });
     if p.engine != Engine::Fba {
         ui.horizontal(|ui| {
-            ui.label("End time:");
+            let lbl = ui.label("End time:");
             ui.add(
                 egui::DragValue::new(&mut p.t_end)
                     .speed(1.0)
                     .range(1.0..=1000.0),
-            );
+            )
+            .labelled_by(lbl.id);
             if p.engine == Engine::Gillespie {
-                ui.label("seed:");
-                ui.add(egui::DragValue::new(&mut p.seed));
+                let lbl = ui.label("seed:");
+                ui.add(egui::DragValue::new(&mut p.seed))
+                    .labelled_by(lbl.id);
             }
         });
     } else if !p.reactions.is_empty() {
@@ -453,7 +455,7 @@ fn draw_species_editor(p: &mut SysbioPanel, ui: &mut egui::Ui) {
         .spacing([8.0, 4.0])
         .show(ui, |ui| {
             ui.label(egui::RichText::new("name").weak().small());
-            ui.label(egui::RichText::new("initial amount").weak().small());
+            let lbl_initial_hdr = ui.label(egui::RichText::new("initial amount").weak().small());
             ui.label("");
             ui.end_row();
             for (i, s) in p.species.iter_mut().enumerate() {
@@ -466,7 +468,8 @@ fn draw_species_editor(p: &mut SysbioPanel, ui: &mut egui::Ui) {
                     egui::DragValue::new(&mut s.initial)
                         .speed(1.0)
                         .range(0.0..=1.0e9),
-                );
+                )
+                .labelled_by(lbl_initial_hdr.id);
                 if ui.small_button("✖").clicked() {
                     remove = Some(i);
                 }
@@ -578,8 +581,9 @@ fn draw_stoich_editor(
                         ui.selectable_value(sp, si, name);
                     }
                 });
-            ui.label("×");
-            ui.add(egui::DragValue::new(stoich).speed(0.1).range(0.0..=100.0));
+            let lbl = ui.label("×");
+            ui.add(egui::DragValue::new(stoich).speed(0.1).range(0.0..=100.0))
+                .labelled_by(lbl.id);
             if ui.small_button("✖").clicked() {
                 remove = Some(idx);
             }
@@ -605,48 +609,55 @@ fn draw_law_params(ui: &mut egui::Ui, r: &mut ReactionRow, species_names: &[Stri
         .spacing([8.0, 4.0])
         .show(ui, |ui| match r.law {
             LawKind::Constant => {
-                ui.label("flux");
-                ui.add(egui::DragValue::new(&mut r.k).speed(0.1).range(0.0..=1.0e6));
+                let lbl = ui.label("flux");
+                ui.add(egui::DragValue::new(&mut r.k).speed(0.1).range(0.0..=1.0e6))
+                    .labelled_by(lbl.id);
                 ui.end_row();
             }
             LawKind::MassAction => {
-                ui.label("k (rate constant)");
+                let lbl = ui.label("k (rate constant)");
                 ui.add(
                     egui::DragValue::new(&mut r.k)
                         .speed(0.01)
                         .range(0.0..=1.0e6),
-                );
+                )
+                .labelled_by(lbl.id);
                 ui.end_row();
             }
             LawKind::MichaelisMenten => {
-                ui.label("Vmax");
-                ui.add(egui::DragValue::new(&mut r.k).speed(0.1).range(0.0..=1.0e6));
+                let lbl = ui.label("Vmax");
+                ui.add(egui::DragValue::new(&mut r.k).speed(0.1).range(0.0..=1.0e6))
+                    .labelled_by(lbl.id);
                 ui.end_row();
-                ui.label("Km");
+                let lbl = ui.label("Km");
                 ui.add(
                     egui::DragValue::new(&mut r.param2)
                         .speed(0.1)
                         .range(1.0e-6..=1.0e6),
-                );
+                )
+                .labelled_by(lbl.id);
                 ui.end_row();
             }
             LawKind::Hill => {
-                ui.label("Vmax");
-                ui.add(egui::DragValue::new(&mut r.k).speed(0.1).range(0.0..=1.0e6));
+                let lbl = ui.label("Vmax");
+                ui.add(egui::DragValue::new(&mut r.k).speed(0.1).range(0.0..=1.0e6))
+                    .labelled_by(lbl.id);
                 ui.end_row();
-                ui.label("Kd");
+                let lbl = ui.label("Kd");
                 ui.add(
                     egui::DragValue::new(&mut r.param2)
                         .speed(0.1)
                         .range(1.0e-6..=1.0e6),
-                );
+                )
+                .labelled_by(lbl.id);
                 ui.end_row();
-                ui.label("Hill coefficient n");
+                let lbl = ui.label("Hill coefficient n");
                 ui.add(
                     egui::DragValue::new(&mut r.param3)
                         .speed(0.1)
                         .range(0.1..=12.0),
-                );
+                )
+                .labelled_by(lbl.id);
                 ui.end_row();
                 ui.label("regulator");
                 if !species_names.is_empty() {
@@ -1069,5 +1080,41 @@ mod headless_ui_tests {
         p.species[1].name = "A".to_string(); // collide with species 0
         run_engine(&mut p);
         assert!(p.error.is_some(), "run should error on duplicate species");
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::Role;
+        // ODE mode exposes t_end; Gillespie additionally exposes seed.
+        for engine in [Engine::Ode, Engine::Gillespie] {
+            let mut app = app_with_panel();
+            app.genetics.sysbio.engine = engine;
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            let out = ctx.run(egui::RawInput::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    super::draw(&mut app, ui);
+                });
+            });
+            let nodes = out
+                .platform_output
+                .accesskit_update
+                .expect("accesskit tree produced")
+                .nodes;
+            let spin_buttons: Vec<_> = nodes
+                .iter()
+                .filter(|(_, n)| n.role() == Role::SpinButton)
+                .collect();
+            assert!(
+                !spin_buttons.is_empty(),
+                "sysbio {engine:?} should expose at least one SpinButton"
+            );
+            assert!(
+                spin_buttons
+                    .iter()
+                    .all(|(_, n)| !n.labelled_by().is_empty()),
+                "every sysbio DragValue ({engine:?}) must be labelled_by its caption"
+            );
+        }
     }
 }

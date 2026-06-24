@@ -163,22 +163,25 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
             common::section(ui, "Target sequence (one-letter amino acids)");
             common::seq_input(ui, "sp_seq", "sequence", &mut p.sequence, 4);
             ui.horizontal(|ui| {
-                ui.label("centroid moves");
+                let lbl = ui.label("centroid moves");
                 ui.add(
                     egui::DragValue::new(&mut p.centroid_moves)
                         .speed(10.0)
                         .range(1..=20_000),
-                );
-                ui.label("repack moves");
+                )
+                .labelled_by(lbl.id);
+                let lbl = ui.label("repack moves");
                 ui.add(
                     egui::DragValue::new(&mut p.repack_moves)
                         .speed(5.0)
                         .range(1..=5_000),
-                );
+                )
+                .labelled_by(lbl.id);
             });
             ui.horizontal(|ui| {
-                ui.label("seed");
-                ui.add(egui::DragValue::new(&mut p.seed).speed(1.0));
+                let lbl = ui.label("seed");
+                ui.add(egui::DragValue::new(&mut p.seed).speed(1.0))
+                    .labelled_by(lbl.id);
             });
             ui.label(
                 egui::RichText::new(
@@ -222,14 +225,16 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
             ui.horizontal(|ui| {
                 ui.label("chain");
                 ui.add(egui::TextEdit::singleline(&mut p.chain).desired_width(40.0));
-                ui.label("design moves");
+                let lbl = ui.label("design moves");
                 ui.add(
                     egui::DragValue::new(&mut p.design_moves)
                         .speed(10.0)
                         .range(1..=10_000),
-                );
-                ui.label("seed");
-                ui.add(egui::DragValue::new(&mut p.seed).speed(1.0));
+                )
+                .labelled_by(lbl.id);
+                let lbl = ui.label("seed");
+                ui.add(egui::DragValue::new(&mut p.seed).speed(1.0))
+                    .labelled_by(lbl.id);
             });
             if common::run_button(ui, "Design sequence") {
                 let snap = p.snapshot();
@@ -348,5 +353,59 @@ mod tests {
             p.error.is_some(),
             "design with no backbone must surface an error"
         );
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
+mod headless_ui_tests {
+    use super::*;
+    use crate::genetics_workbench::GeneticsPanel;
+    use crate::ValenxApp;
+    use egui::accesskit::{Node, NodeId, Role};
+
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                super::draw(app, ui);
+            });
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree produced when enabled")
+            .nodes
+    }
+
+    fn app_with_panel() -> ValenxApp {
+        let mut app = ValenxApp::default();
+        app.genetics.active = GeneticsPanel::StructurePrediction;
+        app
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // AbInitio renders centroid_moves, repack_moves, and seed.
+        // Design renders design_moves and seed.
+        for mode in [SpMode::AbInitio, SpMode::Design] {
+            let mut app = app_with_panel();
+            app.genetics.structpredict.mode = mode;
+            let nodes = draw_and_collect_nodes(&mut app);
+            let spin_buttons: Vec<_> = nodes
+                .iter()
+                .filter(|(_, n)| n.role() == Role::SpinButton)
+                .collect();
+            assert!(
+                !spin_buttons.is_empty(),
+                "structpredict mode {mode:?} should expose at least one SpinButton"
+            );
+            assert!(
+                spin_buttons
+                    .iter()
+                    .all(|(_, n)| !n.labelled_by().is_empty()),
+                "every structpredict DragValue ({mode:?}) must be labelled_by its caption"
+            );
+        }
     }
 }
