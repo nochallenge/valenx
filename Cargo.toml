@@ -313,6 +313,8 @@ members = [
 
     # Multi-physics coupling meta-adapter
     "crates/valenx-adapters/coupling/valenx-adapter-precice",
+    # Native co-simulation master + FMI co-sim import + DIS PDU codec
+    "crates/valenx-adapters/coupling/valenx-adapter-fmi",
 
     # Biology adapters (Phase 17)
     "crates/valenx-adapters/bio/valenx-adapter-biopython",
