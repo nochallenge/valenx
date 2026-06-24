@@ -556,10 +556,50 @@ pub fn show_molecule(
     }
     let count = mesh.triangle_count();
     app.mesh = None;
-    app.stl = Some(LoadedStl {
-        path: PathBuf::from(format!("<genetics>/{source_label}")),
+    app.stl = Some(LoadedStl::new(
+        PathBuf::from(format!("<genetics>/{source_label}")),
         mesh,
-    });
+    ));
+    app.frame_current_stl();
+    Ok(count)
+}
+
+/// Push a built molecular mesh into the viewport **carrying per-vertex colours**
+/// so the shaded central viewport tints each atom instead of rendering one
+/// material. Same viewport plumbing as [`show_molecule`] — sets `ValenxApp::stl`
+/// and clears `ValenxApp::mesh`, then frames the camera — but attaches a
+/// per-vertex colour buffer (`LoadedStl::colors`) that the viewport's shaded
+/// wgpu path uploads via
+/// [`crate::wgpu_renderer::triangles_to_vertices_colored`].
+///
+/// `per_tri_colors` is **one colour per triangle**, in lockstep with
+/// `mesh.triangles` (the shape [`crate::molviz::build_mesh_colored`] returns);
+/// it is expanded here to the triangle-major per-vertex layout the renderer
+/// emits (three copies per triangle, via
+/// [`crate::products_registry::per_triangle_to_vertex_colors`]) so it lines up
+/// 1:1 with the surface vertices — exactly the per-triangle→per-vertex bridge
+/// the Workbench+Agent molecule tile ([`molecule_product`]) uses. A length
+/// mismatch can never half-colour the mesh: the viewport length-guards the
+/// buffer and falls back to neutral metal.
+///
+/// Returns an error string (and pushes nothing) if the mesh is empty.
+pub fn show_molecule_colored(
+    app: &mut ValenxApp,
+    mesh: TriangleMesh,
+    per_tri_colors: &[[f32; 3]],
+    source_label: &str,
+) -> Result<usize, String> {
+    if mesh.triangles.is_empty() {
+        return Err("nothing to display — the molecule has no atoms".to_string());
+    }
+    let count = mesh.triangle_count();
+    let vertex_colors = crate::products_registry::per_triangle_to_vertex_colors(per_tri_colors);
+    app.mesh = None;
+    app.stl = Some(LoadedStl::with_colors(
+        PathBuf::from(format!("<genetics>/{source_label}")),
+        mesh,
+        vertex_colors,
+    ));
     app.frame_current_stl();
     Ok(count)
 }
@@ -776,6 +816,39 @@ mod tests {
         // The canonical mesh slot is cleared so the molecule is what
         // the viewport draws.
         assert!(app.mesh.is_none());
+        // The plain (uncoloured) path attaches no per-vertex colour buffer.
+        assert!(app.stl.as_ref().unwrap().colors.is_none());
+    }
+
+    #[test]
+    fn show_molecule_colored_attaches_per_vertex_colors() {
+        // The colour-aware path attaches a per-vertex colour buffer of exactly
+        // 3 × triangle count (one per surface vertex), expanded from the
+        // per-triangle colours the colour-aware builder returns.
+        let mut app = ValenxApp::default();
+        let mut mol = water();
+        mol.bonds = detect_bonds(&mol.atoms);
+        let (mesh, per_tri) = ball_and_stick_colored(&mol, 0.25, 0.15);
+        let tri_count = mesh.triangle_count();
+        assert_eq!(per_tri.len(), tri_count, "one colour per triangle");
+        let n =
+            super::show_molecule_colored(&mut app, mesh, &per_tri, "water.bs").expect("non-empty");
+        assert!(n > 0);
+        let stl = app.stl.as_ref().expect("viewport STL set");
+        let colors = stl.colors.as_ref().expect("per-vertex colours attached");
+        assert_eq!(
+            colors.len(),
+            tri_count * 3,
+            "per-vertex colours = 3 × triangle count (triangles_to_vertices order)"
+        );
+        assert!(app.mesh.is_none());
+    }
+
+    #[test]
+    fn show_molecule_colored_rejects_empty_mesh() {
+        let mut app = ValenxApp::default();
+        let empty = TriangleMesh::new();
+        assert!(super::show_molecule_colored(&mut app, empty, &[], "test").is_err());
     }
 
     #[test]

@@ -178,10 +178,10 @@ pub fn draw_reverse_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     app.reverse.status = "no triangles reconstructed".to_string();
                 } else {
                     app.mesh = None;
-                    app.stl = Some(LoadedStl {
-                        path: PathBuf::from("<reverse>/reconstruction"),
-                        mesh: soup,
-                    });
+                    app.stl = Some(LoadedStl::new(
+                        PathBuf::from("<reverse>/reconstruction"),
+                        soup,
+                    ));
                     app.frame_current_stl();
                     app.reverse.status = format!("{n_pts} points → {n} triangles");
                 }

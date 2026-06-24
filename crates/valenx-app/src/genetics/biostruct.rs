@@ -16,7 +16,7 @@ use valenx_biostruct::superpose::{kabsch, rmsd};
 
 use super::common;
 use super::molecule_view::{self, ViewMolecule};
-use crate::molviz::{self, BackbonePoint, MolvizParams, Representation};
+use crate::molviz::{self, AtomAttr, BackbonePoint, ColorScheme, MolvizParams, Representation};
 use crate::ValenxApp;
 
 /// Which structure sub-tool is showing.
@@ -53,6 +53,12 @@ pub struct BiostructPanel {
     /// Which molecular-viewer representation the "Show in 3D viewport" button
     /// builds. Reactive picker; default [`Representation::BallAndStick`].
     pub(crate) representation: Representation,
+    /// How the viewer colours atoms. Reactive picker; default
+    /// [`ColorScheme::Element`] (the CPK palette). When non-default
+    /// (chain / residue / B-factor), "Show in 3D viewport" builds a
+    /// per-vertex-coloured mesh and uploads the colours so the viewport
+    /// renders the scheme instead of monochrome.
+    pub(crate) color_scheme: ColorScheme,
     /// Per-representation mesh-generation tunables (surface grid resolution,
     /// cartoon tube, ball/stick radii). Mutated by the picker's sliders.
     pub(crate) molviz_params: MolvizParams,
@@ -128,6 +134,7 @@ impl Default for BiostructPanel {
             result: String::new(),
             history: crate::undo::History::new(),
             representation: Representation::default(),
+            color_scheme: ColorScheme::default(),
             molviz_params: MolvizParams::default(),
         }
     }
@@ -233,6 +240,49 @@ fn draw_representation_picker(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 });
         }
     });
+
+    // Colour-scheme picker: a row of named `selectable_value` buttons (one per
+    // [`ColorScheme`]). A non-default scheme (chain / residue / B-factor) makes
+    // "Show in 3D viewport" build a per-vertex-coloured mesh and upload the
+    // colours so the viewport renders the scheme. Each button is `labelled_by`
+    // the "Colour scheme" caption so it carries an unambiguous accessibility /
+    // UI-Automation Name (AI-drivable: an agent flips the scheme by selecting
+    // the button by its `label()`), and the caption itself names the group.
+    ui.horizontal_wrapped(|ui| {
+        let caption = ui.label("Colour scheme");
+        for scheme in ColorScheme::ALL {
+            ui.selectable_value(&mut p.color_scheme, scheme, scheme.label())
+                .labelled_by(caption.id)
+                .on_hover_text(match scheme {
+                    ColorScheme::Element => "CPK by element (C grey, N blue, O red, S yellow, …).",
+                    ColorScheme::Chain => "A distinct hue per chain.",
+                    ColorScheme::Residue => "Rainbow ramp by residue index (N→C terminus).",
+                    ColorScheme::BFactor => "Blue→white→red ramp by B-factor (low→high).",
+                });
+        }
+    });
+    if p.color_scheme != ColorScheme::Element {
+        // Sticks / cartoon / ribbon / surface / density have no per-atom colour
+        // builder, so they take a single scheme-derived tint rather than
+        // per-atom colour. Tell the user which they'll get.
+        let per_atom = matches!(
+            p.representation,
+            Representation::BallAndStick | Representation::Spacefill
+        );
+        if !per_atom {
+            ui.label(
+                egui::RichText::new(format!(
+                    "note: {} renders a single {}-derived tint (per-atom colour needs \
+                     ball-and-stick or spacefill)",
+                    p.representation.label().to_ascii_lowercase(),
+                    p.color_scheme.label().to_ascii_lowercase(),
+                ))
+                .weak()
+                .italics(),
+            );
+        }
+    }
+
     // Per-representation tuning, only shown when relevant.
     match p.representation {
         Representation::Surface => {
@@ -339,6 +389,7 @@ fn draw_representation_picker(app: &mut ValenxApp, ui: &mut egui::Ui) {
 /// other modes the atom/bond [`ViewMolecule`] is meshed.
 fn show_in_viewport(app: &mut ValenxApp) {
     let rep = app.genetics.biostruct.representation;
+    let scheme = app.genetics.biostruct.color_scheme;
     let params = app.genetics.biostruct.molviz_params;
     match read_structure(&app.genetics.biostruct.structure_a, "viewer") {
         Ok(s) => {
@@ -358,15 +409,59 @@ fn show_in_viewport(app: &mut ValenxApp) {
                 return;
             }
             let view = ViewMolecule::from_biostruct(&s);
-            let mesh = molviz::build_mesh(&view, rep, &backbone, &params);
-            let label = format!("structure.{}", rep.token());
-            match molecule_view::show_molecule(app, mesh, &label) {
+            let label = format!("structure.{}.{}", rep.token(), scheme.token());
+            // Default (Element / CPK) keeps the original monochrome-metal path
+            // (`show_molecule`). A non-default scheme builds the colour-aware
+            // mesh and uploads per-vertex colours so the viewport renders the
+            // scheme instead of a single material.
+            let result = if scheme == ColorScheme::Element {
+                let mesh = molviz::build_mesh(&view, rep, &backbone, &params);
+                molecule_view::show_molecule(app, mesh, &label)
+            } else {
+                // Per-atom annotations (chain / residue / B-factor) in lockstep
+                // with `view.atoms`, read from the structure the viewer parsed.
+                let attrs = structure_atom_attrs(&s);
+                let (mesh, per_tri_colors) =
+                    molviz::build_mesh_colored(&view, rep, &backbone, &params, scheme, &attrs);
+                molecule_view::show_molecule_colored(app, mesh, &per_tri_colors, &label)
+            };
+            match result {
                 Ok(_) => app.genetics.biostruct.error = None,
                 Err(e) => app.genetics.biostruct.error = Some(e),
             }
         }
         Err(e) => app.genetics.biostruct.error = Some(e.to_string()),
     }
+}
+
+/// Build the per-atom [`AtomAttr`] (chain id, residue index, B-factor) for a
+/// structure's first model, **in the exact atom order**
+/// [`ViewMolecule::from_biostruct`] walks (chain-major, then residue, then atom)
+/// so the returned vec is in lockstep with `ViewMolecule::atoms` and the colour
+/// schemes line up atom-for-atom.
+///
+/// All three fields come straight from the `valenx-biostruct` model, which
+/// carries them on every atom (`Atom::b_factor`, `Chain::id`, `Residue::seq_num`):
+/// no field needs a fallback. The residue index is a **monotone counter across
+/// the whole model** (incremented per residue in iteration order) rather than the
+/// raw `seq_num`, so the residue rainbow runs cleanly N→C even when `seq_num`
+/// has gaps, insertion codes, or resets between chains.
+fn structure_atom_attrs(s: &Structure) -> Vec<AtomAttr> {
+    let mut out = Vec::new();
+    let mut residue_index: i32 = 0;
+    for chain in &s.first_model().chains {
+        for res in &chain.residues {
+            for atom in &res.atoms {
+                out.push(AtomAttr::new(
+                    chain.id.clone(),
+                    residue_index,
+                    atom.b_factor as f32,
+                ));
+            }
+            residue_index += 1;
+        }
+    }
+    out
 }
 
 /// Extract the per-residue Cα backbone control points of a structure's first
@@ -676,6 +771,24 @@ mod headless_ui_tests {
         });
     }
 
+    /// Draw the panel once with the accesskit tree enabled and return its
+    /// nodes — the harness the AI-drivability (`labelled_by`) assertions use.
+    fn draw_and_collect_nodes(
+        app: &mut ValenxApp,
+    ) -> Vec<(egui::accesskit::NodeId, egui::accesskit::Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                super::draw(app, ui);
+            });
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
+    }
+
     fn app_with_panel() -> ValenxApp {
         let mut app = ValenxApp::default();
         app.genetics.active = GeneticsPanel::MacromolecularStructure;
@@ -827,5 +940,126 @@ END
             bb.iter().all(|p| p.ss.is_some()),
             "every backbone point carries a DSSP code"
         );
+    }
+
+    #[test]
+    fn draws_with_every_color_scheme_selected_without_panic() {
+        // The colour-scheme picker (+ its per-scheme note row) must draw for
+        // every scheme, in combination with each representation (the demo PDB
+        // is loaded by default, so the picker is shown).
+        for scheme in ColorScheme::ALL {
+            for rep in Representation::ALL {
+                let mut app = app_with_panel();
+                app.genetics.biostruct.color_scheme = scheme;
+                app.genetics.biostruct.representation = rep;
+                draw_headless(&mut app);
+            }
+        }
+    }
+
+    #[test]
+    fn structure_atom_attrs_lockstep_with_view_atoms() {
+        // The per-atom attribute slice must be in lockstep with the
+        // `ViewMolecule::from_biostruct` atom order so the colour schemes line
+        // up atom-for-atom. The demo 3-glycine peptide has 12 atoms across one
+        // chain "A" and three residues.
+        let s = read_structure(DEMO_PDB, "demo").unwrap();
+        let view = ViewMolecule::from_biostruct(&s);
+        let attrs = super::structure_atom_attrs(&s);
+        assert_eq!(
+            attrs.len(),
+            view.atoms.len(),
+            "one AtomAttr per ViewMolecule atom, in order"
+        );
+        assert!(attrs.iter().all(|a| a.chain == "A"), "demo is all chain A");
+        // Residue index is a monotone 0-based counter across the model: three
+        // residues → indices 0, 1, 2 present.
+        let max_res = attrs.iter().map(|a| a.residue_index).max().unwrap();
+        assert_eq!(max_res, 2, "three residues → max residue index 2");
+    }
+
+    #[test]
+    fn show_in_viewport_uploads_per_vertex_colors_for_each_non_default_scheme() {
+        // A non-default colour scheme builds a colour-aware mesh and uploads
+        // per-vertex colours: the viewport STL carries a `colors` buffer whose
+        // length is exactly 3 × the triangle count (one colour per surface
+        // vertex), for every representation. The default Element scheme keeps
+        // the monochrome path (no colour buffer).
+        for scheme in ColorScheme::ALL {
+            for rep in Representation::ALL {
+                let mut app = app_with_panel();
+                app.genetics.biostruct.color_scheme = scheme;
+                app.genetics.biostruct.representation = rep;
+                // Keep the surface/density grids small so the test stays fast.
+                app.genetics.biostruct.molviz_params.grid_max = 24;
+                app.genetics.biostruct.molviz_params.density_grid_max = 24;
+                super::show_in_viewport(&mut app);
+                assert!(
+                    app.genetics.biostruct.error.is_none(),
+                    "{scheme:?}/{rep:?} errored: {:?}",
+                    app.genetics.biostruct.error
+                );
+                let stl = app
+                    .stl
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("{scheme:?}/{rep:?} pushed no mesh"));
+                let tri_count = stl.mesh.triangle_count();
+                match scheme {
+                    ColorScheme::Element => {
+                        // Default scheme → no per-vertex colour override.
+                        assert!(
+                            stl.colors.is_none(),
+                            "{rep:?}: Element scheme must keep the monochrome path"
+                        );
+                    }
+                    _ => {
+                        let colors = stl.colors.as_ref().unwrap_or_else(|| {
+                            panic!("{scheme:?}/{rep:?} must carry per-vertex colours")
+                        });
+                        assert_eq!(
+                            colors.len(),
+                            tri_count * 3,
+                            "{scheme:?}/{rep:?}: colours must equal 3 × triangle count"
+                        );
+                        // Every colour component is a finite 0..=1 value.
+                        assert!(
+                            colors.iter().all(|c| c
+                                .iter()
+                                .all(|&x| x.is_finite() && (0.0..=1.0).contains(&x))),
+                            "{scheme:?}/{rep:?}: colour components must be finite in [0,1]"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn color_scheme_picker_is_labelled_for_ai_driving() {
+        // The colour-scheme picker must be AI-drivable: each scheme button
+        // carries the scheme label as its accessibility Name AND is
+        // `labelled_by` the "Colour scheme" caption (so an agent / screen
+        // reader can find and select it by name). Assert the four scheme labels
+        // appear as named, `labelled_by`-associated nodes in the accesskit tree.
+        use egui::accesskit::Node;
+        let mut app = app_with_panel();
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        for scheme in ColorScheme::ALL {
+            let label = scheme.label();
+            let matching: Vec<&Node> = nodes
+                .iter()
+                .map(|(_, n)| n)
+                .filter(|n| n.name() == Some(label))
+                .collect();
+            assert!(
+                !matching.is_empty(),
+                "colour scheme '{label}' must appear as a named node in the accesskit tree"
+            );
+            assert!(
+                matching.iter().any(|n| !n.labelled_by().is_empty()),
+                "colour scheme '{label}' button must be labelled_by its caption (AI-drivable)"
+            );
+        }
     }
 }

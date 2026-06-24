@@ -203,6 +203,84 @@ pub fn build_mesh(
     }
 }
 
+/// Build the [`TriangleMesh`] for `mol` in representation `rep` **paired with a
+/// per-triangle colour** under `scheme`, ready to upload to the viewport's
+/// per-vertex-colour path. Returns the same geometry as [`build_mesh`] plus a
+/// `Vec<[f32; 3]>` carrying **one colour per triangle**, in lockstep with the
+/// mesh's `triangles` (`colors.len() == mesh.triangles.len()`).
+///
+/// `attrs` is the per-atom [`AtomAttr`] slice (chain / residue / B-factor) in
+/// lockstep with `mol.atoms`, consulted by the non-element schemes; pass an
+/// empty slice for [`ColorScheme::Element`] (it reads only the element symbol).
+///
+/// Which representations carry a *true* per-atom colour vs a single uniform
+/// scheme-derived tint:
+///
+/// - **[`Representation::BallAndStick`]** and **[`Representation::Spacefill`]**
+///   have colour-aware builders ([`ball_and_stick_colored`] /
+///   [`spacefill_colored`]), so each atom (and each half-bond) takes its own
+///   [`atom_color`] — genuine per-atom colouring.
+/// - **Sticks / Cartoon / Ribbon / Surface / Density** have no colour-aware
+///   builder (a tube/surface is not a per-atom primitive), so the whole mesh is
+///   tinted a single **scheme-derived** colour — the mean of the per-atom
+///   colours under `scheme` (so a chain/residue/B-factor scheme still visibly
+///   recolours the geometry rather than leaving it monochrome metal). This is
+///   the documented fallback the task calls for.
+///
+/// An empty molecule (or an empty backbone for the cartoon/ribbon) yields an
+/// empty mesh and an empty colour list — never a panic.
+pub fn build_mesh_colored(
+    mol: &ViewMolecule,
+    rep: Representation,
+    backbone: &[BackbonePoint],
+    params: &MolvizParams,
+    scheme: ColorScheme,
+    attrs: &[AtomAttr],
+) -> (TriangleMesh, Vec<[f32; 3]>) {
+    match rep {
+        Representation::BallAndStick => {
+            ball_and_stick_colored(mol, params.ball_scale, params.stick_radius, scheme, attrs)
+        }
+        Representation::Spacefill => spacefill_colored(mol, scheme, attrs),
+        // Reps with no colour-aware builder: build the plain geometry, then tag
+        // every triangle with one uniform scheme-derived colour.
+        Representation::Sticks
+        | Representation::Cartoon
+        | Representation::Ribbon
+        | Representation::Surface
+        | Representation::Density => {
+            let mesh = build_mesh(mol, rep, backbone, params);
+            let color = uniform_scheme_color(mol, scheme, attrs);
+            let colors = vec![color; mesh.triangles.len()];
+            (mesh, colors)
+        }
+    }
+}
+
+/// One representative colour for a whole-mesh tint under `scheme`: the
+/// component-wise **mean** of every atom's [`atom_color`]. Used for the
+/// representations that have no per-atom colour builder (sticks / cartoon /
+/// ribbon / surface / density) so a chain / residue / B-factor scheme still
+/// visibly recolours them. An empty molecule (no atoms) falls back to the CPK
+/// carbon grey so the tint is never `NaN` or pure black.
+fn uniform_scheme_color(mol: &ViewMolecule, scheme: ColorScheme, attrs: &[AtomAttr]) -> [f32; 3] {
+    if mol.atoms.is_empty() {
+        return element_color("C");
+    }
+    let ctx = ColorContext::build(attrs);
+    let default_attr = AtomAttr::default();
+    let mut acc = [0.0f32; 3];
+    for (i, atom) in mol.atoms.iter().enumerate() {
+        let attr = attrs.get(i).unwrap_or(&default_attr);
+        let c = atom_color(scheme, &atom.element, attr, &ctx);
+        acc[0] += c[0];
+        acc[1] += c[1];
+        acc[2] += c[2];
+    }
+    let n = mol.atoms.len() as f32;
+    [acc[0] / n, acc[1] / n, acc[2] / n]
+}
+
 /// Per-representation tunables. [`MolvizParams::default`] is the set the picker
 /// starts at; the panel mutates a copy as the user drags sliders.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -2728,6 +2806,68 @@ mod tests {
             let (bsm, bsc) = ball_and_stick_colored(&empty, 0.3, 0.18, scheme, &[]);
             assert!(bsm.triangles.is_empty() && bsc.is_empty());
         }
+    }
+
+    #[test]
+    fn build_mesh_colored_pairs_one_color_per_triangle_for_every_rep() {
+        // The dispatch wrapper returns colours in lockstep with triangles for
+        // every representation — the per-atom builders (ball-and-stick /
+        // spacefill) and the uniform-tint fallbacks (sticks / cartoon / ribbon
+        // / surface / density) alike. Atom attrs in lockstep with `water()`.
+        let mol = water();
+        let backbone = straight_backbone(4);
+        let attrs = vec![
+            AtomAttr::new("A", 0, 10.0),
+            AtomAttr::new("A", 0, 20.0),
+            AtomAttr::new("B", 1, 30.0),
+        ];
+        let params = MolvizParams {
+            grid_max: 20,
+            density_grid_max: 20,
+            ..MolvizParams::default()
+        };
+        for scheme in ColorScheme::ALL {
+            for rep in Representation::ALL {
+                let (mesh, colors) =
+                    build_mesh_colored(&mol, rep, &backbone, &params, scheme, &attrs);
+                assert_eq!(
+                    colors.len(),
+                    mesh.triangles.len(),
+                    "{scheme:?}/{rep:?}: one colour per triangle"
+                );
+                assert!(
+                    colors
+                        .iter()
+                        .all(|c| c.iter().all(|&x| x.is_finite() && (0.0..=1.0).contains(&x))),
+                    "{scheme:?}/{rep:?}: colour components finite in [0,1]"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn uniform_scheme_color_recolors_non_atom_reps() {
+        // A uniform-tint rep (sticks) must visibly change colour when the
+        // scheme changes from the CPK element palette to a chain hue — proving
+        // the fallback isn't stuck on one colour. A two-chain molecule makes the
+        // chain scheme's mean hue differ from the element mean.
+        let mol = water();
+        let attrs = vec![
+            AtomAttr::new("A", 0, 5.0),
+            AtomAttr::new("B", 1, 50.0),
+            AtomAttr::new("C", 2, 95.0),
+        ];
+        let elem = uniform_scheme_color(&mol, ColorScheme::Element, &attrs);
+        let chain = uniform_scheme_color(&mol, ColorScheme::Chain, &attrs);
+        let bfac = uniform_scheme_color(&mol, ColorScheme::BFactor, &attrs);
+        assert_ne!(elem, chain, "chain tint must differ from the element tint");
+        assert_ne!(
+            elem, bfac,
+            "B-factor tint must differ from the element tint"
+        );
+        // Empty molecule falls back to carbon grey, no NaN.
+        let none = uniform_scheme_color(&ViewMolecule::new(), ColorScheme::Chain, &[]);
+        assert_eq!(none, element_color("C"));
     }
 
     #[test]
