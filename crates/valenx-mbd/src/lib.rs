@@ -66,6 +66,7 @@
 #![warn(missing_docs)]
 
 pub mod aba;
+pub mod contact;
 
 use nalgebra::{DMatrix, DVector, Vector2};
 
