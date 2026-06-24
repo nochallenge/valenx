@@ -1438,12 +1438,13 @@ fn draw_dot_plot(p: &mut RnaDesignerPanel, ui: &mut egui::Ui, fold: &FoldOutcome
         .small(),
     );
     ui.horizontal(|ui| {
-        ui.label("show pairs with p ≥");
+        let lbl = ui.label("show pairs with p ≥");
         ui.add(
             egui::DragValue::new(&mut p.bpp_threshold)
                 .speed(0.01)
                 .range(0.0..=1.0),
-        );
+        )
+        .labelled_by(lbl.id);
     });
     ui.add_space(4.0);
 
@@ -1578,28 +1579,31 @@ fn draw_inverse_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
     ui.add_space(4.0);
     common::section(ui, "Design constraints");
     ui.horizontal(|ui| {
-        ui.label("GC band");
+        let lbl_gc = ui.label("GC band");
         ui.add(
             egui::DragValue::new(&mut p.inverse_gc_min)
                 .speed(0.01)
                 .range(0.0..=1.0)
                 .custom_formatter(|v, _| format!("{:.0}%", v * 100.0)),
-        );
-        ui.label("to");
+        )
+        .labelled_by(lbl_gc.id);
+        let lbl_to = ui.label("to");
         ui.add(
             egui::DragValue::new(&mut p.inverse_gc_max)
                 .speed(0.01)
                 .range(0.0..=1.0)
                 .custom_formatter(|v, _| format!("{:.0}%", v * 100.0)),
-        );
+        )
+        .labelled_by(lbl_to.id);
     });
     ui.horizontal(|ui| {
-        ui.label("max homopolymer run");
+        let lbl = ui.label("max homopolymer run");
         ui.add(
             egui::DragValue::new(&mut p.inverse_max_homopolymer)
                 .speed(1.0)
                 .range(1..=30),
-        );
+        )
+        .labelled_by(lbl.id);
         ui.label("nt");
     });
     ui.label("Forbidden motifs (comma / newline separated):");
@@ -2544,6 +2548,51 @@ mod headless_ui_tests {
         for section in Section::ALL {
             app.genetics.rna_designer.section = section;
             draw_headless(&mut app);
+        }
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::Role;
+        // Visualize section: bpp_threshold DragValue (only in DotPlot viz mode).
+        // Inverse section: gc_min, gc_max, max_homopolymer DragValues.
+        for section in [Section::Visualize, Section::Inverse] {
+            let mut app = app_with_panel();
+            // Provide a fold result so the Visualize section renders content.
+            app.genetics.rna_designer.do_fold();
+            assert!(
+                app.genetics.rna_designer.fold.is_some(),
+                "do_fold() should populate p.fold"
+            );
+            app.genetics.rna_designer.section = section;
+            // The bpp DragValue only appears in DotPlot viz mode.
+            app.genetics.rna_designer.viz = VizKind::DotPlot;
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            let out = ctx.run(egui::RawInput::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    super::draw(&mut app, ui);
+                });
+            });
+            let nodes = out
+                .platform_output
+                .accesskit_update
+                .expect("accesskit tree produced")
+                .nodes;
+            let spin_buttons: Vec<_> = nodes
+                .iter()
+                .filter(|(_, n)| n.role() == Role::SpinButton)
+                .collect();
+            assert!(
+                !spin_buttons.is_empty(),
+                "rna_designer {section:?} should expose at least one SpinButton"
+            );
+            assert!(
+                spin_buttons
+                    .iter()
+                    .all(|(_, n)| !n.labelled_by().is_empty()),
+                "every rna_designer DragValue ({section:?}) must be labelled_by its caption"
+            );
         }
     }
 }

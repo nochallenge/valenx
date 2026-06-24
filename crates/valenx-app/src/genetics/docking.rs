@@ -305,14 +305,17 @@ fn draw_dock(p: &mut DockingPanel, ui: &mut egui::Ui) {
             .desired_rows(5),
     );
     ui.horizontal(|ui| {
-        ui.label("Search runs:").on_hover_text(
+        let lbl_runs = ui.label("Search runs:").on_hover_text(
             "Number of independent docking restarts. More = better pose coverage but slower.",
         );
         ui.add(egui::DragValue::new(&mut p.n_runs).range(1..=64))
+            .labelled_by(lbl_runs.id)
             .on_hover_text("Independent search restarts (typical 8–16).");
-        ui.label("seed:")
+        let lbl_seed = ui
+            .label("seed:")
             .on_hover_text("RNG seed — same seed reproduces the same poses.");
         ui.add(egui::DragValue::new(&mut p.seed))
+            .labelled_by(lbl_seed.id)
             .on_hover_text("Reproducibility seed.");
     });
 
@@ -373,14 +376,17 @@ fn draw_screen(p: &mut DockingPanel, ui: &mut egui::Ui) {
             .desired_rows(7),
     );
     ui.horizontal(|ui| {
-        ui.label("Search runs:").on_hover_text(
+        let lbl_runs = ui.label("Search runs:").on_hover_text(
             "Number of independent docking restarts. More = better pose coverage but slower.",
         );
         ui.add(egui::DragValue::new(&mut p.n_runs).range(1..=64))
+            .labelled_by(lbl_runs.id)
             .on_hover_text("Independent search restarts (typical 8–16).");
-        ui.label("seed:")
+        let lbl_seed = ui
+            .label("seed:")
             .on_hover_text("RNG seed — same seed reproduces the same poses.");
         ui.add(egui::DragValue::new(&mut p.seed))
+            .labelled_by(lbl_seed.id)
             .on_hover_text("Reproducibility seed.");
     });
 
@@ -597,5 +603,40 @@ mod headless_ui_tests {
             p.error.is_some(),
             "dock should error on a malformed receptor"
         );
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::Role;
+        for tool in [Tool::Dock, Tool::Screen] {
+            let mut app = app_with_panel();
+            app.genetics.docking.tool = tool;
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            let out = ctx.run(egui::RawInput::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    super::draw(&mut app, ui);
+                });
+            });
+            let nodes = out
+                .platform_output
+                .accesskit_update
+                .expect("accesskit tree produced")
+                .nodes;
+            let spin_buttons: Vec<_> = nodes
+                .iter()
+                .filter(|(_, n)| n.role() == Role::SpinButton)
+                .collect();
+            assert!(
+                !spin_buttons.is_empty(),
+                "docking tool {tool:?} should expose at least one SpinButton"
+            );
+            assert!(
+                spin_buttons
+                    .iter()
+                    .all(|(_, n)| !n.labelled_by().is_empty()),
+                "every docking DragValue ({tool:?}) must be labelled_by its caption"
+            );
+        }
     }
 }

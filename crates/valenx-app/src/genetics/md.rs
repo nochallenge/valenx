@@ -581,7 +581,7 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
             .desired_rows(5),
     );
     ui.horizontal(|ui| {
-        ui.label("Bond-detection tolerance:").on_hover_text(
+        let lbl = ui.label("Bond-detection tolerance:").on_hover_text(
             "Multiplier on the covalent-radius cutoff used to infer bonds from coordinates.",
         );
         ui.add(
@@ -589,6 +589,7 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .speed(0.05)
                 .range(0.6..=1.6),
         )
+        .labelled_by(lbl.id)
         .on_hover_text(
             "1.0 = textbook covalent-radius rule. Bump to 1.2 if your input has noisy \
              coordinates; drop to 0.9 to be stricter about long bonds.",
@@ -638,51 +639,60 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 });
             ui.end_row();
 
-            ui.label("Temperature (K)")
+            let lbl = ui
+                .label("Temperature (K)")
                 .on_hover_text("Thermostat setpoint. SI unit: K. 300 K ≈ room temperature.");
             ui.add(
                 egui::DragValue::new(&mut p.temperature)
                     .speed(5.0)
                     .range(1.0..=1000.0),
             )
+            .labelled_by(lbl.id)
             .on_hover_text(
                 "Thermostat target temperature in Kelvin. Initial velocities are \
                  drawn from Maxwell-Boltzmann at this T.",
             );
             ui.end_row();
 
-            ui.label("Time step (fs)")
+            let lbl = ui
+                .label("Time step (fs)")
                 .on_hover_text("Integration step. SI unit: fs (10⁻¹⁵ s).");
             ui.add(
                 egui::DragValue::new(&mut p.timestep_fs)
                     .speed(0.1)
                     .range(0.1..=4.0),
             )
+            .labelled_by(lbl.id)
             .on_hover_text(
                 "Integration time step in femtoseconds. 1.0 fs is the textbook all-atom \
                  default; ≤ 2.0 fs without hydrogen constraints; ≤ 4.0 fs with SHAKE.",
             );
             ui.end_row();
 
-            ui.label("Steps")
+            let lbl = ui
+                .label("Steps")
                 .on_hover_text("Total number of integration steps.");
             ui.add(egui::DragValue::new(&mut p.steps).range(1..=20_000))
+                .labelled_by(lbl.id)
                 .on_hover_text("Number of MD steps. Total simulated time = steps × time-step.");
             ui.end_row();
 
-            ui.label("Report every")
+            let lbl = ui
+                .label("Report every")
                 .on_hover_text("Energy / temperature sampling interval (in steps).");
             ui.add(egui::DragValue::new(&mut p.report_interval).range(1..=1000))
+                .labelled_by(lbl.id)
                 .on_hover_text(
                     "Number of steps between energy / temperature samples in the report.",
                 );
             ui.end_row();
 
-            ui.label("RNG seed").on_hover_text(
+            let lbl = ui.label("RNG seed").on_hover_text(
                 "Pseudorandom seed for initial-velocity sampling + stochastic thermostats. \
                      Same seed = exactly reproducible run.",
             );
             ui.add(egui::DragValue::new(&mut p.seed))
+                .labelled_by(lbl.id)
                 .on_hover_text("Reproducibility seed.");
             ui.end_row();
         });
@@ -1084,5 +1094,37 @@ mod headless_ui_tests {
         };
         run_simulation(&mut p);
         assert!(p.error.is_some(), "MD run should error on malformed input");
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::Role;
+        let mut app = app_with_panel();
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                super::draw(&mut app, ui);
+            });
+        });
+        let nodes = out
+            .platform_output
+            .accesskit_update
+            .expect("accesskit tree produced")
+            .nodes;
+        let spin_buttons: Vec<_> = nodes
+            .iter()
+            .filter(|(_, n)| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            !spin_buttons.is_empty(),
+            "MD panel should expose at least one SpinButton"
+        );
+        assert!(
+            spin_buttons
+                .iter()
+                .all(|(_, n)| !n.labelled_by().is_empty()),
+            "every MD DragValue must be labelled_by its caption (AI-drivable name)"
+        );
     }
 }

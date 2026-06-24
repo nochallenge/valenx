@@ -467,10 +467,12 @@ fn draw_readsim(p: &mut GenomicsPanel, ui: &mut egui::Ui) {
         3,
     );
     ui.horizontal(|ui| {
-        ui.label("Reads:");
-        ui.add(egui::DragValue::new(&mut p.n_reads).range(1..=100_000));
-        ui.label("seed:");
-        ui.add(egui::DragValue::new(&mut p.read_seed));
+        let lbl = ui.label("Reads:");
+        ui.add(egui::DragValue::new(&mut p.n_reads).range(1..=100_000))
+            .labelled_by(lbl.id);
+        let lbl = ui.label("seed:");
+        ui.add(egui::DragValue::new(&mut p.read_seed))
+            .labelled_by(lbl.id);
     });
     ui.label(
         egui::RichText::new("HiSeq 150 bp Illumina error model")
@@ -687,5 +689,39 @@ mod headless_ui_tests {
         // The SAM parser is lenient with junk lines; assert no panic
         // and a well-formed outcome (error or result).
         assert!(p.error.is_some() || !p.result.is_empty());
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::Role;
+        // ReadSim exposes the Reads and seed DragValues.
+        let mut app = app_with_panel();
+        app.genetics.genomics.tool = Tool::ReadSim;
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                super::draw(&mut app, ui);
+            });
+        });
+        let nodes = out
+            .platform_output
+            .accesskit_update
+            .expect("accesskit tree produced")
+            .nodes;
+        let spin_buttons: Vec<_> = nodes
+            .iter()
+            .filter(|(_, n)| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            !spin_buttons.is_empty(),
+            "genomics ReadSim should expose at least one SpinButton"
+        );
+        assert!(
+            spin_buttons
+                .iter()
+                .all(|(_, n)| !n.labelled_by().is_empty()),
+            "every genomics DragValue must be labelled_by its caption (AI-drivable name)"
+        );
     }
 }

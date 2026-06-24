@@ -476,8 +476,9 @@ pub fn draw_reactdyn_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     });
                     if s.backend == Backend::QmMm {
                         ui.horizontal(|ui| {
-                            ui.label("solvent atoms");
-                            ui.add(egui::DragValue::new(&mut s.n_solvent).speed(0.5));
+                            let lbl = ui.label("solvent atoms");
+                            ui.add(egui::DragValue::new(&mut s.n_solvent).speed(0.5))
+                                .labelled_by(lbl.id);
                         });
                         ui.horizontal(|ui| {
                             ui.radio_value(&mut s.embedding, Embedding::Mechanical, "mechanical")
@@ -502,8 +503,9 @@ pub fn draw_reactdyn_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     }
                     if s.backend == Backend::Reactive {
                         ui.horizontal(|ui| {
-                            ui.label("cluster atoms (carbon)");
-                            ui.add(egui::DragValue::new(&mut s.n_cluster).speed(0.5));
+                            let lbl = ui.label("cluster atoms (carbon)");
+                            ui.add(egui::DragValue::new(&mut s.n_cluster).speed(0.5))
+                                .labelled_by(lbl.id);
                         });
                         ui.label(
                             egui::RichText::new(
@@ -556,10 +558,12 @@ pub fn draw_reactdyn_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Dynamics").strong());
                     ui.horizontal(|ui| {
-                        ui.label("dt (fs)");
-                        ui.add(egui::DragValue::new(&mut s.dt_fs).speed(0.05));
-                        ui.label("steps");
-                        ui.add(egui::DragValue::new(&mut s.n_steps).speed(1.0));
+                        let lbl_dt = ui.label("dt (fs)");
+                        ui.add(egui::DragValue::new(&mut s.dt_fs).speed(0.05))
+                            .labelled_by(lbl_dt.id);
+                        let lbl_steps = ui.label("steps");
+                        ui.add(egui::DragValue::new(&mut s.n_steps).speed(1.0))
+                            .labelled_by(lbl_steps.id);
                     });
                     ui.horizontal(|ui| {
                         ui.radio_value(&mut s.thermostat, ThermostatKind::Nve, "NVE")
@@ -569,10 +573,12 @@ pub fn draw_reactdyn_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     });
                     if s.thermostat == ThermostatKind::Berendsen {
                         ui.horizontal(|ui| {
-                            ui.label("T (K)");
-                            ui.add(egui::DragValue::new(&mut s.target_kelvin).speed(5.0));
-                            ui.label("τ (fs)");
-                            ui.add(egui::DragValue::new(&mut s.tau_fs).speed(1.0));
+                            let lbl_t = ui.label("T (K)");
+                            ui.add(egui::DragValue::new(&mut s.target_kelvin).speed(5.0))
+                                .labelled_by(lbl_t.id);
+                            let lbl_tau = ui.label("τ (fs)");
+                            ui.add(egui::DragValue::new(&mut s.tau_fs).speed(1.0))
+                                .labelled_by(lbl_tau.id);
                         });
                     }
                     ui.label(
@@ -933,5 +939,45 @@ mod tests {
             .expect("reactive run");
         assert_eq!(traj.system.n_atoms(), 6);
         assert_eq!(traj.frames.len(), 6);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
+mod headless_ui_tests {
+    use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
+
+    fn draw_and_collect_nodes(app: &mut crate::ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_reactdyn_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        let mut app = crate::ValenxApp::default();
+        app.show_reactdyn_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            !spin_buttons.is_empty(),
+            "reactdyn panels should have at least one numeric spin button"
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every reactdyn DragValue must be labelled_by its caption (AI-drivable name)"
+        );
     }
 }
