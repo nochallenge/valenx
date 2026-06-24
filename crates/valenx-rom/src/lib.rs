@@ -21,6 +21,11 @@
 //!   ([`OpInfModel::step`] / [`OpInfModel::rollout`]).
 //! - **POD–Galerkin** — [`galerkin::galerkin_operator`]: intrusive projection of
 //!   a known full-order linear operator onto a POD basis.
+//! - **DEIM** — [`Deim`]: discrete empirical interpolation. Hyper-reduction of a
+//!   *nonlinear* term — greedy Chaturantabut–Sorensen selection of `k`
+//!   interpolation rows and the `m × k` operator `U (Pᵀ U)⁻¹` that reconstructs
+//!   the full nonlinear vector from only `k` sampled entries
+//!   ([`Deim::approximate`] / [`deim::deim_select`]).
 //!
 //! ## Fail-loud contract
 //!
@@ -63,6 +68,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod deim;
 pub mod dmd;
 pub mod error;
 pub mod galerkin;
@@ -70,6 +76,7 @@ pub mod opinf;
 pub mod pod;
 pub mod snapshots;
 
+pub use deim::{deim_select, Deim};
 pub use dmd::{Dmd, DmdVariant};
 pub use error::RomError;
 pub use galerkin::{galerkin_affine, galerkin_operator};
