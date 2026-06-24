@@ -55,8 +55,12 @@
 //! velocities and torques `(q, q̇, τ)` to joint accelerations `q̈`. It is a
 //! distinct paradigm from the global-KKT planar solver — propagation over a
 //! tree rather than one factored matrix — and reuses the same semi-implicit
-//! (symplectic) Euler integration convention for stepping. Fixed base only;
-//! floating base is a documented follow-up.
+//! (symplectic) Euler integration convention for stepping. It supports both a
+//! **fixed base** ([`aba::ArticulatedTree::forward_dynamics`]) and a **floating
+//! base** ([`aba::ArticulatedTree::forward_dynamics_floating`]) — a free 6-DOF
+//! root body that may translate and rotate, solved with the articulated-base
+//! acceleration `a₀ = −(Iᴬ₀)⁻¹ pᴬ₀` and verified to conserve total momentum
+//! (gravity off) and energy.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
