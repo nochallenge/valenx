@@ -218,8 +218,12 @@ fn draw_representation_picker(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     Representation::Sticks => "Bonds only (licorice).",
                     Representation::Spacefill => "Full van-der-Waals spheres (CPK).",
                     Representation::Cartoon => {
-                        "Smooth Catmull-Rom ribbon/tube through the Cα backbone \
+                        "Smooth Catmull-Rom round tube through the Cα backbone \
                          (helices/strands fatten via DSSP)."
+                    }
+                    Representation::Ribbon => {
+                        "Flat elliptical ribbon swept along the Cα spline — a wide, \
+                         thin band (helices/strands widen via DSSP)."
                     }
                     Representation::Surface => "Marching-cubes molecular surface (union-of-balls).",
                     Representation::Density => {
@@ -297,6 +301,24 @@ fn draw_representation_picker(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 );
             });
         }
+        Representation::Ribbon => {
+            ui.horizontal(|ui| {
+                ui.label("Ribbon width (Å):");
+                ui.add(
+                    egui::DragValue::new(&mut p.molviz_params.ribbon_width)
+                        .speed(0.05)
+                        .range(0.2..=4.0),
+                )
+                .on_hover_text("Half-width of the flat band (the wide axis).");
+                ui.add(
+                    egui::DragValue::new(&mut p.molviz_params.ribbon_thickness)
+                        .speed(0.02)
+                        .range(0.05..=1.0)
+                        .prefix("thick Å "),
+                )
+                .on_hover_text("Half-thickness of the band (the thin axis).");
+            });
+        }
         Representation::BallAndStick | Representation::Sticks => {
             ui.horizontal(|ui| {
                 ui.label("Stick radius (Å):");
@@ -325,14 +347,14 @@ fn show_in_viewport(app: &mut ValenxApp) {
             } else {
                 Vec::new()
             };
-            // A cartoon needs a real Cα trace — fail loudly rather than
-            // silently showing nothing.
+            // A cartoon / ribbon needs a real Cα trace — fail loudly rather
+            // than silently showing nothing.
             if rep.needs_backbone() && backbone.len() < 2 {
-                app.genetics.biostruct.error = Some(
-                    "cartoon needs a protein backbone (≥ 2 Cα atoms) — this \
-                     structure has none; try ball-and-stick or surface"
-                        .to_string(),
-                );
+                app.genetics.biostruct.error = Some(format!(
+                    "{} needs a protein backbone (≥ 2 Cα atoms) — this \
+                     structure has none; try ball-and-stick or surface",
+                    rep.label().to_ascii_lowercase()
+                ));
                 return;
             }
             let view = ViewMolecule::from_biostruct(&s);

@@ -70,7 +70,7 @@
 
 use valenx_viz::stl::{StlTriangle, TriangleMesh};
 
-use crate::genetics::molecule_view::{self, vdw_radius, ViewMolecule};
+use crate::genetics::molecule_view::{self, element_color, vdw_radius, ViewMolecule};
 
 /// The molecular-viewer representation modes the Genetics viewport offers.
 ///
@@ -89,6 +89,10 @@ pub enum Representation {
     Spacefill,
     /// A smooth Catmull-Rom ribbon/tube through the Cα backbone (proteins).
     Cartoon,
+    /// A flat / elliptical ribbon swept along the Cα Catmull-Rom spline,
+    /// oriented by the local backbone frame (distinct from the round
+    /// [`Cartoon`](Representation::Cartoon) tube — a wide, thin band).
+    Ribbon,
     /// A marching-cubes isosurface of a union-of-balls (molecular surface).
     Surface,
     /// A marching-cubes isosurface of a **Gaussian electron-density-like
@@ -100,11 +104,12 @@ pub enum Representation {
 impl Representation {
     /// Every representation, in picker order. Used to build the picker row and
     /// by the round-trip label test.
-    pub const ALL: [Representation; 6] = [
+    pub const ALL: [Representation; 7] = [
         Representation::BallAndStick,
         Representation::Sticks,
         Representation::Spacefill,
         Representation::Cartoon,
+        Representation::Ribbon,
         Representation::Surface,
         Representation::Density,
     ];
@@ -116,6 +121,7 @@ impl Representation {
             Representation::Sticks => "Sticks",
             Representation::Spacefill => "Spacefill",
             Representation::Cartoon => "Cartoon",
+            Representation::Ribbon => "Ribbon",
             Representation::Surface => "Surface",
             Representation::Density => "Density",
         }
@@ -129,6 +135,7 @@ impl Representation {
             Representation::Sticks => "sticks",
             Representation::Spacefill => "spacefill",
             Representation::Cartoon => "cartoon",
+            Representation::Ribbon => "ribbon",
             Representation::Surface => "surface",
             Representation::Density => "density",
         }
@@ -144,7 +151,8 @@ impl Representation {
             }
             "sticks" | "stick" | "licorice" => Some(Representation::Sticks),
             "spacefill" | "cpk" | "vdw" | "space-fill" => Some(Representation::Spacefill),
-            "cartoon" | "ribbon" | "tube" => Some(Representation::Cartoon),
+            "cartoon" | "tube" => Some(Representation::Cartoon),
+            "ribbon" | "flat-ribbon" | "band" | "strand-ribbon" => Some(Representation::Ribbon),
             "surface" | "sas" | "ses" | "molecular-surface" => Some(Representation::Surface),
             "density" | "volume" | "electron-density" | "blob" | "isosurface" => {
                 Some(Representation::Density)
@@ -153,11 +161,12 @@ impl Representation {
         }
     }
 
-    /// Whether this representation needs a protein backbone (the cartoon does;
-    /// the others mesh any atom set). The picker uses this to warn when a
-    /// cartoon is requested for a structure with no Cα trace.
+    /// Whether this representation needs a protein backbone (the cartoon and
+    /// ribbon do; the others mesh any atom set). The picker uses this to warn
+    /// when a backbone representation is requested for a structure with no Cα
+    /// trace.
     pub fn needs_backbone(self) -> bool {
-        matches!(self, Representation::Cartoon)
+        matches!(self, Representation::Cartoon | Representation::Ribbon)
     }
 }
 
@@ -188,6 +197,7 @@ pub fn build_mesh(
         Representation::Spacefill => molecule_view::spacefill(mol),
         Representation::Sticks => sticks(mol, params.stick_radius),
         Representation::Cartoon => cartoon(backbone, params),
+        Representation::Ribbon => ribbon(backbone, params),
         Representation::Surface => surface(mol, params),
         Representation::Density => density_surface(mol, params),
     }
@@ -203,10 +213,17 @@ pub struct MolvizParams {
     pub stick_radius: f32,
     /// Cartoon tube base radius (ångström) for coil; helices/strands scale it.
     pub tube_radius: f32,
-    /// Catmull-Rom samples per Cα–Cα span for the cartoon tube.
+    /// Catmull-Rom samples per Cα–Cα span for the cartoon tube / ribbon.
     pub tube_samples: usize,
     /// Radial segments around the cartoon tube / a surface sphere proxy.
     pub tube_segments: usize,
+    /// Ribbon: half-width (ångström) of the flat band swept along the Cα
+    /// spline (the wide axis, in the local frame's binormal direction). The
+    /// per-point secondary-structure scale widens helices/strands.
+    pub ribbon_width: f32,
+    /// Ribbon: half-thickness (ångström) of the band (the thin axis, along the
+    /// local frame's normal). A small value gives the characteristic flat strip.
+    pub ribbon_thickness: f32,
     /// Surface: probe radius (ångström) added to every atom's vdW radius
     /// before the isosurface is extracted (the union-of-balls inflation).
     pub probe_radius: f32,
@@ -242,6 +259,8 @@ impl Default for MolvizParams {
             tube_radius: 0.45,
             tube_samples: 8,
             tube_segments: 8,
+            ribbon_width: 1.4,
+            ribbon_thickness: 0.25,
             probe_radius: 1.4,
             surface_vdw_scale: 1.0,
             grid_max: 48,
@@ -280,6 +299,340 @@ impl BackbonePoint {
             Some('E') | Some('B') => 1.5,             // strands
             _ => 1.0,                                 // coil / turn / bend / unknown
         }
+    }
+}
+
+// --------------------------------------------------------------------------
+// Colouring schemes (a per-atom colour the representations carry alongside the
+// mesh as a parallel `Vec<[f32; 3]>`, one entry per triangle — mirroring
+// `molecule_view::ball_and_stick_colored`, since `StlTriangle` has no colour
+// field).
+// --------------------------------------------------------------------------
+
+/// Per-atom annotations the structure carries that the colour schemes need but
+/// [`crate::genetics::molecule_view::ViewAtom`] does not store (it keeps only
+/// position + element). The caller (which read the PDB/mmCIF and *does* have
+/// chain / residue / B-factor) supplies one of these per atom, in lockstep with
+/// `mol.atoms`, when colouring by chain / residue / B-factor. Element colouring
+/// needs none of this and ignores the attributes entirely.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct AtomAttr {
+    /// Chain identifier (e.g. `"A"`). Drives [`ColorScheme::Chain`]; empty is
+    /// treated as one anonymous chain.
+    pub chain: String,
+    /// Residue sequence index along the structure (monotone per chain). Drives
+    /// the rainbow [`ColorScheme::Residue`].
+    pub residue_index: i32,
+    /// Crystallographic B-factor (temperature factor), ångström². Drives the
+    /// blue→white→red [`ColorScheme::BFactor`] ramp.
+    pub b_factor: f32,
+}
+
+impl AtomAttr {
+    /// An attribute record with the given chain, residue index and B-factor.
+    pub fn new(chain: impl Into<String>, residue_index: i32, b_factor: f32) -> Self {
+        AtomAttr {
+            chain: chain.into(),
+            residue_index,
+            b_factor,
+        }
+    }
+}
+
+/// How the representations colour atoms (and the bonds/vertices derived from
+/// them). [`ColorScheme::default`] is [`Element`](ColorScheme::Element), the CPK
+/// palette the viewer already used.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+pub enum ColorScheme {
+    /// CPK by element (C grey, N blue, O red, S yellow, H white, P orange, …) —
+    /// reuses [`crate::genetics::molecule_view::element_color`]. The default.
+    #[default]
+    Element,
+    /// A distinct hue per chain (cycles the hue wheel over the chains present).
+    Chain,
+    /// A rainbow ramp by residue index (N-terminus → C-terminus).
+    Residue,
+    /// A blue→white→red ramp by B-factor (low → high temperature factor).
+    BFactor,
+}
+
+impl ColorScheme {
+    /// Every scheme, in picker order.
+    pub const ALL: [ColorScheme; 4] = [
+        ColorScheme::Element,
+        ColorScheme::Chain,
+        ColorScheme::Residue,
+        ColorScheme::BFactor,
+    ];
+
+    /// Short human label for the picker button.
+    pub fn label(self) -> &'static str {
+        match self {
+            ColorScheme::Element => "Element",
+            ColorScheme::Chain => "Chain",
+            ColorScheme::Residue => "Residue",
+            ColorScheme::BFactor => "B-factor",
+        }
+    }
+
+    /// Stable lower-case wire token (for an agent-bridge command argument).
+    pub fn token(self) -> &'static str {
+        match self {
+            ColorScheme::Element => "element",
+            ColorScheme::Chain => "chain",
+            ColorScheme::Residue => "residue",
+            ColorScheme::BFactor => "bfactor",
+        }
+    }
+
+    /// Parse a wire token (case-insensitive; a few synonyms) into a
+    /// [`ColorScheme`]. `None` for an unrecognised token.
+    pub fn from_token(s: &str) -> Option<ColorScheme> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "element" | "cpk" | "atom" => Some(ColorScheme::Element),
+            "chain" | "by-chain" => Some(ColorScheme::Chain),
+            "residue" | "rainbow" | "resid" | "spectrum" => Some(ColorScheme::Residue),
+            "bfactor" | "b-factor" | "b_factor" | "temperature" | "putty" => {
+                Some(ColorScheme::BFactor)
+            }
+            _ => None,
+        }
+    }
+
+    /// Whether this scheme reads the per-atom [`AtomAttr`] (chain / residue /
+    /// B-factor). [`Element`](ColorScheme::Element) does not — it reads only the
+    /// element symbol, so it works with no attribute array.
+    pub fn needs_attrs(self) -> bool {
+        !matches!(self, ColorScheme::Element)
+    }
+}
+
+/// Precomputed ranges over a molecule's [`AtomAttr`] array that the per-atom
+/// colour function needs to normalise residue index / B-factor and to map chain
+/// ids to hues. Build once with [`ColorContext::build`] then reuse per atom.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ColorContext {
+    /// Distinct chain ids in first-seen order; an atom's hue index is its
+    /// position here.
+    chains: Vec<String>,
+    /// `(min, max)` residue index over all atoms (equal when only one residue).
+    res_range: (i32, i32),
+    /// `(min, max)` B-factor over all atoms (equal when all identical).
+    bfac_range: (f32, f32),
+}
+
+impl ColorContext {
+    /// Build the colour context from a per-atom attribute slice. An empty slice
+    /// yields trivial ranges (used only by the element scheme, which ignores
+    /// them).
+    pub fn build(attrs: &[AtomAttr]) -> Self {
+        let mut chains: Vec<String> = Vec::new();
+        let mut res_min = i32::MAX;
+        let mut res_max = i32::MIN;
+        let mut b_min = f32::INFINITY;
+        let mut b_max = f32::NEG_INFINITY;
+        for a in attrs {
+            if !chains.iter().any(|c| c == &a.chain) {
+                chains.push(a.chain.clone());
+            }
+            res_min = res_min.min(a.residue_index);
+            res_max = res_max.max(a.residue_index);
+            b_min = b_min.min(a.b_factor);
+            b_max = b_max.max(a.b_factor);
+        }
+        if attrs.is_empty() {
+            res_min = 0;
+            res_max = 0;
+            b_min = 0.0;
+            b_max = 0.0;
+        }
+        ColorContext {
+            chains,
+            res_range: (res_min, res_max),
+            bfac_range: (b_min, b_max),
+        }
+    }
+
+    /// Chain index (hue slot) for a chain id, or `0` if unseen.
+    fn chain_index(&self, chain: &str) -> usize {
+        self.chains.iter().position(|c| c == chain).unwrap_or(0)
+    }
+}
+
+/// The colour for one atom under `scheme`. `element` is the atom's symbol (used
+/// by [`ColorScheme::Element`]); `attr` is its [`AtomAttr`] and `ctx` the
+/// precomputed [`ColorContext`] (used by the chain / residue / B-factor
+/// schemes). Returns linear-ish `[r, g, b]` in `0.0..=1.0`.
+pub fn atom_color(
+    scheme: ColorScheme,
+    element: &str,
+    attr: &AtomAttr,
+    ctx: &ColorContext,
+) -> [f32; 3] {
+    match scheme {
+        ColorScheme::Element => element_color(element),
+        ColorScheme::Chain => {
+            let n = ctx.chains.len().max(1);
+            let idx = ctx.chain_index(&attr.chain);
+            // Spread hues evenly around the wheel; golden-ratio offset avoids
+            // adjacent chains looking similar for small chain counts.
+            let hue = (idx as f32 / n as f32 + 0.0) % 1.0;
+            hsv_to_rgb(hue, 0.65, 0.95)
+        }
+        ColorScheme::Residue => {
+            let (lo, hi) = ctx.res_range;
+            let t = if hi > lo {
+                (attr.residue_index - lo) as f32 / (hi - lo) as f32
+            } else {
+                0.5
+            };
+            rainbow(t)
+        }
+        ColorScheme::BFactor => {
+            let (lo, hi) = ctx.bfac_range;
+            let t = if hi > lo {
+                ((attr.b_factor - lo) / (hi - lo)).clamp(0.0, 1.0)
+            } else {
+                0.5
+            };
+            blue_white_red(t)
+        }
+    }
+}
+
+/// A **spacefill** mesh *with a paired per-triangle colour* under `scheme` — the
+/// colour-aware sibling of [`crate::genetics::molecule_view::spacefill`]. Returns
+/// the same geometry (one vdW sphere per atom) plus one colour per triangle in
+/// lockstep with `mesh.triangles` (`colors.len() == mesh.triangles.len()`), so a
+/// colour-aware consumer can tint per element / chain / residue / B-factor.
+///
+/// `attrs` must be in lockstep with `mol.atoms` for the non-element schemes; an
+/// atom past the end of `attrs` falls back to a default [`AtomAttr`].
+pub fn spacefill_colored(
+    mol: &ViewMolecule,
+    scheme: ColorScheme,
+    attrs: &[AtomAttr],
+) -> (TriangleMesh, Vec<[f32; 3]>) {
+    let ctx = ColorContext::build(attrs);
+    let default_attr = AtomAttr::default();
+    let mut tris: Vec<StlTriangle> = Vec::new();
+    let mut colors: Vec<[f32; 3]> = Vec::new();
+    for (i, atom) in mol.atoms.iter().enumerate() {
+        let r = vdw_radius(&atom.element).max(0.05);
+        let attr = attrs.get(i).unwrap_or(&default_attr);
+        let col = atom_color(scheme, &atom.element, attr, &ctx);
+        let before = tris.len();
+        push_sphere(&mut tris, atom.pos, r);
+        for _ in before..tris.len() {
+            colors.push(col);
+        }
+    }
+    let mesh = TriangleMesh {
+        format: None,
+        name: Some("genetics-spacefill".to_string()),
+        triangles: tris,
+    };
+    (mesh, colors)
+}
+
+/// A **ball-and-stick** mesh *with a paired per-triangle colour* under `scheme`.
+/// Same geometry as [`crate::genetics::molecule_view::ball_and_stick`] (a sphere
+/// of `vdw·ball_scale` per atom + a midpoint-split cylinder per bond) plus one
+/// colour per triangle, in lockstep with `mesh.triangles`. Each atom sphere and
+/// each bond half take their (near) atom's [`atom_color`] under `scheme`, so the
+/// generalisation of `molecule_view::ball_and_stick_colored` to chain / residue /
+/// B-factor colouring is a single call.
+pub fn ball_and_stick_colored(
+    mol: &ViewMolecule,
+    ball_scale: f32,
+    stick_radius: f32,
+    scheme: ColorScheme,
+    attrs: &[AtomAttr],
+) -> (TriangleMesh, Vec<[f32; 3]>) {
+    let ctx = ColorContext::build(attrs);
+    let default_attr = AtomAttr::default();
+    let color_of = |i: usize, element: &str| -> [f32; 3] {
+        let attr = attrs.get(i).unwrap_or(&default_attr);
+        atom_color(scheme, element, attr, &ctx)
+    };
+    let mut tris: Vec<StlTriangle> = Vec::new();
+    let mut colors: Vec<[f32; 3]> = Vec::new();
+    let tag = |tris: &[StlTriangle], before: usize, col: [f32; 3], colors: &mut Vec<[f32; 3]>| {
+        for _ in before..tris.len() {
+            colors.push(col);
+        }
+    };
+    let r = stick_radius.max(0.02);
+    for (i, atom) in mol.atoms.iter().enumerate() {
+        let rad = (vdw_radius(&atom.element) * ball_scale).max(0.05);
+        let before = tris.len();
+        push_sphere(&mut tris, atom.pos, rad);
+        tag(&tris, before, color_of(i, &atom.element), &mut colors);
+    }
+    for &(a, b) in &mol.bonds {
+        let (Some(atom_a), Some(atom_b)) = (mol.atoms.get(a), mol.atoms.get(b)) else {
+            continue;
+        };
+        // Split at the midpoint so each half takes its own atom's colour.
+        let mid = [
+            0.5 * (atom_a.pos[0] + atom_b.pos[0]),
+            0.5 * (atom_a.pos[1] + atom_b.pos[1]),
+            0.5 * (atom_a.pos[2] + atom_b.pos[2]),
+        ];
+        let before = tris.len();
+        push_cylinder(&mut tris, atom_a.pos, mid, r);
+        tag(&tris, before, color_of(a, &atom_a.element), &mut colors);
+        let before = tris.len();
+        push_cylinder(&mut tris, mid, atom_b.pos, r);
+        tag(&tris, before, color_of(b, &atom_b.element), &mut colors);
+    }
+    let mesh = TriangleMesh {
+        format: None,
+        name: Some("genetics-ball-and-stick".to_string()),
+        triangles: tris,
+    };
+    (mesh, colors)
+}
+
+/// HSV→RGB with `h, s, v` each in `0.0..=1.0`; returns `[r, g, b]` in
+/// `0.0..=1.0`. Used to spread chain hues around the wheel.
+fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [f32; 3] {
+    let h = (h.rem_euclid(1.0)) * 6.0;
+    let c = v * s;
+    let x = c * (1.0 - ((h % 2.0) - 1.0).abs());
+    let m = v - c;
+    let (r, g, b) = match h as i32 {
+        0 => (c, x, 0.0),
+        1 => (x, c, 0.0),
+        2 => (0.0, c, x),
+        3 => (0.0, x, c),
+        4 => (x, 0.0, c),
+        _ => (c, 0.0, x),
+    };
+    [r + m, g + m, b + m]
+}
+
+/// A rainbow ramp for `t ∈ [0, 1]`: blue (low) → cyan → green → yellow → red
+/// (high), the canonical residue-index spectrum. Implemented as a hue sweep
+/// from 240° (blue) down to 0° (red).
+fn rainbow(t: f32) -> [f32; 3] {
+    let t = t.clamp(0.0, 1.0);
+    // Hue 0.666 (blue) → 0.0 (red).
+    let hue = (1.0 - t) * (2.0 / 3.0);
+    hsv_to_rgb(hue, 0.85, 0.95)
+}
+
+/// A blue→white→red ramp for `t ∈ [0, 1]`: blue at `0`, white at `0.5`, red at
+/// `1` — the conventional B-factor / temperature ramp (cool = rigid, warm =
+/// flexible).
+fn blue_white_red(t: f32) -> [f32; 3] {
+    let t = t.clamp(0.0, 1.0);
+    if t < 0.5 {
+        let u = t / 0.5; // 0 → 1 over the blue→white half
+        [u, u, 1.0]
+    } else {
+        let u = (t - 0.5) / 0.5; // 0 → 1 over the white→red half
+        [1.0, 1.0 - u, 1.0 - u]
     }
 }
 
@@ -520,6 +873,116 @@ fn cap_ring(tris: &mut Vec<StlTriangle>, ring: &[[f32; 3]], center: [f32; 3], fr
             push_tri(tris, center, ring[s], ring[s1]);
         }
     }
+}
+
+// --------------------------------------------------------------------------
+// Ribbon (a flat / elliptical band swept along the Cα Catmull-Rom spline)
+// --------------------------------------------------------------------------
+
+/// Build a **ribbon** mesh: the same Catmull-Rom spline through the Cα control
+/// points as the [`cartoon`], but swept into a **flat elliptical band** (wide
+/// along the local binormal, thin along the local normal) rather than a round
+/// tube — the classic flattened-ribbon protein view. The band's half-width and
+/// half-thickness come from [`MolvizParams::ribbon_width`] /
+/// [`MolvizParams::ribbon_thickness`], each scaled per-sample by the point's
+/// secondary-structure [`BackbonePoint::radius_scale`] so helices/strands widen.
+///
+/// With fewer than two control points the mesh is empty (a single Cα is drawn
+/// as one small sphere so a 1-residue input is not invisible), mirroring the
+/// cartoon's degenerate handling.
+pub fn ribbon(backbone: &[BackbonePoint], params: &MolvizParams) -> TriangleMesh {
+    let mut tris: Vec<StlTriangle> = Vec::new();
+    if backbone.is_empty() {
+        return TriangleMesh {
+            format: None,
+            name: Some("genetics-ribbon".to_string()),
+            triangles: tris,
+        };
+    }
+    if backbone.len() == 1 {
+        push_sphere(&mut tris, backbone[0].pos, params.ribbon_width.max(0.05));
+        return TriangleMesh {
+            format: None,
+            name: Some("genetics-ribbon".to_string()),
+            triangles: tris,
+        };
+    }
+    let centers = sample_backbone_spline(backbone, params.tube_samples.max(1));
+    sweep_ribbon(
+        &mut tris,
+        &centers,
+        params.ribbon_width.max(0.02),
+        params.ribbon_thickness.max(0.01),
+        params.tube_segments.max(4),
+    );
+    TriangleMesh {
+        format: None,
+        name: Some("genetics-ribbon".to_string()),
+        triangles: tris,
+    }
+}
+
+/// Sweep a closed **flat elliptical band** along a centre-line. Identical
+/// minimal-twist parallel-transport framing to [`sweep_tube`], but each ring is
+/// an ellipse of half-extents `(half_width, half_thickness)` in the frame's
+/// `(u, v)` plane — `u` (binormal) carries the wide axis, `v` (normal) the thin
+/// axis — so the swept surface reads as a flat ribbon rather than a round tube.
+/// Both half-extents are scaled per-sample by [`TubeSample::radius_scale`].
+fn sweep_ribbon(
+    tris: &mut Vec<StlTriangle>,
+    centers: &[TubeSample],
+    half_width: f32,
+    half_thickness: f32,
+    segments: usize,
+) {
+    if centers.len() < 2 {
+        return;
+    }
+    let mut rings: Vec<Vec<[f32; 3]>> = Vec::with_capacity(centers.len());
+    let first_dir = normalize(sub(centers[1].pos, centers[0].pos));
+    let (mut u, _v) = perpendicular_basis(first_dir);
+    for i in 0..centers.len() {
+        let dir = if i == 0 {
+            normalize(sub(centers[1].pos, centers[0].pos))
+        } else if i == centers.len() - 1 {
+            normalize(sub(centers[i].pos, centers[i - 1].pos))
+        } else {
+            normalize(sub(centers[i + 1].pos, centers[i - 1].pos))
+        };
+        // Minimal-twist re-orthogonalisation of the carried binormal.
+        u = normalize(sub(u, scale_vec(dir, dot(u, dir))));
+        if length(u) < 1e-5 {
+            let (nu, _) = perpendicular_basis(dir);
+            u = nu;
+        }
+        let v = normalize(cross(dir, u));
+        let s = centers[i].radius_scale.max(0.05);
+        let (a, b) = (half_width * s, half_thickness * s);
+        let c = centers[i].pos;
+        let mut ring = Vec::with_capacity(segments);
+        for k in 0..segments {
+            let ang = 2.0 * std::f32::consts::PI * k as f32 / segments as f32;
+            let (ca, sa) = (ang.cos(), ang.sin());
+            // Ellipse: wide along `u` (a), thin along `v` (b).
+            ring.push([
+                c[0] + a * ca * u[0] + b * sa * v[0],
+                c[1] + a * ca * u[1] + b * sa * v[1],
+                c[2] + a * ca * u[2] + b * sa * v[2],
+            ]);
+        }
+        rings.push(ring);
+    }
+    for w in rings.windows(2) {
+        let (r0, r1) = (&w[0], &w[1]);
+        for k in 0..segments {
+            let k1 = (k + 1) % segments;
+            push_tri(tris, r0[k], r1[k], r1[k1]);
+            push_tri(tris, r0[k], r1[k1], r0[k1]);
+        }
+    }
+    cap_ring(tris, &rings[0], centers[0].pos, true);
+    let last = rings.len() - 1;
+    cap_ring(tris, &rings[last], centers[last].pos, false);
 }
 
 // --------------------------------------------------------------------------
@@ -1466,17 +1929,17 @@ mod tests {
 
     #[test]
     fn representation_all_covers_every_variant_and_has_unique_labels() {
-        assert_eq!(Representation::ALL.len(), 6);
+        assert_eq!(Representation::ALL.len(), 7);
         // Labels and tokens are all distinct (so the picker rows + wire tokens
         // don't collide).
         let mut labels: Vec<&str> = Representation::ALL.iter().map(|r| r.label()).collect();
         labels.sort_unstable();
         labels.dedup();
-        assert_eq!(labels.len(), 6, "labels must be unique");
+        assert_eq!(labels.len(), 7, "labels must be unique");
         let mut tokens: Vec<&str> = Representation::ALL.iter().map(|r| r.token()).collect();
         tokens.sort_unstable();
         tokens.dedup();
-        assert_eq!(tokens.len(), 6, "tokens must be unique");
+        assert_eq!(tokens.len(), 7, "tokens must be unique");
     }
 
     #[test]
@@ -1494,9 +1957,15 @@ mod tests {
             Representation::from_token("CARTOON"),
             Some(Representation::Cartoon)
         );
+        // "ribbon" is now its own representation (a flat band), distinct from
+        // the round "cartoon" tube.
         assert_eq!(
             Representation::from_token("ribbon"),
-            Some(Representation::Cartoon)
+            Some(Representation::Ribbon)
+        );
+        assert_eq!(
+            Representation::from_token("flat-ribbon"),
+            Some(Representation::Ribbon)
         );
         assert_eq!(
             Representation::from_token(" CPK "),
@@ -1511,9 +1980,10 @@ mod tests {
     }
 
     #[test]
-    fn only_cartoon_needs_a_backbone() {
+    fn only_backbone_reps_need_a_backbone() {
         for rep in Representation::ALL {
-            assert_eq!(rep.needs_backbone(), rep == Representation::Cartoon);
+            let expect = matches!(rep, Representation::Cartoon | Representation::Ribbon);
+            assert_eq!(rep.needs_backbone(), expect);
         }
     }
 
@@ -1539,9 +2009,14 @@ mod tests {
                 rep
             );
         }
-        // Cartoon needs the backbone, not the atom list.
+        // Cartoon + ribbon need the backbone, not the atom list.
         let cartoon = build_mesh(&mol, Representation::Cartoon, &bb, &p);
         assert!(cartoon.triangle_count() > 0, "cartoon should mesh a trace");
+        let ribbon_mesh = build_mesh(&mol, Representation::Ribbon, &bb, &p);
+        assert!(
+            ribbon_mesh.triangle_count() > 0,
+            "ribbon should mesh a trace"
+        );
     }
 
     // ---- empty / degenerate inputs (no panic) ----------------------------
@@ -1975,6 +2450,300 @@ mod tests {
         unbonded.atoms.push(ViewAtom::new([0.0, 0.0, 0.0], "C"));
         unbonded.atoms.push(ViewAtom::new([10.0, 0.0, 0.0], "C"));
         assert!(sticks(&unbonded, 0.18).triangles.is_empty());
+    }
+
+    // ---- spacefill / ball-and-stick analytic pins ------------------------
+
+    #[test]
+    fn spacefill_single_carbon_extent_matches_vdw_radius() {
+        // A lone carbon spacefill sphere must span ~2·vdw(C) on every axis
+        // (within the UV-sphere tessellation tolerance — the faceted sphere
+        // sits slightly *inside* the true radius at facet midpoints).
+        let mol = one_atom("C", [0.0, 0.0, 0.0]);
+        let mesh = molecule_view::spacefill(&mol);
+        assert!(mesh.triangle_count() > 0);
+        let (min, max) = mesh.bounding_box().expect("non-empty");
+        let r = vdw_radius("C"); // 1.70 Å
+        for k in 0..3 {
+            let span = max[k] - min[k];
+            // Tessellation makes the span no larger than the true diameter and
+            // within ~8 % of it at SEGMENTS = 8.
+            assert!(
+                (span - 2.0 * r).abs() < 0.3,
+                "axis {k} span {span} not ~ vdW diameter {}",
+                2.0 * r
+            );
+        }
+    }
+
+    #[test]
+    fn ball_and_stick_two_atoms_is_two_spheres_plus_one_cylinder_watertight() {
+        // A 2-atom bonded molecule meshes to exactly two atom spheres + one
+        // (midpoint-split) bond cylinder: vertex/triangle count > 0 and the
+        // soup is watertight.
+        let mut mol = ViewMolecule::new();
+        mol.atoms.push(ViewAtom::new([0.0, 0.0, 0.0], "C"));
+        mol.atoms.push(ViewAtom::new([1.4, 0.0, 0.0], "O")); // ~bonded
+        mol.bonds = molecule_view::detect_bonds(&mol.atoms);
+        assert_eq!(mol.bonds.len(), 1, "the two atoms must bond");
+
+        let mesh = molecule_view::ball_and_stick(&mol, 0.3, 0.18);
+        assert!(mesh.triangle_count() > 0, "must produce geometry");
+        // The geometry is the union of two atom spheres + a midpoint-split bond
+        // cylinder. The *union* of overlapping closed solids is not a single
+        // 2-manifold (interfaces interpenetrate), so we pin watertightness on
+        // each closed primitive in isolation — the property the task asks for
+        // ("2 spheres + 1 cylinder, watertight") holds per solid — and pin the
+        // assembled mesh for non-emptiness + all-finite vertices.
+        let mut sphere = Vec::new();
+        push_sphere(&mut sphere, [0.0, 0.0, 0.0], 0.51);
+        assert!(
+            mesh_is_closed(&sphere, 0.51 / 8.0),
+            "an atom sphere must be watertight"
+        );
+        let mut cyl = Vec::new();
+        push_cylinder(&mut cyl, [0.0, 0.0, 0.0], [1.4, 0.0, 0.0], 0.18);
+        assert!(
+            mesh_is_closed(&cyl, 0.18),
+            "a capped bond cylinder must be watertight"
+        );
+        for t in &mesh.triangles {
+            for v in &t.vertices {
+                assert!(v.iter().all(|c| c.is_finite()));
+            }
+        }
+    }
+
+    #[test]
+    fn ball_and_stick_zero_length_bond_is_guarded() {
+        // A degenerate (coincident-atom) bond has a zero-length axis; the
+        // cylinder builder must skip it rather than divide by zero / NaN.
+        let mut mol = ViewMolecule::new();
+        mol.atoms.push(ViewAtom::new([0.0, 0.0, 0.0], "C"));
+        mol.atoms.push(ViewAtom::new([0.0, 0.0, 0.0], "C"));
+        mol.bonds = vec![(0, 1)];
+        let mesh = molecule_view::ball_and_stick(&mol, 0.3, 0.18);
+        // Spheres still present; the zero-length cylinder added nothing weird.
+        for t in &mesh.triangles {
+            for v in &t.vertices {
+                assert!(v.iter().all(|c| c.is_finite()), "no NaN/inf vertices");
+            }
+        }
+    }
+
+    // ---- ribbon ----------------------------------------------------------
+
+    #[test]
+    fn ribbon_through_three_ca_points_passes_near_them() {
+        // A ribbon swept through 3+ Cα points must pass near each control point
+        // (the centre-line is the Catmull-Rom spline, which interpolates them).
+        let bb = straight_backbone(3);
+        let p = MolvizParams::default();
+        let mesh = ribbon(&bb, &p);
+        assert!(mesh.triangle_count() > 0, "ribbon must mesh a 3-CA trace");
+        // For each control point, some vertex of the band is within
+        // (width + a slack) of it — the band wraps the spline near each Cα.
+        let reach = p.ribbon_width * 1.8 + 0.6;
+        for ctrl in &bb {
+            let near = mesh.triangles.iter().any(|t| {
+                t.vertices.iter().any(|v| {
+                    let d = ((v[0] - ctrl.pos[0]).powi(2)
+                        + (v[1] - ctrl.pos[1]).powi(2)
+                        + (v[2] - ctrl.pos[2]).powi(2))
+                    .sqrt();
+                    d < reach
+                })
+            });
+            assert!(near, "ribbon must pass near Cα {:?}", ctrl.pos);
+        }
+    }
+
+    #[test]
+    fn ribbon_is_flatter_than_it_is_wide() {
+        // The defining property of a ribbon vs. the round tube: a straight band
+        // is much wider (binormal) than it is thick (normal). A straight trace
+        // on x makes y the wide axis and z the thin axis.
+        let bb = straight_backbone(6);
+        let mut p = MolvizParams::default();
+        p.ribbon_width = 1.6;
+        p.ribbon_thickness = 0.2;
+        let mesh = ribbon(&bb, &p);
+        let (min, max) = mesh.bounding_box().expect("non-empty");
+        let wide = (max[1] - min[1]).max(max[2] - min[2]);
+        let thin = (max[1] - min[1]).min(max[2] - min[2]);
+        assert!(
+            wide > thin * 2.0,
+            "ribbon must be markedly flatter (wide {wide} vs thin {thin})"
+        );
+    }
+
+    #[test]
+    fn ribbon_degenerate_inputs_no_panic() {
+        let p = MolvizParams::default();
+        assert!(ribbon(&[], &p).triangles.is_empty(), "empty → empty");
+        // One point → a single sphere, not empty, no panic.
+        let one = vec![BackbonePoint::new([1.0, 2.0, 3.0], None)];
+        assert!(ribbon(&one, &p).triangle_count() > 0);
+    }
+
+    // ---- colour schemes --------------------------------------------------
+
+    #[test]
+    fn color_scheme_enum_round_trips_and_is_unique() {
+        assert_eq!(ColorScheme::default(), ColorScheme::Element);
+        assert_eq!(ColorScheme::ALL.len(), 4);
+        let mut tokens: Vec<&str> = ColorScheme::ALL.iter().map(|s| s.token()).collect();
+        tokens.sort_unstable();
+        tokens.dedup();
+        assert_eq!(tokens.len(), 4, "tokens must be unique");
+        for s in ColorScheme::ALL {
+            assert_eq!(ColorScheme::from_token(s.token()), Some(s));
+        }
+        // Synonyms an agent might send.
+        assert_eq!(
+            ColorScheme::from_token("RAINBOW"),
+            Some(ColorScheme::Residue)
+        );
+        assert_eq!(ColorScheme::from_token("cpk"), Some(ColorScheme::Element));
+        assert_eq!(
+            ColorScheme::from_token("b-factor"),
+            Some(ColorScheme::BFactor)
+        );
+        assert_eq!(ColorScheme::from_token("nope"), None);
+        // Only the non-element schemes consult the per-atom attrs.
+        assert!(!ColorScheme::Element.needs_attrs());
+        assert!(ColorScheme::Chain.needs_attrs());
+    }
+
+    #[test]
+    fn cpk_color_of_known_elements_matches_the_table() {
+        // The element scheme must equal molecule_view::element_color for every
+        // atom, regardless of attrs/context.
+        let ctx = ColorContext::build(&[]);
+        let a = AtomAttr::default();
+        for el in ["C", "N", "O", "S", "H", "P"] {
+            assert_eq!(
+                atom_color(ColorScheme::Element, el, &a, &ctx),
+                element_color(el),
+                "CPK colour of {el} must match the table"
+            );
+        }
+        // Spot-check the canonical CPK assignments directly.
+        assert_eq!(element_color("O"), [0.94, 0.15, 0.10]); // red
+        assert_eq!(element_color("N"), [0.19, 0.31, 0.97]); // blue
+        assert_eq!(element_color("S"), [0.94, 0.78, 0.20]); // yellow
+        assert_eq!(element_color("H"), [0.95, 0.95, 0.95]); // white
+        assert_eq!(element_color("P"), [0.96, 0.55, 0.16]); // orange
+    }
+
+    #[test]
+    fn chain_scheme_gives_distinct_colors_per_chain() {
+        // Two atoms in different chains must get different colours; same chain
+        // → same colour.
+        let attrs = vec![
+            AtomAttr::new("A", 1, 10.0),
+            AtomAttr::new("B", 1, 10.0),
+            AtomAttr::new("A", 2, 10.0),
+        ];
+        let ctx = ColorContext::build(&attrs);
+        let c0 = atom_color(ColorScheme::Chain, "C", &attrs[0], &ctx);
+        let c1 = atom_color(ColorScheme::Chain, "C", &attrs[1], &ctx);
+        let c2 = atom_color(ColorScheme::Chain, "C", &attrs[2], &ctx);
+        assert_ne!(c0, c1, "different chains must differ");
+        assert_eq!(c0, c2, "same chain must match");
+    }
+
+    #[test]
+    fn residue_rainbow_runs_blue_low_to_red_high() {
+        // The rainbow ramp puts the N-terminus (low residue index) at the blue
+        // end and the C-terminus (high) at the red end.
+        let attrs = vec![AtomAttr::new("A", 0, 0.0), AtomAttr::new("A", 100, 0.0)];
+        let ctx = ColorContext::build(&attrs);
+        let lo = atom_color(ColorScheme::Residue, "C", &attrs[0], &ctx);
+        let hi = atom_color(ColorScheme::Residue, "C", &attrs[1], &ctx);
+        assert!(lo[2] > lo[0], "low residue should be blue-ish (B > R)");
+        assert!(hi[0] > hi[2], "high residue should be red-ish (R > B)");
+    }
+
+    #[test]
+    fn bfactor_ramp_is_blue_white_red() {
+        // Blue at the min, ~white at the mid, red at the max.
+        let attrs = vec![AtomAttr::new("A", 1, 10.0), AtomAttr::new("A", 2, 60.0)];
+        let ctx = ColorContext::build(&attrs);
+        let lo = atom_color(ColorScheme::BFactor, "C", &attrs[0], &ctx);
+        let hi = atom_color(ColorScheme::BFactor, "C", &attrs[1], &ctx);
+        // Low B → blue (B channel dominant); high B → red (R dominant).
+        assert!(
+            lo[2] > lo[0] && lo[2] > lo[1],
+            "low B must be blue, got {lo:?}"
+        );
+        assert!(
+            hi[0] > hi[1] && hi[0] > hi[2],
+            "high B must be red, got {hi:?}"
+        );
+        // A degenerate (all-equal) range maps to the mid colour, no div-by-zero.
+        let flat = vec![AtomAttr::new("A", 1, 5.0), AtomAttr::new("A", 2, 5.0)];
+        let fctx = ColorContext::build(&flat);
+        let mid = atom_color(ColorScheme::BFactor, "C", &flat[0], &fctx);
+        assert!(mid.iter().all(|c| c.is_finite()));
+    }
+
+    #[test]
+    fn colored_meshes_carry_one_color_per_triangle() {
+        // Both colour-aware builders return colours in lockstep with triangles.
+        let mol = water();
+        let attrs = vec![
+            AtomAttr::new("A", 1, 10.0),
+            AtomAttr::new("A", 1, 20.0),
+            AtomAttr::new("A", 2, 30.0),
+        ];
+        for scheme in ColorScheme::ALL {
+            let (mesh, colors) = spacefill_colored(&mol, scheme, &attrs);
+            assert_eq!(
+                colors.len(),
+                mesh.triangles.len(),
+                "{scheme:?}: spacefill colours must be per-triangle"
+            );
+            assert!(!colors.is_empty());
+            let (bsm, bsc) = ball_and_stick_colored(&mol, 0.3, 0.18, scheme, &attrs);
+            assert_eq!(
+                bsc.len(),
+                bsm.triangles.len(),
+                "{scheme:?}: ball-and-stick colours must be per-triangle"
+            );
+        }
+        // Element colouring works with *no* attrs (it ignores them).
+        let (mesh, colors) = spacefill_colored(&mol, ColorScheme::Element, &[]);
+        assert_eq!(colors.len(), mesh.triangles.len());
+        // And the first atom (O) sphere's colour is oxygen-red.
+        assert_eq!(colors[0], element_color("O"));
+    }
+
+    #[test]
+    fn colored_meshes_empty_molecule_is_empty_no_panic() {
+        let empty = ViewMolecule::new();
+        for scheme in ColorScheme::ALL {
+            let (mesh, colors) = spacefill_colored(&empty, scheme, &[]);
+            assert!(mesh.triangles.is_empty() && colors.is_empty());
+            let (bsm, bsc) = ball_and_stick_colored(&empty, 0.3, 0.18, scheme, &[]);
+            assert!(bsm.triangles.is_empty() && bsc.is_empty());
+        }
+    }
+
+    #[test]
+    fn hsv_to_rgb_primaries_are_correct() {
+        // Red / green / blue at the canonical hues, full sat/val.
+        let r = hsv_to_rgb(0.0, 1.0, 1.0);
+        let g = hsv_to_rgb(1.0 / 3.0, 1.0, 1.0);
+        let b = hsv_to_rgb(2.0 / 3.0, 1.0, 1.0);
+        assert!((r[0] - 1.0).abs() < 1e-4 && r[1] < 1e-4 && r[2] < 1e-4);
+        assert!(g[1] > 0.99 && g[0] < 1e-4 && g[2] < 1e-4);
+        assert!(b[2] > 0.99 && b[0] < 1e-4 && b[1] < 1e-4);
+        // Every channel stays in range for arbitrary inputs.
+        for i in 0..12 {
+            let c = hsv_to_rgb(i as f32 / 12.0, 0.7, 0.9);
+            assert!(c.iter().all(|&x| (0.0..=1.0).contains(&x)));
+        }
     }
 
     // ---- helpers for the closedness check --------------------------------
