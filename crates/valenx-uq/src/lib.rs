@@ -22,7 +22,14 @@
 //!   (`sensitivity`).
 //! * **Surrogate / metamodelling** — when `f` is expensive, fit a cheap
 //!   approximation `f̂ ≈ f` from a modest sample and evaluate *that* instead
-//!   (`surrogate`).
+//!   (`surrogate`), or build a spectral **polynomial-chaos expansion** whose
+//!   coefficients give the output mean and variance analytically (`pce`).
+//! * **Quasi-random sampling** — a deterministic, low-discrepancy **Sobol'
+//!   sequence** that fills `[0,1)^d` more evenly than pseudo-random points, for
+//!   faster-converging quasi-Monte-Carlo integration (`sobol`).
+//! * **Verification & validation** — order-of-accuracy fits, Roache's Grid
+//!   Convergence Index, a Method-of-Manufactured-Solutions helper, and error
+//!   norms for checking that a solver converges at its formal rate (`vnv`).
 //!
 //! The model itself is abstracted by the [`Model`] trait, so the same UQ
 //! machinery applies to a one-line closure ([`FnModel`]) in a test or to any
@@ -94,10 +101,13 @@
 
 pub mod distribution;
 pub mod model;
+pub mod pce;
 pub mod sampling;
 pub mod sensitivity;
+pub mod sobol;
 pub mod statistics;
 pub mod surrogate;
+pub mod vnv;
 
 mod error;
 mod rng;
@@ -105,6 +115,9 @@ mod rng;
 pub use distribution::Distribution;
 pub use error::UqError;
 pub use model::{FnModel, Model};
+pub use pce::{Pce, PolyBasis};
 pub use rng::SplitMix64;
 pub use sensitivity::{MorrisResult, SobolIndices};
+pub use sobol::sobol_sequence;
 pub use surrogate::PolynomialSurrogate;
+pub use vnv::{l2_norm, linf_norm, rms_norm, ConvergenceStudy, Mms};
