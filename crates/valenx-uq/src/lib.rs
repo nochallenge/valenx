@@ -102,6 +102,7 @@
 pub mod distribution;
 pub mod model;
 pub mod pce;
+pub mod reliability;
 pub mod sampling;
 pub mod sensitivity;
 pub mod sobol;
@@ -116,6 +117,9 @@ pub use distribution::Distribution;
 pub use error::UqError;
 pub use model::{FnModel, Model};
 pub use pce::{Pce, PolyBasis};
+pub use reliability::{
+    form, pf_monte_carlo, sorm_breitung, FormConfig, FormResult, McResult, SormResult,
+};
 pub use rng::SplitMix64;
 pub use sensitivity::{MorrisResult, SobolIndices};
 pub use sobol::sobol_sequence;

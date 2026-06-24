@@ -38,4 +38,10 @@ pub enum UqError {
     /// degree).
     #[error("linear-algebra failure: {0}")]
     LinearAlgebra(String),
+
+    /// An iterative algorithm (e.g. the HLRF loop in FORM) did not reach
+    /// its convergence criterion within the allowed number of iterations.
+    /// The message includes the last diagnostic (iteration count, residual).
+    #[error("convergence failure: {0}")]
+    NotConverged(String),
 }
