@@ -32,6 +32,19 @@
 //!   `Info: not run`, not as a pass. Every run
 //!   [`requires_human_signoff`](FunnelOutcome::requires_human_signoff).
 //!
+//! ## Digital-engineering spine
+//!
+//! Alongside the biologic funnel, the [`digeng`] module is a standalone
+//! **systems-engineering / MBSE** layer — the digital thread that ties design
+//! parameters → requirements → trade studies into one auditable record:
+//! [`digeng::Requirement`]s with signed-margin [`digeng::Verdict`]s,
+//! [`digeng::DesignPoint`] compliance, a full-factorial
+//! [`digeng::TradeStudy`] driver with Pareto-front extraction, and
+//! requirements-↔-metrics [`digeng::coverage`]. It is pure systems-engineering
+//! book-keeping (zero dual-use concern) and shares no state with the funnel;
+//! sampling-based / UQ design-of-experiments is a documented future hook, not a
+//! dependency.
+//!
 //! ## Honest scope
 //!
 //! Research/educational grade. This crate is *plumbing* — it composes
@@ -88,6 +101,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod digeng;
 pub mod error;
 pub mod funnel;
 pub mod seq;
@@ -98,6 +112,13 @@ pub use funnel::{
     OfftargetEvidence,
 };
 pub use seq::{run_funnel_seqs, ScreenConfig, SeqCandidate};
+
+// Digital-engineering / MBSE spine (see [`digeng`]).
+pub use digeng::{
+    coverage, pareto_front, Comparator, ComplianceReport, CoverageReport, DesignPoint, Direction,
+    Objective, Parameter, ParameterSweep, Requirement, TradeResult, TradeStudy, TradeStudyOutcome,
+    Verdict,
+};
 
 // Re-export the dossier type the public API returns inside [`FunnelOutcome`].
 pub use valenx_dossier::RunDossier;
