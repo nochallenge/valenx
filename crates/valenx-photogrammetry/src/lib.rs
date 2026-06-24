@@ -80,6 +80,26 @@
 //! (exactly what Stages 3–4 supply), and the global **scale** of a pure
 //! two-view-seeded bundle remains free even with camera 0 pinned.
 //!
+//! **Reconstruction-quality tooling (the post-solve stage)** is the
+//! [`quality`] module — what you reach for *after* the mapper has produced a
+//! [`Reconstruction`], to judge, clean, and export it. It provides
+//! [`reconstruction_quality`] ([`QualityMetrics`]: mean / median / max
+//! reprojection error, the track-length distribution, registered-camera and
+//! point counts, and camera connectivity — the count of image pairs sharing at
+//! least `N` triangulated points); [`filter_outliers`], which removes
+//! high-reprojection-error observations by a fixed pixel threshold or a robust
+//! `k·MAD` rule and drops any track left under two observations, returning the
+//! compacted reconstruction plus a [`FilterReport`] of exactly what was
+//! removed; and exporters — an ASCII [`point_cloud_ply`] / [`write_ply`] (xyz
+//! with optional rgb) and a [`camera_poses_text`] / [`write_camera_poses`]
+//! dump. These mirror a production tool's model-statistics, observation-
+//! filtering, and PLY/`cameras.txt` exporters. Honest caveat (in the module
+//! docs): the metrics are *diagnostic* self-consistency measures, not a
+//! calibrated accuracy certificate against survey ground truth — the
+//! reconstruction is still only up to a global similarity. They fail loud on an
+//! empty reconstruction, non-finite geometry, or a negative filter threshold,
+//! and guard every average by a positive count.
+//!
 //! **The incremental mapper (the orchestration capstone)** is the [`mapper`]
 //! module — the conductor that drives Stages 1–5 in order to turn a set of
 //! images and their pairwise verified matches into *one* reconstruction. It
@@ -150,6 +170,7 @@ pub mod image;
 pub mod mapper;
 pub mod matching;
 pub mod pnp;
+pub mod quality;
 pub mod twoview;
 
 mod error;
@@ -172,6 +193,10 @@ pub use mapper::{
 };
 pub use matching::{match_descriptors, Match};
 pub use pnp::{project_point, solve_pnp, solve_pnp_ransac, CameraPose, PnpRansacParams, PnpResult};
+pub use quality::{
+    camera_poses_text, filter_outliers, point_cloud_ply, reconstruction_quality,
+    write_camera_poses, write_ply, FilterReport, OutlierRule, QualityMetrics, QualityParams,
+};
 pub use twoview::{
     decompose_essential, essential_from_fundamental, recover_pose, triangulate_point,
     CameraIntrinsics, TwoViewReconstruction,
