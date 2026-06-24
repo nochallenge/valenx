@@ -114,62 +114,91 @@ pub fn draw_pump_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Pump curve  H = H0 − a·Q²").strong());
+                    // Associate each numeric `DragValue` with its caption via
+                    // `labelled_by`, so the spin button carries the caption as
+                    // its accessibility / UI-Automation Name (egui clears a
+                    // DragValue's own Name, leaving it anonymous to a screen
+                    // reader / AI driver otherwise).
                     ui.horizontal(|ui| {
-                        ui.label("shut-off head H0 (m)");
-                        ui.add(egui::DragValue::new(&mut s.shutoff_head_m).speed(0.5));
+                        let h0 = ui.label("shut-off head H0 (m)");
+                        ui.add(egui::DragValue::new(&mut s.shutoff_head_m).speed(0.5))
+                            .labelled_by(h0.id)
+                            .on_hover_text("Shut-off head H0 (m), the pump head at zero flow");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("droop a (m·s²/m⁶)");
-                        ui.add(egui::DragValue::new(&mut s.droop_a).speed(10.0));
+                        let da = ui.label("droop a (m·s²/m⁶)");
+                        ui.add(egui::DragValue::new(&mut s.droop_a).speed(10.0))
+                            .labelled_by(da.id)
+                            .on_hover_text("Pump-curve droop coefficient a (m·s²/m⁶)");
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("System curve  H = Hs + K·Q²").strong());
                     ui.horizontal(|ui| {
-                        ui.label("static head Hs (m)");
-                        ui.add(egui::DragValue::new(&mut s.static_head_m).speed(0.5));
+                        let hs = ui.label("static head Hs (m)");
+                        ui.add(egui::DragValue::new(&mut s.static_head_m).speed(0.5))
+                            .labelled_by(hs.id)
+                            .on_hover_text("System static head Hs (m)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("resistance K (m·s²/m⁶)");
-                        ui.add(egui::DragValue::new(&mut s.resistance_k).speed(10.0));
+                        let rk = ui.label("resistance K (m·s²/m⁶)");
+                        ui.add(egui::DragValue::new(&mut s.resistance_k).speed(10.0))
+                            .labelled_by(rk.id)
+                            .on_hover_text("System resistance coefficient K (m·s²/m⁶)");
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Fluid + drive").strong());
                     ui.horizontal(|ui| {
-                        ui.label("density ρ (kg/m³)");
-                        ui.add(egui::DragValue::new(&mut s.density_kg_m3).speed(1.0));
+                        let de = ui.label("density ρ (kg/m³)");
+                        ui.add(egui::DragValue::new(&mut s.density_kg_m3).speed(1.0))
+                            .labelled_by(de.id)
+                            .on_hover_text("Fluid density ρ (kg/m³)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("efficiency η");
-                        ui.add(egui::DragValue::new(&mut s.efficiency).speed(0.01));
+                        let ef = ui.label("efficiency η");
+                        ui.add(egui::DragValue::new(&mut s.efficiency).speed(0.01))
+                            .labelled_by(ef.id)
+                            .on_hover_text("Pump efficiency η (0–1]");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("shaft speed ω (rad/s)");
-                        ui.add(egui::DragValue::new(&mut s.angular_speed_rad_s).speed(1.0));
+                        let sp = ui.label("shaft speed ω (rad/s)");
+                        ui.add(egui::DragValue::new(&mut s.angular_speed_rad_s).speed(1.0))
+                            .labelled_by(sp.id)
+                            .on_hover_text("Shaft angular speed ω (rad/s)");
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Suction / NPSH").strong());
                     ui.horizontal(|ui| {
-                        ui.label("atmospheric (Pa)");
-                        ui.add(egui::DragValue::new(&mut s.atmospheric_pa).speed(100.0));
+                        let at = ui.label("atmospheric (Pa)");
+                        ui.add(egui::DragValue::new(&mut s.atmospheric_pa).speed(100.0))
+                            .labelled_by(at.id)
+                            .on_hover_text("Atmospheric pressure at the suction surface (Pa)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("vapour pressure (Pa)");
-                        ui.add(egui::DragValue::new(&mut s.vapor_pressure_pa).speed(50.0));
+                        let vp = ui.label("vapour pressure (Pa)");
+                        ui.add(egui::DragValue::new(&mut s.vapor_pressure_pa).speed(50.0))
+                            .labelled_by(vp.id)
+                            .on_hover_text("Fluid vapour pressure (Pa)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("static suction head (m)");
-                        ui.add(egui::DragValue::new(&mut s.static_suction_head_m).speed(0.1));
+                        let ss = ui.label("static suction head (m)");
+                        ui.add(egui::DragValue::new(&mut s.static_suction_head_m).speed(0.1))
+                            .labelled_by(ss.id)
+                            .on_hover_text("Static suction head (m); negative for a suction lift");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("suction loss (m)");
-                        ui.add(egui::DragValue::new(&mut s.suction_loss_m).speed(0.05));
+                        let sk = ui.label("suction loss (m)");
+                        ui.add(egui::DragValue::new(&mut s.suction_loss_m).speed(0.05))
+                            .labelled_by(sk.id)
+                            .on_hover_text("Suction-line friction loss (m)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("required NPSHr (m)");
-                        ui.add(egui::DragValue::new(&mut s.required_npsh_m).speed(0.1));
+                        let rn = ui.label("required NPSHr (m)");
+                        ui.add(egui::DragValue::new(&mut s.required_npsh_m).speed(0.1))
+                            .labelled_by(rn.id)
+                            .on_hover_text("Pump required NPSH (NPSHr) (m)");
                     });
 
                     ui.add_space(6.0);
@@ -653,12 +682,28 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_pump_workbench(app, ctx);
         });
+    }
+
+    /// As [`draw_workbench`], but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_pump_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -674,5 +719,47 @@ mod headless_ui_tests {
         app.show_pump_workbench = true;
         run_pump(&mut app.pump);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // The pump-curve, system-curve, fluid/drive and suction DragValues are
+        // SpinButtons; each must be `labelled_by` its caption (egui clears a
+        // DragValue's own Name), so an AI / screen reader can find the control
+        // by the caption text.
+        let mut app = ValenxApp::default();
+        app.show_pump_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // H0, droop a, static head, resistance K, density, efficiency, shaft
+        // speed, atmospheric, vapour pressure, static suction head, suction
+        // loss, required NPSHr.
+        assert!(
+            spin_buttons.len() >= 12,
+            "expected the pump numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every pump DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["shut-off head H0 (m)", "efficiency η", "required NPSHr (m)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        // The Analyze button stays a named, invokable node.
+        assert!(
+            nodes.iter().any(|(_, n)| n.role() == Role::Button
+                && n.name().is_some_and(|s| s.contains("Analyze"))),
+            "the Analyze button is a named, invokable node"
+        );
     }
 }

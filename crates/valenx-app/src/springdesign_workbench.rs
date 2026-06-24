@@ -132,17 +132,28 @@ pub fn draw_springdesign_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Geometry").strong());
+                    // Associate each numeric `DragValue` with its caption via
+                    // `labelled_by`, so the spin button carries the caption as
+                    // its accessibility / UI-Automation Name (egui clears a
+                    // DragValue's own Name, leaving it anonymous to a screen
+                    // reader / AI driver otherwise).
                     ui.horizontal(|ui| {
-                        ui.label("wire d (mm)");
-                        ui.add(egui::DragValue::new(&mut s.wire_diameter_mm).speed(0.05));
+                        let wd = ui.label("wire d (mm)");
+                        ui.add(egui::DragValue::new(&mut s.wire_diameter_mm).speed(0.05))
+                            .labelled_by(wd.id)
+                            .on_hover_text("Wire diameter d (mm)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("mean coil D (mm)");
-                        ui.add(egui::DragValue::new(&mut s.mean_coil_diameter_mm).speed(0.1));
+                        let cd = ui.label("mean coil D (mm)");
+                        ui.add(egui::DragValue::new(&mut s.mean_coil_diameter_mm).speed(0.1))
+                            .labelled_by(cd.id)
+                            .on_hover_text("Mean coil diameter D (mm), centre-to-centre of the wire");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("active coils N");
-                        ui.add(egui::DragValue::new(&mut s.active_coils).speed(0.5));
+                        let nc = ui.label("active coils N");
+                        ui.add(egui::DragValue::new(&mut s.active_coils).speed(0.5))
+                            .labelled_by(nc.id)
+                            .on_hover_text("Number of active (deflecting) coils N");
                     });
 
                     ui.add_space(4.0);
@@ -168,14 +179,17 @@ pub fn draw_springdesign_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Load").strong());
                     ui.horizontal(|ui| {
-                        ui.label("applied force F (N)");
-                        ui.add(egui::DragValue::new(&mut s.force_n).speed(1.0));
+                        let ff = ui.label("applied force F (N)");
+                        ui.add(egui::DragValue::new(&mut s.force_n).speed(1.0))
+                            .labelled_by(ff.id)
+                            .on_hover_text("Applied axial force F (N)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("target deflection (mm)");
+                        let td = ui.label("target deflection (mm)");
                         ui.add(
                             egui::DragValue::new(&mut s.target_deflection_mm).speed(0.1),
                         )
+                        .labelled_by(td.id)
                         .on_hover_text(
                             "Force required to compress the spring this far (F = k·delta)",
                         );
@@ -585,12 +599,28 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_springdesign_workbench(app, ctx);
         });
+    }
+
+    /// As [`draw_workbench`], but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_springdesign_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -606,5 +636,44 @@ mod headless_ui_tests {
         app.show_springdesign_workbench = true;
         run_springdesign(&mut app.springdesign);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // The geometry + load DragValues are SpinButtons; each must be
+        // `labelled_by` its caption (egui clears a DragValue's own Name), so an
+        // AI / screen reader can find the control by the caption text.
+        let mut app = ValenxApp::default();
+        app.show_springdesign_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // wire d, mean coil D, active coils N, applied force F, target deflection.
+        assert!(
+            spin_buttons.len() >= 5,
+            "expected the spring numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every spring DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["wire d (mm)", "active coils N", "applied force F (N)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        // The Analyze button stays a named, invokable node.
+        assert!(
+            nodes.iter().any(|(_, n)| n.role() == Role::Button
+                && n.name().is_some_and(|s| s.contains("Analyze"))),
+            "the Analyze button is a named, invokable node"
+        );
     }
 }
