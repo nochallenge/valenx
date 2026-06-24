@@ -7997,6 +7997,7 @@ dependencies = [
  "valenx-mohr",
  "valenx-mosfet",
  "valenx-neuro",
+ "valenx-ocean",
  "valenx-opamp",
  "valenx-openchannel",
  "valenx-optics",

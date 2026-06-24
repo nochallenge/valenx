@@ -211,6 +211,10 @@ valenx-sensors       = { path = "../valenx-sensors" }
 # Native particle-based SPH fluid simulation — surfaced by the Fluids (SPH)
 # workbench (src/fluids_workbench.rs). Pure-Rust; no new external deps.
 valenx-fluids        = { path = "../valenx-fluids" }
+# Native ocean wave field (sum-of-N Gerstner / trochoidal waves with deep-water
+# dispersion) + quasi-static Archimedes buoyancy — surfaced by the Ocean
+# workbench (src/ocean_workbench.rs). Pure-Rust; no new external deps.
+valenx-ocean         = { path = "../valenx-ocean" }
 # Native propeller / rotor blade-element-momentum (BEMT) performance —
 # surfaced by the Rotor / Drone (BEMT) workbench (src/rotor_workbench.rs).
 # Pure-Rust solver; the workbench calls its real API directly (no subprocess).

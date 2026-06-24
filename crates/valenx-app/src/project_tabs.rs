@@ -234,12 +234,14 @@ pub enum TabKind {
     Sensors,
     // -- Fluids --
     Fluids,
+    // -- Ocean --
+    Ocean,
 }
 
 impl TabKind {
     /// Every *template* kind (i.e. excluding [`TabKind::Blank`]), in
     /// `＋ from template`-menu order (grouped via [`Self::group`]).
-    pub const TEMPLATES: [TabKind; 33] = [
+    pub const TEMPLATES: [TabKind; 34] = [
         TabKind::Rocket,
         TabKind::Engine,
         TabKind::Astro,
@@ -273,6 +275,7 @@ impl TabKind {
         TabKind::VariantEffect,
         TabKind::Sensors,
         TabKind::Fluids,
+        TabKind::Ocean,
     ];
 
     /// Group header shown in the `＋ from template` new-tab menu. Blank is
@@ -308,6 +311,7 @@ impl TabKind {
             TabKind::Genetics | TabKind::Neuro | TabKind::VariantEffect => "Life sciences",
             TabKind::Sensors => "Sensors",
             TabKind::Fluids => "Simulation",
+            TabKind::Ocean => "Simulation",
         }
     }
 
@@ -348,6 +352,7 @@ impl TabKind {
             TabKind::VariantEffect => "Variant effect",
             TabKind::Sensors => "Sensors (LiDAR / Radar)",
             TabKind::Fluids => "Fluids (SPH particle sim)",
+            TabKind::Ocean => "Ocean (waves + buoyancy)",
         }
     }
 
@@ -390,6 +395,7 @@ impl TabKind {
             TabKind::VariantEffect => app.show_variant_effect_workbench = true,
             TabKind::Sensors => app.show_sensors_workbench = true,
             TabKind::Fluids => app.show_fluids_workbench = true,
+            TabKind::Ocean => app.show_ocean_workbench = true,
         }
     }
 
@@ -438,6 +444,7 @@ impl TabKind {
             "variant" | "varianteffect" => Some(TabKind::VariantEffect),
             "sensors" => Some(TabKind::Sensors),
             "fluids" | "sph" => Some(TabKind::Fluids),
+            "ocean" | "waves" => Some(TabKind::Ocean),
             _ => None,
         }
     }
@@ -1181,6 +1188,8 @@ pub const ALL_WORKBENCH_KINDS: &[&str] = &[
     "sensors",
     // Native SPH particle fluid simulation — surfaced by the Fluids workbench.
     "fluids",
+    // Native Gerstner ocean wave field + buoyancy — surfaced by the Ocean workbench.
+    "ocean",
     // The Mesh Toolbox is gated on `show_mesh_toolbox` (a `_toolbox`, not a
     // `_workbench`, field) but behaves like a per-tab workbench, so it is
     // mappable here under the same id the agent registry / `TabKind::from_id`
@@ -1340,6 +1349,7 @@ pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
         "car" => app.show_car_workbench = on,
         "sensors" => app.show_sensors_workbench = on,
         "fluids" | "sph" => app.show_fluids_workbench = on,
+        "ocean" | "waves" => app.show_ocean_workbench = on,
         // Mesh Toolbox (a `_toolbox` flag, mapped here for parity).
         "mesh" | "meshtoolbox" => app.show_mesh_toolbox = on,
         // Unknown kind: no-op — a stale/hostile registry string is ignored.
@@ -1394,6 +1404,7 @@ fn clear_all_workbenches(app: &mut ValenxApp) {
     app.show_variant_effect_workbench = false;
     app.show_sensors_workbench = false;
     app.show_fluids_workbench = false;
+    app.show_ocean_workbench = false;
 }
 
 /// Reconcile the visible workbench + central viewport with the active
@@ -2884,6 +2895,7 @@ mod tests {
             ("varianteffect", TabKind::VariantEffect),
             ("sensors", TabKind::Sensors),
             ("fluids", TabKind::Fluids),
+            ("ocean", TabKind::Ocean),
         ];
         // Every TEMPLATES kind is covered by the canonical table above.
         assert_eq!(canonical.len(), TabKind::TEMPLATES.len());
@@ -4295,6 +4307,7 @@ mod tests {
             app.show_variant_effect_workbench,
             app.show_sensors_workbench,
             app.show_fluids_workbench,
+            app.show_ocean_workbench,
         ]
         .into_iter()
         .filter(|&b| b)
@@ -4346,6 +4359,7 @@ mod tests {
             }
             TabKind::Sensors => crate::sensors_workbench::draw_sensors_workbench(app, ctx),
             TabKind::Fluids => crate::fluids_workbench::draw_fluids_workbench(app, ctx),
+            TabKind::Ocean => crate::ocean_workbench::draw_ocean_workbench(app, ctx),
         });
     }
 
@@ -4629,7 +4643,7 @@ mod headless_ui_tests {
 
     #[test]
     fn all_workbench_kinds_is_unique_and_covers_134_plus_mesh() {
-        // The registry list has no duplicate ids, and is the 134
+        // The registry list has no duplicate ids, and is the 136
         // `show_*_workbench` fields plus the one `meshtoolbox` alias.
         let mut seen = std::collections::HashSet::new();
         for k in ALL_WORKBENCH_KINDS {
@@ -4640,8 +4654,8 @@ mod headless_ui_tests {
         }
         assert_eq!(
             ALL_WORKBENCH_KINDS.len(),
-            136,
-            "135 `show_*_workbench` fields + the meshtoolbox alias"
+            137,
+            "136 `show_*_workbench` fields + the meshtoolbox alias"
         );
         assert!(ALL_WORKBENCH_KINDS.contains(&"meshtoolbox"));
         // A couple of representative kinds are present.

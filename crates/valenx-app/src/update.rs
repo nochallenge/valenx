@@ -1549,6 +1549,19 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Ocean workbench (valenx-ocean).
+                    if ui
+                        .checkbox(&mut self.show_ocean_workbench, "Ocean (waves + buoyancy)")
+                        .on_hover_text(
+                            "Show / hide the Ocean Workbench — native sum-of-N Gerstner \
+                             (trochoidal) wave field with deep-water dispersion + quasi-static \
+                             Archimedes buoyancy on a floating body, computed in-process by \
+                             valenx-ocean. Graphics / first-cut engineering — NOT seakeeping CFD.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Plate Bending workbench (valenx-plate).
                     if ui
                         .checkbox(&mut self.show_plate_workbench, "Plate Bending")
@@ -3284,6 +3297,10 @@ impl eframe::App for ValenxApp {
             // Fluids (SPH) Workbench (right) — native particle-based SPH simulation
             // on valenx-fluids. A no-op unless toggled on via View → SPH Fluids.
             crate::fluids_workbench::draw_fluids_workbench(self, ctx);
+
+            // Ocean Workbench (right) — native Gerstner wave field + quasi-static
+            // buoyancy on valenx-ocean. A no-op unless toggled on via View → Ocean.
+            crate::ocean_workbench::draw_ocean_workbench(self, ctx);
             crate::plate_workbench::draw_plate_workbench(self, ctx);
             crate::strainrosette_workbench::draw_strainrosette_workbench(self, ctx);
             crate::transformer_workbench::draw_transformer_workbench(self, ctx);
