@@ -8143,6 +8143,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-autonomy-vnv"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "nalgebra",
+ "thiserror 2.0.18",
+ "valenx-sensors",
+]
+
+[[package]]
 name = "valenx-battery-ecm"
 version = "0.1.0-alpha.1"
 dependencies = [
