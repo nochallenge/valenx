@@ -24,6 +24,12 @@
 //!   a constant bias and zero-mean Gaussian noise.
 //! * **GPS** ([`Gps`]) — converts a local **ENU** offset about a geodetic datum
 //!   to a WGS-84 latitude/longitude/altitude fix, with Gaussian position noise.
+//! * **Radar / RF** ([`Radar`]) — a monostatic, point-target radar: the
+//!   range equation `Pr = Pt·G²·λ²·σ / ((4π)³·R⁴)` gives received power and an
+//!   SNR-vs-threshold detection against a `kTB` noise floor, with closed-form
+//!   [`Rcs`] cross-sections (sphere / plate / corner / cylinder), a main-lobe
+//!   [`AntennaPattern`] (Gaussian or `sinc²`), and the `fd = 2·vr/λ` Doppler
+//!   shift. **Defensive** sensing (detection / ranging / tracking input only).
 //!
 //! ## The autonomy harness
 //!
@@ -68,6 +74,11 @@
 //! * **GPS** is geometry plus a Gaussian error — no satellite geometry / DOP, no
 //!   multipath, no atmospheric delay, no clock or correlated-error model. The
 //!   WGS-84 conversion itself is exact to floating point.
+//! * **Radar** is the analytic radar equation for a single point scatterer in
+//!   free space: no clutter, multipath, atmospheric loss, extended-target glint
+//!   / Swerling fluctuation, ECM, or waveform / CFAR processing — the RCS forms
+//!   are the standard optical-region approximations. It is **defensive** sensing
+//!   (detection / ranging / tracking input), not weapons cueing.
 //! * **The harness** is *kinematic*, not a dynamics simulator: it integrates
 //!   commanded body acceleration/rate directly (no mass, tire, contact, or
 //!   aero forces — use `valenx-vehicle` / `valenx-mbd` for those).
@@ -118,6 +129,7 @@ pub mod gps;
 pub mod harness;
 pub mod imu;
 pub mod lidar;
+pub mod radar;
 pub mod scene;
 
 mod error;
@@ -131,4 +143,8 @@ pub use gps::{Geodetic, Gps, GpsFix};
 pub use harness::{Command, Harness, SensorFrame, VehicleState};
 pub use imu::{AxisNoise, BodyState, Imu, ImuConfig, ImuReading};
 pub use lidar::{Beam, Lidar, LidarConfig, LidarScan};
+pub use radar::{
+    db_to_linear, doppler_shift, linear_to_db, wavelength_from_frequency, AntennaPattern, Radar,
+    RadarConfig, RadarReturn, Rcs,
+};
 pub use scene::{Plane, Ray, Scene, Sphere, Surface, Triangle};
