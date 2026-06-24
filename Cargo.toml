@@ -172,6 +172,7 @@ members = [
     "crates/valenx-vibration",
     "crates/valenx-fluid-statics",
     "crates/valenx-fluids",
+    "crates/valenx-ocean",
     "crates/valenx-acoustics",
     "crates/valenx-controls",
     "crates/valenx-statics",
