@@ -12,7 +12,12 @@
 //!    provenance and software list into one content-hashed [`RunDossier`].
 //!
 //! [`run_funnel`] is the whole pipeline; [`FunnelOutcome`] carries the dossier
-//! plus every intermediate product. [`run_funnel_seqs`] is the sequence-driven
+//! plus every intermediate product. [`Campaign`] (see [`campaign`]) sweeps a set
+//! of [`FunnelConfig`]s through the funnel over a shared candidate set, collects
+//! each run's outcome + provenance (the dossier fingerprint), and summarises
+//! best / worst and success / blocked tallies — a failing config is recorded,
+//! not fatal, and gated stages stay `BLOCKED`, never faked.
+//! [`run_funnel_seqs`] is the sequence-driven
 //! entry point: give it candidate amino-acid sequences and a reference panel and
 //! it *runs the screens itself* — off-target identity ([`valenx_offtarget`]),
 //! T-cell epitope density ([`valenx_immuno`]), developability
@@ -101,6 +106,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod campaign;
 pub mod digeng;
 pub mod error;
 pub mod funnel;
@@ -112,6 +118,11 @@ pub use funnel::{
     OfftargetEvidence,
 };
 pub use seq::{run_funnel_seqs, ScreenConfig, SeqCandidate};
+
+// Multi-run campaign / parameter sweep over the funnel (see [`campaign`]).
+pub use campaign::{
+    Campaign, CampaignMetric, CampaignReport, CampaignRun, CampaignSummary, RunProvenance,
+};
 
 // Digital-engineering / MBSE spine (see [`digeng`]).
 pub use digeng::{

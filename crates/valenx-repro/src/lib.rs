@@ -51,8 +51,10 @@
 
 pub mod bundle;
 pub mod error;
+pub mod provenance;
 pub mod scaffold;
 
 pub use bundle::{Artifact, ArtifactRole, Parameter, ProvenanceStep, ReproBundle, SoftwareRef};
 pub use error::ReproError;
+pub use provenance::{HashedItem, Manifest, ManifestBuilder, ParamEntry};
 pub use scaffold::{abstract_scaffold, methods_scaffold};
