@@ -166,6 +166,7 @@ members = [
     "crates/valenx-projectile",
     "crates/valenx-vibration",
     "crates/valenx-fluid-statics",
+    "crates/valenx-fluids",
     "crates/valenx-acoustics",
     "crates/valenx-controls",
     "crates/valenx-statics",
