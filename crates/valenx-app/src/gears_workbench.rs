@@ -90,32 +90,50 @@ pub fn draw_gears_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Geometry").strong());
+                    // Associate each numeric `DragValue` with its caption via
+                    // `labelled_by`, so the spin button carries the caption as
+                    // its accessibility / UI-Automation Name (egui clears a
+                    // DragValue's own Name, leaving it anonymous to a screen
+                    // reader / AI driver otherwise); the hover text mirrors the
+                    // caption for a mouse user.
                     ui.horizontal(|ui| {
-                        ui.label("module m (mm)");
-                        ui.add(egui::DragValue::new(&mut s.module_mm).speed(0.05));
+                        let m = ui.label("module m (mm)");
+                        ui.add(egui::DragValue::new(&mut s.module_mm).speed(0.05))
+                            .labelled_by(m.id)
+                            .on_hover_text("Module m (mm) — pitch diameter = m·z");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("teeth z");
-                        ui.add(egui::DragValue::new(&mut s.teeth).speed(1.0));
+                        let z = ui.label("teeth z");
+                        ui.add(egui::DragValue::new(&mut s.teeth).speed(1.0))
+                            .labelled_by(z.id)
+                            .on_hover_text("Tooth count z");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("pressure angle (°)");
-                        ui.add(egui::DragValue::new(&mut s.pressure_angle_deg).speed(0.5));
+                        let pa = ui.label("pressure angle (°)");
+                        ui.add(egui::DragValue::new(&mut s.pressure_angle_deg).speed(0.5))
+                            .labelled_by(pa.id)
+                            .on_hover_text("Pressure angle α (degrees)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("helix angle (°)");
-                        ui.add(egui::DragValue::new(&mut s.helix_angle_deg).speed(0.5));
+                        let ha = ui.label("helix angle (°)");
+                        ui.add(egui::DragValue::new(&mut s.helix_angle_deg).speed(0.5))
+                            .labelled_by(ha.id)
+                            .on_hover_text("Helix angle β (degrees; 0 for spur)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("face width (mm)");
-                        ui.add(egui::DragValue::new(&mut s.face_width_mm).speed(0.5));
+                        let fw = ui.label("face width (mm)");
+                        ui.add(egui::DragValue::new(&mut s.face_width_mm).speed(0.5))
+                            .labelled_by(fw.id)
+                            .on_hover_text("Face width (mm)");
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Mesh").strong());
                     ui.horizontal(|ui| {
-                        ui.label("mating teeth");
-                        ui.add(egui::DragValue::new(&mut s.mate_teeth).speed(1.0));
+                        let mt = ui.label("mating teeth");
+                        ui.add(egui::DragValue::new(&mut s.mate_teeth).speed(1.0))
+                            .labelled_by(mt.id)
+                            .on_hover_text("Mating gear tooth count (for the ratio)");
                     });
 
                     // Live hint: the pitch (reference) diameter d = m·z.
@@ -744,6 +762,7 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     /// Render the whole workbench panel once in a headless egui context.
     fn draw_workbench(app: &mut ValenxApp) {
@@ -751,6 +770,21 @@ mod headless_ui_tests {
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_gears_workbench(app, ctx);
         });
+    }
+
+    /// As [`draw_workbench`], but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_gears_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -774,5 +808,50 @@ mod headless_ui_tests {
         run_gears(&mut app.gears);
         app.gears.error = Some("invalid gear parameters".to_string());
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // The geometry + mesh DragValues are SpinButtons; each must be
+        // `labelled_by` its caption (egui clears a DragValue's own Name), so an
+        // AI / screen reader can find the control by the caption text.
+        let mut app = ValenxApp::default();
+        app.show_gears_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // module, teeth, pressure angle, helix angle, face width, mating teeth.
+        assert!(
+            spin_buttons.len() >= 6,
+            "expected the gear numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every gear DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["module m (mm)", "teeth z", "mating teeth"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        // The Analyze button and the family radio buttons stay named/invokable.
+        assert!(
+            nodes.iter().any(|(_, n)| n.role() == Role::Button
+                && n.name().is_some_and(|s| s.contains("Analyze"))),
+            "the Analyze button is a named, invokable node"
+        );
+        assert!(
+            nodes
+                .iter()
+                .any(|(_, n)| n.role() == Role::RadioButton && n.name() == Some("Spur")),
+            "the Spur family radio is a named, selectable node"
+        );
     }
 }

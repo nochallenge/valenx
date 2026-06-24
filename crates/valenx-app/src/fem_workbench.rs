@@ -178,43 +178,69 @@ pub(crate) fn fem_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Geometry — structured box mesh (m)").strong());
+                    // Each numeric `DragValue` is associated with its caption via
+                    // `labelled_by`, so the control carries the caption text as its
+                    // accessibility / UI-Automation Name (egui clears a DragValue's
+                    // own name — see egui 0.28 `DragValue` — so without this the
+                    // spin button is anonymous to a screen reader / AI driver). The
+                    // hover text gives the same caption to a mouse user.
                     ui.horizontal(|ui| {
-                        ui.label("Lx");
-                        ui.add(egui::DragValue::new(&mut s.lx).speed(0.05));
-                        ui.label("Ly");
-                        ui.add(egui::DragValue::new(&mut s.ly).speed(0.01));
-                        ui.label("Lz");
-                        ui.add(egui::DragValue::new(&mut s.lz).speed(0.01));
+                        let lx = ui.label("Lx");
+                        ui.add(egui::DragValue::new(&mut s.lx).speed(0.05))
+                            .labelled_by(lx.id)
+                            .on_hover_text("Box length Lx (m)");
+                        let ly = ui.label("Ly");
+                        ui.add(egui::DragValue::new(&mut s.ly).speed(0.01))
+                            .labelled_by(ly.id)
+                            .on_hover_text("Box length Ly (m)");
+                        let lz = ui.label("Lz");
+                        ui.add(egui::DragValue::new(&mut s.lz).speed(0.01))
+                            .labelled_by(lz.id)
+                            .on_hover_text("Box length Lz (m)");
                     });
                     ui.horizontal(|ui| {
                         // Clamp the mesh resolution: node count grows as
                         // (nx+1)(ny+1)(nz+1) and the solve as its cube, so an
                         // unbounded drag could hang the app for minutes / OOM.
-                        ui.label("nx");
-                        ui.add(egui::DragValue::new(&mut s.nx).speed(0.2).range(1..=40));
-                        ui.label("ny");
-                        ui.add(egui::DragValue::new(&mut s.ny).speed(0.2).range(1..=20));
-                        ui.label("nz");
-                        ui.add(egui::DragValue::new(&mut s.nz).speed(0.2).range(1..=20));
+                        let nx = ui.label("nx");
+                        ui.add(egui::DragValue::new(&mut s.nx).speed(0.2).range(1..=40))
+                            .labelled_by(nx.id)
+                            .on_hover_text("Subdivisions along x");
+                        let ny = ui.label("ny");
+                        ui.add(egui::DragValue::new(&mut s.ny).speed(0.2).range(1..=20))
+                            .labelled_by(ny.id)
+                            .on_hover_text("Subdivisions along y");
+                        let nz = ui.label("nz");
+                        ui.add(egui::DragValue::new(&mut s.nz).speed(0.2).range(1..=20))
+                            .labelled_by(nz.id)
+                            .on_hover_text("Subdivisions along z");
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Material").strong());
                     ui.horizontal(|ui| {
-                        ui.label("E (GPa)");
-                        ui.add(egui::DragValue::new(&mut s.youngs_gpa).speed(1.0));
+                        let e = ui.label("E (GPa)");
+                        ui.add(egui::DragValue::new(&mut s.youngs_gpa).speed(1.0))
+                            .labelled_by(e.id)
+                            .on_hover_text("Young's modulus E (GPa)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Poisson ν");
-                        ui.add(egui::DragValue::new(&mut s.poisson).speed(0.005));
+                        let nu = ui.label("Poisson ν");
+                        ui.add(egui::DragValue::new(&mut s.poisson).speed(0.005))
+                            .labelled_by(nu.id)
+                            .on_hover_text("Poisson's ratio ν");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Density (kg/m³)");
-                        ui.add(egui::DragValue::new(&mut s.density).speed(10.0));
+                        let rho = ui.label("Density (kg/m³)");
+                        ui.add(egui::DragValue::new(&mut s.density).speed(10.0))
+                            .labelled_by(rho.id)
+                            .on_hover_text("Mass density ρ (kg/m³)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Yield σy (MPa)");
-                        ui.add(egui::DragValue::new(&mut s.yield_mpa).speed(5.0));
+                        let sy = ui.label("Yield σy (MPa)");
+                        ui.add(egui::DragValue::new(&mut s.yield_mpa).speed(5.0))
+                            .labelled_by(sy.id)
+                            .on_hover_text("Yield stress σy (MPa)");
                     });
 
                     ui.add_space(4.0);
@@ -228,14 +254,18 @@ pub(crate) fn fem_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     match s.solver {
                         FemSolver::LinearStatic => {
                             ui.horizontal(|ui| {
-                                ui.label("Tip load Fy (N, downward)");
-                                ui.add(egui::DragValue::new(&mut s.force_n).speed(50.0));
+                                let f = ui.label("Tip load Fy (N, downward)");
+                                ui.add(egui::DragValue::new(&mut s.force_n).speed(50.0))
+                                    .labelled_by(f.id)
+                                    .on_hover_text("Downward tip load Fy (N)");
                             });
                         }
                         FemSolver::Modal => {
                             ui.horizontal(|ui| {
-                                ui.label("# modes");
-                                ui.add(egui::DragValue::new(&mut s.n_modes).speed(0.2));
+                                let m = ui.label("# modes");
+                                ui.add(egui::DragValue::new(&mut s.n_modes).speed(0.2))
+                                    .labelled_by(m.id)
+                                    .on_hover_text("Number of natural modes to extract");
                             });
                         }
                     }
@@ -1489,5 +1519,98 @@ mod tests {
         assert!(s.result.contains("max principal"), "result: {}", s.result);
         // The Tresca maximum shear stress is reported alongside it.
         assert!(s.result.contains("max shear"), "result: {}", s.result);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
+mod headless_ui_tests {
+    use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
+
+    /// Draw the whole panel once in a headless egui context **with accesskit
+    /// enabled**, and return the emitted accessibility tree nodes. This is the
+    /// same tree a screen reader or an AI UI-Automation driver consumes, so
+    /// asserting on it verifies the panel is drivable by name. `accesskit` is
+    /// re-exported by egui (`egui::accesskit`), so no extra dependency is
+    /// needed.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_fem_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
+    }
+
+    /// True if some node in the tree carries `name` as its accessibility Name
+    /// (egui derives a label's / button's Name from its text).
+    fn has_named_node(nodes: &[(NodeId, Node)], name: &str) -> bool {
+        nodes.iter().any(|(_, n)| n.name() == Some(name))
+    }
+
+    #[test]
+    fn workbench_is_a_noop_when_hidden() {
+        let mut app = ValenxApp::default();
+        assert!(!app.show_fem_workbench);
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_fem_workbench(&mut app, ctx);
+        });
+    }
+
+    #[test]
+    fn workbench_draws_when_shown_without_panic() {
+        let mut app = ValenxApp::default();
+        app.show_fem_workbench = true;
+        // Drawing a populated result + error must also not panic.
+        run_fem(&mut app.fem);
+        app.fem.error = Some("invalid FEM input".to_string());
+        let _ = draw_and_collect_nodes(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // Every DragValue (accesskit Role::SpinButton) must be associated with a
+        // caption via `labelled_by`, because egui clears a DragValue's own Name —
+        // without the association the control is anonymous to an AI / screen
+        // reader. We also confirm the caption text itself is present in the tree.
+        let mut app = ValenxApp::default();
+        app.show_fem_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // The geometry/material/analysis form draws at least the box dims,
+        // material and the active-solver field as numeric spin buttons.
+        assert!(
+            spin_buttons.len() >= 8,
+            "expected the FEM numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every FEM DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        // The captions a driver searches for are present as named nodes.
+        for caption in ["Lx", "nx", "E (GPa)", "Poisson ν", "Density (kg/m³)"] {
+            assert!(
+                has_named_node(&nodes, caption),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        // The run button keeps its plain-text Name (its label is the Name).
+        assert!(
+            nodes.iter().any(|(_, n)| n.role() == Role::Button
+                && n.name().is_some_and(|s| s.contains("Run analysis"))),
+            "the Run analysis button is a named, invokable node"
+        );
     }
 }
