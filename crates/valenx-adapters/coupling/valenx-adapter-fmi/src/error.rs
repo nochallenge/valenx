@@ -98,6 +98,21 @@ pub enum FmiError {
     /// `binary-fmu` feature enabled).
     #[error("binary FMU load error: {0}")]
     BinaryFmu(String),
+
+    /// A fault in the HELICS-style co-simulation **federation** / distributed
+    /// time-coordination layer (see [`crate::federation`]): an unknown or
+    /// duplicate federate / publication / subscription / endpoint name, a
+    /// negative period or lookahead, a non-monotone time request, a message
+    /// sent into the past, and so on. The machine-readable
+    /// [`crate::federation::FederationError`] `code` is the supported way to
+    /// match a specific failure; `message` is the human-readable detail.
+    #[error("federation error [{code:?}]: {message}")]
+    Federation {
+        /// Stable, machine-readable classification of the fault.
+        code: crate::federation::FederationError,
+        /// Human-readable detail of exactly what went wrong.
+        message: String,
+    },
 }
 
 /// Convenience result alias for this crate.

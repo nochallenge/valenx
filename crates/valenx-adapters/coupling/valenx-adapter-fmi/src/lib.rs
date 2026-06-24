@@ -9,11 +9,19 @@
 //! one macro-step at a time under a [`cosim::Scheme`] (Jacobi or
 //! Gauss-Seidel). Nothing here requires an external binary to run.
 //!
-//! Three connective pieces sit on top of that core:
+//! Four connective pieces sit on top of that core:
 //!
 //! * [`cosim`] — the native co-simulation master (the house-style path; an
 //!   HLA / AFSIM federate, or the binary FMU below, can implement
 //!   `Subsystem` too).
+//! * [`federation`] — a **HELICS-style co-simulation federation** with
+//!   distributed (dependency-aware) **time coordination**: a
+//!   [`federation::Broker`] grants each [`federation::Federate`] the largest
+//!   time consistent with every federate's lookahead, generalizing the
+//!   fixed-step master into coordinated multi-rate advancement, with named
+//!   pub/sub value exchange and timed message endpoints. Pure-Rust, in-process,
+//!   reimplemented from the published HELICS algorithm (BSD-3 — credited in the
+//!   module). A co-sim FMU rides it via [`federation::SubsystemFederate`].
 //! * [`fmi`] — **FMI 2.0 / 3.0 co-simulation import**: a hand-rolled,
 //!   dependency-free parser for an FMU's `modelDescription.xml` that pulls
 //!   out the model name and the scalar interface variables (name, value
@@ -55,6 +63,7 @@
 pub mod cosim;
 pub mod dis;
 pub mod error;
+pub mod federation;
 pub mod fmi;
 
 #[cfg(feature = "binary-fmu")]
@@ -63,6 +72,10 @@ pub mod binary;
 pub use cosim::{CoSimMaster, Coupling, CouplingGraph, Scheme, Subsystem};
 pub use dis::EntityStatePdu;
 pub use error::{FmiError, Result};
+pub use federation::{
+    Broker, Federate, FederateBehavior, FederateId, FederationError, GrantContext, GrantRecord,
+    Message, SubsystemFederate, Time, TimePolicy, Value,
+};
 pub use fmi::{Causality, ModelDescription, ScalarVariable};
 
 #[cfg(test)]
