@@ -192,8 +192,51 @@ multiple-view-geometry / optimization literature.
   and requires the kind of initialization that Stages 3–4 provide. See the
   `bundle` module documentation for details.
 
+### Incremental mapper — pipeline orchestration (capstone)
+
+The `mapper` module is the capstone that ties Stages 1–5 into one pipeline: it
+builds multi-view tracks from the pairwise matches, seeds a reconstruction from
+the best initial image pair, then incrementally registers new views and
+triangulates new structure, re-running bundle adjustment periodically and once
+globally. This is the **incremental Structure-from-Motion** design popularized
+by COLMAP (already credited above as the overall method reference).
+
+- **Incremental Structure-from-Motion** (best-initial-pair seeding, greedy
+  next-best-view registration by 2D–3D correspondence count, interleaved
+  triangulation, and local-then-global bundle adjustment):
+  J. L. Schönberger and J.-M. Frahm, "Structure-from-Motion Revisited," CVPR
+  2016 (the COLMAP pipeline). The incremental approach traces back to
+  N. Snavely, S. M. Seitz, R. Szeliski, "Photo Tourism: Exploring Photo
+  Collections in 3D," ACM SIGGRAPH 2006, and the general SfM treatment in
+  R. Hartley and A. Zisserman, *Multiple View Geometry in Computer Vision*, 2nd
+  ed., 2004.
+
+- **Multi-view track construction by union-find (disjoint-set)** — chaining the
+  pairwise two-view correspondences into connected components, one per scene
+  point, and rejecting components that observe an image more than once:
+  the disjoint-set / union-find data structure with path compression and
+  union-by-rank is the classic algorithm of B. A. Galler and M. J. Fischer,
+  "An improved equivalence algorithm," Communications of the ACM 7(5), 1964,
+  with the near-linear analysis of R. E. Tarjan, "Efficiency of a Good But Not
+  Linear Set Union Algorithm," Journal of the ACM 22(2), 1975. Its use to merge
+  feature matches into multi-view feature tracks is standard SfM practice (e.g.
+  the *Photo Tourism* / Bundler and COLMAP pipelines).
+
+  Implementation note: the mapper's next-view selection is **greedy** (the view
+  with the most 2D–3D correspondences, no backtracking) and does **not**
+  implement COLMAP's fuller next-view scoring (which also weighs the spatial
+  distribution of the correspondences), re-triangulation, track completion, or
+  redundant-view removal. The intermediate bundle adjustment is
+  global-over-the-current-model rather than a windowed local BA (this crate's
+  `bundle_adjust` is a dense solver — see the Stage 5 note). The whole
+  reconstruction is expressed in the first registered camera's frame and is
+  determined only **up to a global similarity** (the rigid gauge is pinned by
+  that camera; the absolute scale of a two-view-seeded reconstruction is free).
+  Track building uses the conservative "drop any one-image-twice component"
+  heuristic. See the `mapper` module documentation for details.
+
 These publications describe the methods; the Rust code in this crate is an
 independent implementation. The matching, verification, two-view-geometry,
-camera-resectioning (PnP), and bundle-adjustment code is written from the
-mathematics in the references above — **no COLMAP or OpenCV source is used or
-copied.**
+camera-resectioning (PnP), bundle-adjustment, and incremental-mapper code is
+written from the mathematics in the references above — **no COLMAP or OpenCV
+source is used or copied.**
