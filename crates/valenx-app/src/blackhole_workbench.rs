@@ -323,33 +323,44 @@ fn blackhole_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 }
             });
 
+        // Associate each numeric `DragValue` with its grid caption via
+        // `labelled_by`, so the spin button carries the caption as its
+        // accessibility / UI-Automation Name (egui clears a DragValue's own
+        // Name, leaving it anonymous to a screen reader / AI driver otherwise);
+        // the hover text mirrors the caption for a mouse user.
         egui::Grid::new("blackhole_params")
             .num_columns(2)
             .show(ui, |ui| {
-                ui.label("mass M");
+                let m = ui.label("mass M");
                 ui.add(
                     egui::DragValue::new(&mut s.mass)
                         .speed(0.05)
                         .range(0.01..=1.0e3),
-                );
+                )
+                .labelled_by(m.id)
+                .on_hover_text("Mass M (geometrized units)");
                 ui.end_row();
 
-                ui.label("spin a");
+                let a = ui.label("spin a");
                 ui.add_enabled(
                     s.kind.has_spin(),
                     egui::DragValue::new(&mut s.spin)
                         .speed(0.01)
                         .range(0.0..=1.0e3),
-                );
+                )
+                .labelled_by(a.id)
+                .on_hover_text("Spin parameter a = J/M");
                 ui.end_row();
 
-                ui.label("charge Q");
+                let q = ui.label("charge Q");
                 ui.add_enabled(
                     s.kind.has_charge(),
                     egui::DragValue::new(&mut s.charge)
                         .speed(0.01)
                         .range(0.0..=1.0e3),
-                );
+                )
+                .labelled_by(q.id)
+                .on_hover_text("Electric charge Q");
                 ui.end_row();
             });
 
@@ -390,26 +401,32 @@ fn blackhole_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
         egui::Grid::new("blackhole_observer")
             .num_columns(2)
             .show(ui, |ui| {
-                ui.label("observer r (M)");
+                let r = ui.label("observer r (M)");
                 ui.add(
                     egui::DragValue::new(&mut s.r_obs)
                         .speed(1.0)
                         .range(10.0..=1.0e4),
-                );
+                )
+                .labelled_by(r.id)
+                .on_hover_text("Observer radius r (units of M)");
                 ui.end_row();
-                ui.label("observer θ (°)");
+                let theta = ui.label("observer θ (°)");
                 ui.add(
                     egui::DragValue::new(&mut s.theta_obs_deg)
                         .speed(1.0)
                         .range(1.0..=179.0),
-                );
+                )
+                .labelled_by(theta.id)
+                .on_hover_text("Observer polar angle θ (degrees)");
                 ui.end_row();
-                ui.label("image size (px)");
+                let px = ui.label("image size (px)");
                 ui.add(
                     egui::DragValue::new(&mut s.img_size)
                         .speed(4.0)
                         .range(16..=256),
-                );
+                )
+                .labelled_by(px.id)
+                .on_hover_text("Shadow image resolution (pixels, square)");
                 ui.end_row();
             });
 
@@ -498,5 +515,95 @@ mod tests {
         assert_eq!(rgb.len(), 2 * 1 * 3);
         assert_eq!(&rgb[0..3], &[0, 0, 0], "shadow pixel is black");
         assert!(rgb[3..6].iter().any(|&c| c > 0), "sky pixel is not black");
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
+mod headless_ui_tests {
+    use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
+
+    /// Draw the panel once in a headless egui context **with accesskit enabled**
+    /// and return the emitted accessibility tree nodes — the same tree a screen
+    /// reader / AI UI-Automation driver consumes. `accesskit` is re-exported by
+    /// egui, so this needs no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_blackhole_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
+    }
+
+    fn has_named_node(nodes: &[(NodeId, Node)], name: &str) -> bool {
+        nodes.iter().any(|(_, n)| n.name() == Some(name))
+    }
+
+    #[test]
+    fn workbench_is_a_noop_when_hidden() {
+        let mut app = ValenxApp::default();
+        assert!(!app.show_blackhole_workbench);
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_blackhole_workbench(&mut app, ctx);
+        });
+    }
+
+    #[test]
+    fn workbench_draws_when_shown_without_panic() {
+        let mut app = ValenxApp::default();
+        app.show_blackhole_workbench = true;
+        // A populated readout must also draw without panic.
+        app.blackhole.readout = compute_observables(&app.blackhole).unwrap();
+        let _ = draw_and_collect_nodes(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // The (M, a, Q) and observer DragValues are SpinButtons; each must be
+        // `labelled_by` its grid caption (egui clears a DragValue's own Name) —
+        // including the spin/charge fields, which are present in the tree even
+        // when disabled for the Schwarzschild default.
+        let mut app = ValenxApp::default();
+        app.show_blackhole_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // mass, spin, charge, observer r, observer θ, image size = 6.
+        assert!(
+            spin_buttons.len() >= 6,
+            "expected the black-hole numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every black-hole DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["mass M", "spin a", "charge Q", "observer r (M)"] {
+            assert!(
+                has_named_node(&nodes, caption),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        // The spacetime ComboBox and the action buttons stay named + invokable.
+        assert!(
+            nodes.iter().any(|(_, n)| n.role() == Role::ComboBox),
+            "the spacetime picker is a ComboBox node"
+        );
+        assert!(
+            nodes.iter().any(|(_, n)| n.role() == Role::Button
+                && n.name().is_some_and(|s| s.contains("Compute observables"))),
+            "the Compute observables button is a named, invokable node"
+        );
     }
 }

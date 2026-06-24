@@ -209,31 +209,42 @@ fn rotor_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
     {
         let s = &mut app.rotor;
 
+        // Associate each numeric `DragValue` with its caption (the grid's label
+        // cell) via `labelled_by`, so the spin button carries that caption as
+        // its accessibility / UI-Automation Name. egui clears a DragValue's own
+        // Name, so without the association the control is anonymous to a screen
+        // reader / AI driver; the hover text gives a mouse user the same caption.
         egui::Grid::new("rotor_geometry")
             .num_columns(2)
             .show(ui, |ui| {
-                ui.label("blade count n");
+                let n = ui.label("blade count n");
                 ui.add(
                     egui::DragValue::new(&mut s.blade_count)
                         .speed(1)
                         .range(1..=12),
-                );
+                )
+                .labelled_by(n.id)
+                .on_hover_text("Number of blades n");
                 ui.end_row();
 
-                ui.label("tip radius R (m)");
+                let r = ui.label("tip radius R (m)");
                 ui.add(
                     egui::DragValue::new(&mut s.tip_radius_m)
                         .speed(0.01)
                         .range(0.001..=50.0),
-                );
+                )
+                .labelled_by(r.id)
+                .on_hover_text("Tip radius R (m)");
                 ui.end_row();
 
-                ui.label("hub radius (m)");
+                let hub = ui.label("hub radius (m)");
                 ui.add(
                     egui::DragValue::new(&mut s.hub_radius_m)
                         .speed(0.005)
                         .range(0.0..=50.0),
-                );
+                )
+                .labelled_by(hub.id)
+                .on_hover_text("Hub (root) radius (m)");
                 ui.end_row();
             });
 
@@ -249,28 +260,40 @@ fn rotor_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
             .num_columns(4)
             .striped(true)
             .show(ui, |ui| {
-                ui.label(egui::RichText::new("radius (m)").strong());
-                ui.label(egui::RichText::new("chord (m)").strong());
-                ui.label(egui::RichText::new("twist (°)").strong());
+                // The column-header labels double as the per-cell accessibility
+                // captions: every station-row `DragValue` is `labelled_by` its
+                // column header (so a screen reader / AI reads "radius (m)" etc.
+                // for an otherwise-anonymous spin button), and also carries an
+                // explicit hover Name including the row index.
+                let h_radius = ui.label(egui::RichText::new("radius (m)").strong());
+                let h_chord = ui.label(egui::RichText::new("chord (m)").strong());
+                let h_twist = ui.label(egui::RichText::new("twist (°)").strong());
                 ui.label("");
                 ui.end_row();
 
                 for (i, st) in s.stations.iter_mut().enumerate() {
+                    let n = i + 1;
                     ui.add(
                         egui::DragValue::new(&mut st.radius_m)
                             .speed(0.005)
                             .range(0.0..=50.0),
-                    );
+                    )
+                    .labelled_by(h_radius.id)
+                    .on_hover_text(format!("Station {n} radius (m)"));
                     ui.add(
                         egui::DragValue::new(&mut st.chord_m)
                             .speed(0.002)
                             .range(0.0001..=10.0),
-                    );
+                    )
+                    .labelled_by(h_chord.id)
+                    .on_hover_text(format!("Station {n} chord (m)"));
                     ui.add(
                         egui::DragValue::new(&mut st.twist_deg)
                             .speed(0.5)
                             .range(-90.0..=90.0),
-                    );
+                    )
+                    .labelled_by(h_twist.id)
+                    .on_hover_text(format!("Station {n} twist (°)"));
                     // Always offer remove; the ≥ 2-rows invariant (BEMT
                     // integration needs at least two stations) is re-checked
                     // authoritatively when the click is applied below, because
@@ -301,29 +324,34 @@ fn rotor_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
         egui::Grid::new("rotor_operating_point")
             .num_columns(2)
             .show(ui, |ui| {
-                ui.label("rotor speed (rpm)");
+                let rpm = ui.label("rotor speed (rpm)");
                 ui.add(
                     egui::DragValue::new(&mut s.rpm)
                         .speed(50.0)
                         .range(0.1..=1.0e6),
-                );
+                )
+                .labelled_by(rpm.id)
+                .on_hover_text("Rotor speed (rev/min)");
                 ui.end_row();
 
-                ui.label("freestream V (m/s)");
+                let v = ui.label("freestream V (m/s)");
                 ui.add(
                     egui::DragValue::new(&mut s.freestream_v)
                         .speed(0.5)
                         .range(0.0..=400.0),
                 )
+                .labelled_by(v.id)
                 .on_hover_text("Axial inflow speed. 0 = hover (reports figure of merit).");
                 ui.end_row();
 
-                ui.label("air density ρ (kg/m³)");
+                let rho = ui.label("air density ρ (kg/m³)");
                 ui.add(
                     egui::DragValue::new(&mut s.air_density)
                         .speed(0.01)
                         .range(0.001..=10.0),
-                );
+                )
+                .labelled_by(rho.id)
+                .on_hover_text("Air density ρ (kg/m³)");
                 ui.end_row();
             });
 
@@ -517,5 +545,89 @@ mod tests {
         s.freestream_v = 0.0;
         let hover = s.solve().unwrap();
         assert!(success_summary(&hover).contains("FM"));
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
+mod headless_ui_tests {
+    use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
+
+    /// Draw the panel once in a headless egui context **with accesskit enabled**
+    /// and return the emitted accessibility tree nodes — the same tree a screen
+    /// reader / AI UI-Automation driver consumes. `accesskit` is re-exported by
+    /// egui, so this needs no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_rotor_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
+    }
+
+    fn has_named_node(nodes: &[(NodeId, Node)], name: &str) -> bool {
+        nodes.iter().any(|(_, n)| n.name() == Some(name))
+    }
+
+    #[test]
+    fn workbench_is_a_noop_when_hidden() {
+        let mut app = ValenxApp::default();
+        assert!(!app.show_rotor_workbench);
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_rotor_workbench(&mut app, ctx);
+        });
+    }
+
+    #[test]
+    fn workbench_draws_when_shown_without_panic() {
+        let mut app = ValenxApp::default();
+        app.show_rotor_workbench = true;
+        let _ = draw_and_collect_nodes(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // The geometry, station-table and operating-point DragValues are all
+        // SpinButtons; each must be `labelled_by` a caption (egui clears a
+        // DragValue's own Name), including the per-row station cells which are
+        // associated with their column-header labels.
+        let mut app = ValenxApp::default();
+        app.show_rotor_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // 3 geometry + 3 operating-point + 3×(default 5 stations) = 21.
+        assert!(
+            spin_buttons.len() >= 12,
+            "expected the rotor numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every rotor DragValue must be labelled_by a caption (AI-drivable name)"
+        );
+
+        for caption in ["blade count n", "tip radius R (m)", "rotor speed (rpm)"] {
+            assert!(
+                has_named_node(&nodes, caption),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        // The Compute button keeps its plain-text, invokable Name.
+        assert!(
+            nodes.iter().any(|(_, n)| n.role() == Role::Button
+                && n.name().is_some_and(|s| s.contains("Compute"))),
+            "the Compute button is a named, invokable node"
+        );
     }
 }

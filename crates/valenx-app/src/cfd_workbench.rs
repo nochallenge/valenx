@@ -200,36 +200,56 @@ pub(crate) fn cfd_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Grid — staggered finite volume").strong());
+                    // Associate each numeric `DragValue` with its caption via
+                    // `labelled_by` so the spin button carries the caption as its
+                    // accessibility / UI-Automation Name (egui clears a
+                    // DragValue's own Name, so without this it is anonymous to a
+                    // screen reader / AI driver). The hover text mirrors the
+                    // caption for a mouse user.
                     ui.horizontal(|ui| {
-                        ui.label("nx");
-                        ui.add(egui::DragValue::new(&mut s.nx).speed(0.5));
-                        ui.label("ny");
-                        ui.add(egui::DragValue::new(&mut s.ny).speed(0.5));
+                        let nx = ui.label("nx");
+                        ui.add(egui::DragValue::new(&mut s.nx).speed(0.5))
+                            .labelled_by(nx.id)
+                            .on_hover_text("Grid cells along x");
+                        let ny = ui.label("ny");
+                        ui.add(egui::DragValue::new(&mut s.ny).speed(0.5))
+                            .labelled_by(ny.id)
+                            .on_hover_text("Grid cells along y");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Lx");
-                        ui.add(egui::DragValue::new(&mut s.lx).speed(0.05));
-                        ui.label("Ly");
-                        ui.add(egui::DragValue::new(&mut s.ly).speed(0.05));
+                        let lx = ui.label("Lx");
+                        ui.add(egui::DragValue::new(&mut s.lx).speed(0.05))
+                            .labelled_by(lx.id)
+                            .on_hover_text("Domain length Lx (m)");
+                        let ly = ui.label("Ly");
+                        ui.add(egui::DragValue::new(&mut s.ly).speed(0.05))
+                            .labelled_by(ly.id)
+                            .on_hover_text("Domain height Ly (m)");
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Fluid").strong());
                     ui.horizontal(|ui| {
-                        ui.label("density ρ (kg/m³)");
-                        ui.add(egui::DragValue::new(&mut s.density).speed(0.1));
+                        let rho = ui.label("density ρ (kg/m³)");
+                        ui.add(egui::DragValue::new(&mut s.density).speed(0.1))
+                            .labelled_by(rho.id)
+                            .on_hover_text("Fluid density ρ (kg/m³)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("kinematic ν (m²/s)");
-                        ui.add(egui::DragValue::new(&mut s.viscosity).speed(0.001));
+                        let nu = ui.label("kinematic ν (m²/s)");
+                        ui.add(egui::DragValue::new(&mut s.viscosity).speed(0.001))
+                            .labelled_by(nu.id)
+                            .on_hover_text("Kinematic viscosity ν (m²/s)");
                     });
                     let drive = match s.case {
                         CfdCase::LidDrivenCavity => "lid speed U (m/s)",
                         CfdCase::ChannelFlow => "inlet speed U (m/s)",
                     };
                     ui.horizontal(|ui| {
-                        ui.label(drive);
-                        ui.add(egui::DragValue::new(&mut s.speed).speed(0.05));
+                        let u = ui.label(drive);
+                        ui.add(egui::DragValue::new(&mut s.speed).speed(0.05))
+                            .labelled_by(u.id)
+                            .on_hover_text("Drive speed U (m/s)");
                     });
                     if s.viscosity > 0.0 {
                         let re = s.speed.abs() * characteristic_length(s) / s.viscosity;
@@ -261,8 +281,10 @@ pub(crate) fn cfd_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
 
                     ui.add_space(4.0);
                     ui.horizontal(|ui| {
-                        ui.label("max SIMPLE iterations");
-                        ui.add(egui::DragValue::new(&mut s.max_iterations).speed(5.0));
+                        let it = ui.label("max SIMPLE iterations");
+                        ui.add(egui::DragValue::new(&mut s.max_iterations).speed(5.0))
+                            .labelled_by(it.id)
+                            .on_hover_text("Outer SIMPLE iteration cap");
                     });
                     ui.label(
                         egui::RichText::new("Runs on a background thread — the UI stays responsive; a finer grid or more iterations takes longer.")
@@ -936,5 +958,87 @@ mod tests {
         );
         // Sign-independent in the drive direction (uses |U|).
         assert!((cell_reynolds(-10.0, 0.1, 0.01) - cell_reynolds(10.0, 0.1, 0.01)).abs() < 1e-9);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
+mod headless_ui_tests {
+    use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
+
+    /// Draw the panel once in a headless egui context **with accesskit enabled**
+    /// and return the emitted accessibility tree nodes — the same tree a screen
+    /// reader / AI UI-Automation driver consumes. `accesskit` is re-exported by
+    /// egui, so this needs no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_cfd_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
+    }
+
+    fn has_named_node(nodes: &[(NodeId, Node)], name: &str) -> bool {
+        nodes.iter().any(|(_, n)| n.name() == Some(name))
+    }
+
+    #[test]
+    fn workbench_is_a_noop_when_hidden() {
+        let mut app = ValenxApp::default();
+        assert!(!app.show_cfd_workbench);
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_cfd_workbench(&mut app, ctx);
+        });
+    }
+
+    #[test]
+    fn workbench_draws_when_shown_without_panic() {
+        let mut app = ValenxApp::default();
+        app.show_cfd_workbench = true;
+        let _ = draw_and_collect_nodes(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // Every DragValue (Role::SpinButton) must be associated with a caption
+        // via `labelled_by` so it is findable by name; egui clears a DragValue's
+        // own Name. The case radio buttons + Solve button carry their text Name.
+        let mut app = ValenxApp::default();
+        app.show_cfd_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // nx, ny, Lx, Ly, density, viscosity, drive speed, max-iterations.
+        assert!(
+            spin_buttons.len() >= 8,
+            "expected the CFD numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every CFD DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["nx", "Lx", "density ρ (kg/m³)", "max SIMPLE iterations"] {
+            assert!(
+                has_named_node(&nodes, caption),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        // The case radio buttons are named, selectable nodes.
+        assert!(
+            has_named_node(&nodes, "Lid-driven cavity"),
+            "the case radio buttons keep their text Name"
+        );
     }
 }
