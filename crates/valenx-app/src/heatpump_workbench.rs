@@ -83,20 +83,28 @@ pub fn draw_heatpump_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Reservoir temperatures").strong());
+                    // Associate each numeric `DragValue` with its caption via
+                    // `labelled_by`, so the spin button carries the caption as
+                    // its accessibility / UI-Automation Name (egui clears a
+                    // DragValue's own Name, leaving it anonymous to a screen
+                    // reader / AI driver otherwise).
                     ui.horizontal(|ui| {
-                        ui.label("cold T_c (°C)");
-                        ui.add(egui::DragValue::new(&mut s.t_cold_c).speed(0.5));
+                        let cap = ui.label("cold T_c (°C)");
+                        ui.add(egui::DragValue::new(&mut s.t_cold_c).speed(0.5))
+                            .labelled_by(cap.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("hot  T_h (°C)");
-                        ui.add(egui::DragValue::new(&mut s.t_hot_c).speed(0.5));
+                        let cap = ui.label("hot  T_h (°C)");
+                        ui.add(egui::DragValue::new(&mut s.t_hot_c).speed(0.5))
+                            .labelled_by(cap.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Real-machine efficiency").strong());
                     ui.horizontal(|ui| {
-                        ui.label("Carnot fraction");
-                        ui.add(egui::DragValue::new(&mut s.carnot_fraction).speed(0.01));
+                        let cap = ui.label("Carnot fraction");
+                        ui.add(egui::DragValue::new(&mut s.carnot_fraction).speed(0.01))
+                            .labelled_by(cap.id);
                     });
 
                     ui.add_space(6.0);
@@ -497,5 +505,46 @@ mod headless_ui_tests {
         app.show_heatpump_workbench = true;
         run_heatpump(&mut app.heatpump);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::{Node, NodeId, Role};
+
+        // Render with accesskit enabled and read the emitted a11y tree — the
+        // same tree a screen reader / AI UI-Automation driver consumes.
+        let mut app = ValenxApp::default();
+        app.show_heatpump_workbench = true;
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_heatpump_workbench(&mut app, ctx);
+        });
+        let nodes: Vec<(NodeId, Node)> = out
+            .platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes;
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 3,
+            "expected the heat-pump numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every heat-pump DragValue must be labelled_by its caption"
+        );
+        for caption in ["cold T_c (°C)", "hot  T_h (°C)", "Carnot fraction"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

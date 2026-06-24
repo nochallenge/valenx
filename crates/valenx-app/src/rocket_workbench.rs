@@ -873,8 +873,10 @@ pub(crate) fn rocket_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                         .small(),
                     );
 
-                    // ▶ Playback scrubber — drag through the flight and
-                    // read the full vehicle state at that instant.
+                    // ▶ Playback scrubber — drag through the flight and read the
+                    // full vehicle state at that instant. Its `.text(..)` makes
+                    // egui auto-name the value sub-node (Role::SpinButton), so it
+                    // is already AI-drivable / screen-reader-named.
                     if t_max > 0.0 {
                         ui.add(
                             egui::Slider::new(&mut s.scrub_t, 0.0..=t_max)
@@ -1075,25 +1077,31 @@ pub(crate) fn rocket_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
             ui.add_space(4.0);
             ui.label(egui::RichText::new("Interstage structure").strong());
             ui.horizontal(|ui| {
-                ui.label("supported mass");
+                // Associate each DragValue with its caption via `labelled_by`,
+                // so the spin button is named for a screen reader / AI driver
+                // (egui clears a DragValue's own Name; `.on_hover_text` does
+                // not set it).
+                let cap = ui.label("supported mass");
                 ui.add(
                     egui::DragValue::new(&mut s.design.supported_mass_kg)
                         .speed(100.0)
                         .range(100.0..=200_000.0)
                         .suffix(" kg"),
                 )
+                .labelled_by(cap.id)
                 .on_hover_text("Upper stage + payload carried by the interstage.");
             });
             ui.horizontal(|ui| {
-                ui.label("strut count N");
+                let cap = ui.label("strut count N");
                 ui.add(
                     egui::DragValue::new(&mut s.design.strut_count)
                         .speed(0.2)
                         .range(1..=64),
-                );
+                )
+                .labelled_by(cap.id);
             });
             ui.horizontal(|ui| {
-                ui.label("strut area A");
+                let cap = ui.label("strut area A");
                 // Edit in cm² for usability; store in m². Only write back
                 // on an actual edit so the reactive dirty-check below stays
                 // stable (no per-frame float drift).
@@ -1105,13 +1113,14 @@ pub(crate) fn rocket_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .range(0.01..=2000.0)
                             .suffix(" cm²"),
                     )
+                    .labelled_by(cap.id)
                     .changed()
                 {
                     s.design.strut_area_m2 = area_cm2 * 1.0e-4;
                 }
             });
             ui.horizontal(|ui| {
-                ui.label("material yield σy");
+                let cap = ui.label("material yield σy");
                 let mut yield_mpa = s.design.material_yield_pa / 1.0e6;
                 if ui
                     .add(
@@ -1120,6 +1129,7 @@ pub(crate) fn rocket_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .range(1.0..=2000.0)
                             .suffix(" MPa"),
                     )
+                    .labelled_by(cap.id)
                     .on_hover_text("≈ 324 MPa for Al-2024-T3.")
                     .changed()
                 {
@@ -1200,8 +1210,12 @@ pub(crate) fn rocket_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 ui.add_space(6.0);
                 ui.label(egui::RichText::new("Sizing aid").strong());
                 ui.horizontal(|ui| {
-                    ui.label("target SF");
-                    ui.add(egui::Slider::new(&mut s.target_sf, 1.0..=3.0));
+                    // A Slider's numeric value sub-node is a Role::SpinButton;
+                    // egui only auto-names it when the slider carries `.text(..)`
+                    // (it then `labelled_by`s the value node internally — see
+                    // egui 0.28 slider.rs). So name it via `.text(..)` rather
+                    // than a sibling label, to stay AI-drivable.
+                    ui.add(egui::Slider::new(&mut s.target_sf, 1.0..=3.0).text("target SF"));
                 });
                 if let Some(a_req) = required_area_per_strut_m2(
                     r.peak_axial_load_n,
@@ -1693,5 +1707,59 @@ mod headless_ui_tests {
             draw_workbench(&mut app);
         }
         assert!(app.rocket.lv1.is_some());
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::{Node, NodeId, Role};
+
+        // Render with accesskit enabled and read the emitted a11y tree — the
+        // same tree a screen reader / AI UI-Automation driver consumes. Every
+        // DragValue (Role::SpinButton) must carry a caption via `labelled_by`,
+        // since egui clears a DragValue's own Name.
+        let mut app = ValenxApp::default();
+        app.show_rocket_workbench = true;
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_rocket_workbench(&mut app, ctx);
+        });
+        let nodes: Vec<(NodeId, Node)> = out
+            .platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes;
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // The interstage-structure form draws supported-mass, strut-count,
+        // strut-area and material-yield as numeric spin buttons.
+        assert!(
+            spin_buttons.len() >= 4,
+            "expected the rocket interstage numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        // Every numeric spin button (the 4 interstage DragValues plus the
+        // `.text(..)`-named sliders, whose value sub-node egui labels
+        // internally) must be associated with a caption — without it the
+        // control is anonymous to a screen reader / AI driver.
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every rocket numeric spin button must be labelled_by its caption (AI-drivable name)"
+        );
+        for caption in [
+            "supported mass",
+            "strut count N",
+            "strut area A",
+            "material yield σy",
+        ] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

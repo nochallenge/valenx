@@ -105,8 +105,9 @@ pub fn draw_piping_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Geometry").strong());
                     ui.horizontal(|ui| {
-                        ui.label("length (mm)");
-                        ui.add(egui::DragValue::new(&mut s.length_mm).speed(10.0));
+                        let cap = ui.label("length (mm)");
+                        ui.add(egui::DragValue::new(&mut s.length_mm).speed(10.0))
+                            .labelled_by(cap.id);
                     });
 
                     ui.add_space(6.0);
@@ -500,5 +501,44 @@ mod headless_ui_tests {
         run_piping(&mut app.piping);
         app.piping.error = Some("invalid pipe parameters".to_string());
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::{Node, NodeId, Role};
+
+        let mut app = ValenxApp::default();
+        app.show_piping_workbench = true;
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_piping_workbench(&mut app, ctx);
+        });
+        let nodes: Vec<(NodeId, Node)> = out
+            .platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes;
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 1,
+            "expected the piping numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every piping DragValue must be labelled_by its caption"
+        );
+        for caption in ["length (mm)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

@@ -103,8 +103,9 @@ pub fn draw_transmissionline_workbench(app: &mut ValenxApp, ctx: &egui::Context)
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Line").strong());
                     ui.horizontal(|ui| {
-                        ui.label("Z₀ (Ω)");
-                        ui.add(egui::DragValue::new(&mut s.z0_ohms).speed(1.0));
+                        let cap = ui.label("Z₀ (Ω)");
+                        ui.add(egui::DragValue::new(&mut s.z0_ohms).speed(1.0))
+                            .labelled_by(cap.id);
                     });
 
                     ui.add_space(4.0);
@@ -116,8 +117,9 @@ pub fn draw_transmissionline_workbench(app: &mut ValenxApp, ctx: &egui::Context)
                     });
                     if s.load_kind == LoadKind::Resistive {
                         ui.horizontal(|ui| {
-                            ui.label("Z_L (Ω)");
-                            ui.add(egui::DragValue::new(&mut s.load_ohms).speed(1.0));
+                            let cap = ui.label("Z_L (Ω)");
+                            ui.add(egui::DragValue::new(&mut s.load_ohms).speed(1.0))
+                                .labelled_by(cap.id);
                         });
                     }
 
@@ -468,5 +470,44 @@ mod headless_ui_tests {
         app.show_transmissionline_workbench = true;
         run_transmissionline(&mut app.transmissionline);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::{Node, NodeId, Role};
+
+        let mut app = ValenxApp::default();
+        app.show_transmissionline_workbench = true;
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_transmissionline_workbench(&mut app, ctx);
+        });
+        let nodes: Vec<(NodeId, Node)> = out
+            .platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes;
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 1,
+            "expected the transmissionline numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every transmissionline DragValue must be labelled_by its caption"
+        );
+        for caption in ["Z₀ (Ω)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

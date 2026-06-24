@@ -102,19 +102,22 @@ pub fn draw_thermocouple_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Junctions").strong());
                     ui.horizontal(|ui| {
-                        ui.label("hot / measurement (°C)");
-                        ui.add(egui::DragValue::new(&mut s.t_hot_c).speed(0.5));
+                        let cap = ui.label("hot / measurement (°C)");
+                        ui.add(egui::DragValue::new(&mut s.t_hot_c).speed(0.5))
+                            .labelled_by(cap.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("cold / reference (°C)");
-                        ui.add(egui::DragValue::new(&mut s.t_cold_c).speed(0.5));
+                        let cap = ui.label("cold / reference (°C)");
+                        ui.add(egui::DragValue::new(&mut s.t_cold_c).speed(0.5))
+                            .labelled_by(cap.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Inverse (V → T)").strong());
                     ui.horizontal(|ui| {
-                        ui.label("measured EMF (mV)");
-                        ui.add(egui::DragValue::new(&mut s.emf_input_mv).speed(0.05));
+                        let cap = ui.label("measured EMF (mV)");
+                        ui.add(egui::DragValue::new(&mut s.emf_input_mv).speed(0.05))
+                            .labelled_by(cap.id);
                     });
 
                     ui.add_space(6.0);
@@ -501,5 +504,54 @@ mod headless_ui_tests {
         app.show_thermocouple_workbench = true;
         run_thermocouple(&mut app.thermocouple);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::{Node, NodeId, Role};
+
+        // Render with accesskit enabled and read the emitted a11y tree — the
+        // same tree a screen reader / AI UI-Automation driver consumes. Every
+        // DragValue (Role::SpinButton) must carry a caption via `labelled_by`,
+        // since egui clears a DragValue's own Name.
+        let mut app = ValenxApp::default();
+        app.show_thermocouple_workbench = true;
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_thermocouple_workbench(&mut app, ctx);
+        });
+        let nodes: Vec<(NodeId, Node)> = out
+            .platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes;
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // Hot junction, cold junction and the inverse EMF input render as
+        // numeric spin buttons.
+        assert!(
+            spin_buttons.len() >= 3,
+            "expected the thermocouple numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every thermocouple DragValue must be labelled_by its caption"
+        );
+        for caption in [
+            "hot / measurement (°C)",
+            "cold / reference (°C)",
+            "measured EMF (mV)",
+        ] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }
