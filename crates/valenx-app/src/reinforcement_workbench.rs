@@ -106,24 +106,31 @@ pub fn draw_reinforcement_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 ui.selectable_value(&mut s.section, Section::Beam, "Beam");
                 ui.selectable_value(&mut s.section, Section::Column, "Column");
             });
+            // Associate each numeric `DragValue` with its caption via
+            // `labelled_by`, so the spin button carries the caption as its
+            // accessibility / UI-Automation Name (egui clears a DragValue's own
+            // Name, leaving it anonymous to a screen reader / AI driver
+            // otherwise).
             egui::Grid::new("reinf_params")
                 .num_columns(2)
                 .show(ui, |ui| {
-                    ui.label("width (m)");
+                    let l = ui.label("width (m)");
                     ui.add(
                         egui::DragValue::new(&mut s.width)
                             .speed(0.01)
                             .range(0.05..=3.0),
-                    );
+                    )
+                    .labelled_by(l.id);
                     ui.end_row();
-                    ui.label("depth (m)");
+                    let l = ui.label("depth (m)");
                     ui.add(
                         egui::DragValue::new(&mut s.depth)
                             .speed(0.01)
                             .range(0.05..=3.0),
-                    );
+                    )
+                    .labelled_by(l.id);
                     ui.end_row();
-                    ui.label(if s.section == Section::Beam {
+                    let l = ui.label(if s.section == Section::Beam {
                         "length (m)"
                     } else {
                         "height (m)"
@@ -132,17 +139,20 @@ pub fn draw_reinforcement_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         egui::DragValue::new(&mut s.length)
                             .speed(0.05)
                             .range(0.1..=20.0),
-                    );
+                    )
+                    .labelled_by(l.id);
                     ui.end_row();
-                    ui.label("bars");
-                    ui.add(egui::DragValue::new(&mut s.n_bars).speed(0.2));
+                    let l = ui.label("bars");
+                    ui.add(egui::DragValue::new(&mut s.n_bars).speed(0.2))
+                        .labelled_by(l.id);
                     ui.end_row();
-                    ui.label("hoop spacing (m)");
+                    let l = ui.label("hoop spacing (m)");
                     ui.add(
                         egui::DragValue::new(&mut s.hoop_spacing)
                             .speed(0.01)
                             .range(0.02..=1.0),
-                    );
+                    )
+                    .labelled_by(l.id);
                     ui.end_row();
                 });
             ui.separator();
@@ -272,5 +282,98 @@ mod tests {
         };
         let mesh = run_reinforcement(&s).expect("column cage");
         assert!(!mesh.nodes.is_empty());
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
+mod headless_ui_tests {
+    use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
+
+    /// Render the whole workbench panel once in a headless egui context.
+    fn draw_workbench(app: &mut ValenxApp) {
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_reinforcement_workbench(app, ctx);
+        });
+    }
+
+    /// As [`draw_workbench`], but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_reinforcement_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
+    }
+
+    #[test]
+    fn workbench_is_a_noop_when_hidden() {
+        let mut app = ValenxApp::default();
+        assert!(!app.show_reinforcement_workbench);
+        draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn workbench_draws_when_shown_without_panic() {
+        let mut app = ValenxApp::default();
+        app.show_reinforcement_workbench = true;
+        draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn workbench_draws_a_status_without_panic() {
+        // Populate the status line so that readout branch is exercised too.
+        let mut app = ValenxApp::default();
+        app.show_reinforcement_workbench = true;
+        app.reinforcement.status = "120 triangles in the viewport".to_string();
+        draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // The rebar-cage DragValues are SpinButtons; each must be `labelled_by`
+        // its caption (egui clears a DragValue's own Name), so an AI / screen
+        // reader can find the control by the caption text. The default Beam
+        // section shows the "length (m)" caption (not "height (m)").
+        let mut app = ValenxApp::default();
+        app.show_reinforcement_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // width, depth, length, bars, hoop spacing.
+        assert!(
+            spin_buttons.len() >= 5,
+            "expected the reinforcement numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every reinforcement DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["width (m)", "length (m)", "hoop spacing (m)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        // The Generate button stays a named, invokable node.
+        assert!(
+            nodes.iter().any(|(_, n)| n.role() == Role::Button
+                && n.name().is_some_and(|s| s.contains("Generate"))),
+            "the Generate button is a named, invokable node"
+        );
     }
 }
