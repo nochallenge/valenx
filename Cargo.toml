@@ -142,6 +142,11 @@ members = [
     # a SensorFrame per tick, for autonomy / RL testing. Analytic/graphics-grade
     # models, not hardware-calibrated devices (clean-room, AirSim-inspired).
     "crates/valenx-sensors",
+    # Defense M&S (M9 autonomy V&V): a V&V methodology framework layered on
+    # the valenx-sensors harness — Scenarios/Requirements/Traces, coverage
+    # metrics, and a deterministic grid/seeded-MC sweep. Validates the
+    # FRAMEWORK logic over the analytic sensor models; defensive T&E only.
+    "crates/valenx-autonomy-vnv",
     "crates/valenx-rail",
     "crates/valenx-mbd",
     "crates/valenx-muscle",
