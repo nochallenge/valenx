@@ -13,14 +13,21 @@
 //! - [`trajectory`] — a [`trajectory::Trajectory`] container plus a
 //!   compact binary DCD-class writer/reader and a human-readable
 //!   framed-text format (feature 6).
+//! - [`trr`] — a reader for GROMACS **TRR** (uncompressed XDR binary)
+//!   trajectories, plus the multi-frame XYZ → [`trajectory::Trajectory`]
+//!   bridge in [`xyz::read_xyz_trajectory`]. Loads coordinate frames
+//!   with per-frame time / box metadata for playback. (The compressed
+//!   XTC sibling is a documented follow-up.)
 //!
 //! Coordinates in PDB files are Ångström (the format's unit) and are
 //! converted to/from the crate's nm on read/write; XYZ and GRO are
-//! handled in their native units (XYZ Ångström, GRO nm).
+//! handled in their native units (XYZ Ångström, GRO nm). TRR is already
+//! in nm (GROMACS units).
 
 pub mod gro;
 pub mod pdb;
 pub mod trajectory;
+pub mod trr;
 pub mod xyz;
 
 /// Ångström per nanometre — the PDB / XYZ length unit is Å, the
