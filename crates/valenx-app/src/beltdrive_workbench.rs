@@ -105,38 +105,45 @@ pub fn draw_beltdrive_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Pulleys").strong());
                     ui.horizontal(|ui| {
-                        ui.label("driver Ø (mm)");
-                        ui.add(egui::DragValue::new(&mut s.driver_diameter_mm).speed(1.0));
+                        let l = ui.label("driver Ø (mm)");
+                        ui.add(egui::DragValue::new(&mut s.driver_diameter_mm).speed(1.0))
+                            .labelled_by(l.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("driven Ø (mm)");
-                        ui.add(egui::DragValue::new(&mut s.driven_diameter_mm).speed(1.0));
+                        let l = ui.label("driven Ø (mm)");
+                        ui.add(egui::DragValue::new(&mut s.driven_diameter_mm).speed(1.0))
+                            .labelled_by(l.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("centre distance (mm)");
-                        ui.add(egui::DragValue::new(&mut s.center_distance_mm).speed(5.0));
+                        let l = ui.label("centre distance (mm)");
+                        ui.add(egui::DragValue::new(&mut s.center_distance_mm).speed(5.0))
+                            .labelled_by(l.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Drive").strong());
                     ui.horizontal(|ui| {
-                        ui.label("driver speed (rpm)");
-                        ui.add(egui::DragValue::new(&mut s.driver_speed_rpm).speed(5.0));
+                        let l = ui.label("driver speed (rpm)");
+                        ui.add(egui::DragValue::new(&mut s.driver_speed_rpm).speed(5.0))
+                            .labelled_by(l.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("friction μ");
-                        ui.add(egui::DragValue::new(&mut s.mu).speed(0.01));
+                        let l = ui.label("friction μ");
+                        ui.add(egui::DragValue::new(&mut s.mu).speed(0.01))
+                            .labelled_by(l.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Belt").strong());
                     ui.horizontal(|ui| {
-                        ui.label("linear density (kg/m)");
-                        ui.add(egui::DragValue::new(&mut s.linear_density).speed(0.01));
+                        let l = ui.label("linear density (kg/m)");
+                        ui.add(egui::DragValue::new(&mut s.linear_density).speed(0.01))
+                            .labelled_by(l.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("max tension T1 (N)");
-                        ui.add(egui::DragValue::new(&mut s.t1_max).speed(10.0));
+                        let l = ui.label("max tension T1 (N)");
+                        ui.add(egui::DragValue::new(&mut s.t1_max).speed(10.0))
+                            .labelled_by(l.id);
                     });
 
                     ui.add_space(6.0);
@@ -765,12 +772,28 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_beltdrive_workbench(app, ctx);
         });
+    }
+
+    /// As [`draw_workbench`], but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_beltdrive_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -786,5 +809,37 @@ mod headless_ui_tests {
         app.show_beltdrive_workbench = true;
         run_beltdrive(&mut app.beltdrive);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // Every DragValue is a SpinButton that must be `labelled_by` its caption
+        // (egui clears a DragValue's own Name), so an AI / screen reader can find
+        // the control by the caption text.
+        let mut app = ValenxApp::default();
+        app.show_beltdrive_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 7,
+            "expected the numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["driver Ø (mm)", "friction μ", "max tension T1 (N)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }
