@@ -143,68 +143,94 @@ pub fn draw_osmosis_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
 
                     ui.add_space(4.0);
                     if s.mode == OsmosisMode::VantHoff {
+                        // Associate each numeric `DragValue` with its caption via
+                        // `labelled_by`, so the spin button carries the caption
+                        // as its accessibility / UI-Automation Name (egui clears
+                        // a DragValue's own Name, leaving it anonymous to a
+                        // screen reader / AI driver otherwise); the hover text
+                        // mirrors the caption for a mouse user.
                         ui.label(egui::RichText::new("Solution").strong());
                         ui.horizontal(|ui| {
-                            ui.label("c (mol/L)");
+                            let lbl = ui.label("c (mol/L)");
                             ui.add(
                                 egui::DragValue::new(&mut s.concentration_mol_per_l).speed(0.01),
-                            );
+                            )
+                            .labelled_by(lbl.id)
+                            .on_hover_text("c (mol/L)");
                         });
                         ui.horizontal(|ui| {
-                            ui.label("van't Hoff i");
-                            ui.add(egui::DragValue::new(&mut s.vant_hoff_i).speed(0.05));
+                            let lbl = ui.label("van't Hoff i");
+                            ui.add(egui::DragValue::new(&mut s.vant_hoff_i).speed(0.05))
+                                .labelled_by(lbl.id)
+                                .on_hover_text("van't Hoff i");
                         });
                         ui.horizontal(|ui| {
-                            ui.label("temperature (°C)");
-                            ui.add(egui::DragValue::new(&mut s.temperature_c).speed(0.5));
+                            let lbl = ui.label("temperature (°C)");
+                            ui.add(egui::DragValue::new(&mut s.temperature_c).speed(0.5))
+                                .labelled_by(lbl.id)
+                                .on_hover_text("temperature (°C)");
                         });
                         ui.horizontal(|ui| {
-                            ui.label("cell ref (osmol/L)");
+                            let lbl = ui.label("cell ref (osmol/L)");
                             ui.add(
                                 egui::DragValue::new(&mut s.reference_osmolarity).speed(0.01),
-                            );
+                            )
+                            .labelled_by(lbl.id)
+                            .on_hover_text("cell ref (osmol/L)");
                         });
                     } else {
                         ui.label(egui::RichText::new("Hydrostatic (mmHg)").strong());
                         ui.horizontal(|ui| {
-                            ui.label("capillary Pc");
+                            let lbl = ui.label("capillary Pc");
                             ui.add(
                                 egui::DragValue::new(&mut s.capillary_hydrostatic).speed(0.5),
-                            );
+                            )
+                            .labelled_by(lbl.id)
+                            .on_hover_text("capillary Pc");
                         });
                         ui.horizontal(|ui| {
-                            ui.label("interstitial Pi");
+                            let lbl = ui.label("interstitial Pi");
                             ui.add(
                                 egui::DragValue::new(&mut s.interstitial_hydrostatic).speed(0.5),
-                            );
+                            )
+                            .labelled_by(lbl.id)
+                            .on_hover_text("interstitial Pi");
                         });
 
                         ui.add_space(4.0);
                         ui.label(egui::RichText::new("Oncotic (mmHg)").strong());
                         ui.horizontal(|ui| {
-                            ui.label("capillary πc");
-                            ui.add(egui::DragValue::new(&mut s.capillary_oncotic).speed(0.5));
+                            let lbl = ui.label("capillary πc");
+                            ui.add(egui::DragValue::new(&mut s.capillary_oncotic).speed(0.5))
+                                .labelled_by(lbl.id)
+                                .on_hover_text("capillary πc");
                         });
                         ui.horizontal(|ui| {
-                            ui.label("interstitial πi");
+                            let lbl = ui.label("interstitial πi");
                             ui.add(
                                 egui::DragValue::new(&mut s.interstitial_oncotic).speed(0.5),
-                            );
+                            )
+                            .labelled_by(lbl.id)
+                            .on_hover_text("interstitial πi");
                         });
 
                         ui.add_space(4.0);
                         ui.label(egui::RichText::new("Membrane").strong());
                         ui.horizontal(|ui| {
-                            ui.label("reflection σ");
+                            let lbl = ui.label("reflection σ");
                             ui.add(
                                 egui::DragValue::new(&mut s.reflection_sigma)
                                     .speed(0.02)
                                     .range(0.0..=1.0),
-                            );
+                            )
+                            .labelled_by(lbl.id)
+                            .on_hover_text("reflection σ");
                         });
                         ui.horizontal(|ui| {
-                            ui.label("filtration Kf");
-                            ui.add(egui::DragValue::new(&mut s.filtration_kf).speed(0.1));
+                            let lbl = ui.label("filtration Kf");
+                            ui.add(egui::DragValue::new(&mut s.filtration_kf).speed(0.1))
+                                .labelled_by(lbl.id)
+                                .on_hover_text("filtration Kf");
                         });
                     }
 
@@ -642,12 +668,28 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_osmosis_workbench(app, ctx);
         });
+    }
+
+    /// As `draw_workbench`, but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_osmosis_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -663,5 +705,47 @@ mod headless_ui_tests {
         app.show_osmosis_workbench = true;
         run_osmosis(&mut app.osmosis);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // The default mode is Van't Hoff, which shows four numeric DragValues
+        // (the Starling mode's six fields are hidden in this state). Each
+        // visible DragValue is a SpinButton that must be `labelled_by` its
+        // caption (egui clears a DragValue's own Name), so an AI / screen
+        // reader can find the control by the caption text.
+        let mut app = ValenxApp::default();
+        app.show_osmosis_workbench = true;
+        assert_eq!(app.osmosis.mode, OsmosisMode::VantHoff);
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // c, van't Hoff i, temperature, cell ref — the default Van't Hoff set.
+        assert!(
+            spin_buttons.len() >= 4,
+            "expected the default Van't Hoff numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every osmosis DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["c (mol/L)", "van't Hoff i", "cell ref (osmol/L)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        // The Analyze button stays named/invokable.
+        assert!(
+            nodes.iter().any(|(_, n)| n.role() == Role::Button
+                && n.name().is_some_and(|s| s.contains("Analyze"))),
+            "the Analyze button is a named, invokable node"
+        );
     }
 }

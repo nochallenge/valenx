@@ -106,44 +106,68 @@ pub fn draw_electrochem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Cell (Nernst)").strong());
+                    // Associate each numeric `DragValue` with its caption via
+                    // `labelled_by`, so the spin button carries the caption as
+                    // its accessibility / UI-Automation Name (egui clears a
+                    // DragValue's own Name, leaving it anonymous to a screen
+                    // reader / AI driver otherwise); the hover text mirrors the
+                    // caption for a mouse user.
                     ui.horizontal(|ui| {
-                        ui.label("E cathode (V)");
-                        ui.add(egui::DragValue::new(&mut s.e_cathode_v).speed(0.01));
+                        let lbl = ui.label("E cathode (V)");
+                        ui.add(egui::DragValue::new(&mut s.e_cathode_v).speed(0.01))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("E cathode (V)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("E anode (V)");
-                        ui.add(egui::DragValue::new(&mut s.e_anode_v).speed(0.01));
+                        let lbl = ui.label("E anode (V)");
+                        ui.add(egui::DragValue::new(&mut s.e_anode_v).speed(0.01))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("E anode (V)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("electrons n");
-                        ui.add(egui::DragValue::new(&mut s.electrons).speed(0.1));
+                        let lbl = ui.label("electrons n");
+                        ui.add(egui::DragValue::new(&mut s.electrons).speed(0.1))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("electrons n");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("temperature (K)");
-                        ui.add(egui::DragValue::new(&mut s.temperature_k).speed(0.5));
+                        let lbl = ui.label("temperature (K)");
+                        ui.add(egui::DragValue::new(&mut s.temperature_k).speed(0.5))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("temperature (K)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("quotient Q");
-                        ui.add(egui::DragValue::new(&mut s.quotient).speed(0.1));
+                        let lbl = ui.label("quotient Q");
+                        ui.add(egui::DragValue::new(&mut s.quotient).speed(0.1))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("quotient Q");
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Electrolysis (Faraday)").strong());
                     ui.horizontal(|ui| {
-                        ui.label("current I (A)");
-                        ui.add(egui::DragValue::new(&mut s.current_a).speed(0.1));
+                        let lbl = ui.label("current I (A)");
+                        ui.add(egui::DragValue::new(&mut s.current_a).speed(0.1))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("current I (A)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("time t (s)");
-                        ui.add(egui::DragValue::new(&mut s.seconds).speed(10.0));
+                        let lbl = ui.label("time t (s)");
+                        ui.add(egui::DragValue::new(&mut s.seconds).speed(10.0))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("time t (s)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("molar mass M (g/mol)");
-                        ui.add(egui::DragValue::new(&mut s.molar_mass_g_per_mol).speed(0.5));
+                        let lbl = ui.label("molar mass M (g/mol)");
+                        ui.add(egui::DragValue::new(&mut s.molar_mass_g_per_mol).speed(0.5))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("molar mass M (g/mol)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("electrons n");
-                        ui.add(egui::DragValue::new(&mut s.electrolysis_electrons).speed(0.1));
+                        let lbl = ui.label("electrons n");
+                        ui.add(egui::DragValue::new(&mut s.electrolysis_electrons).speed(0.1))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("electrons n");
                     });
 
                     ui.add_space(6.0);
@@ -518,12 +542,28 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_electrochem_workbench(app, ctx);
         });
+    }
+
+    /// As [`draw_workbench`], but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_electrochem_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -539,5 +579,46 @@ mod headless_ui_tests {
         app.show_electrochem_workbench = true;
         run_electrochem(&mut app.electrochem);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // All nine cell + electrolysis DragValues are SpinButtons; each must be
+        // `labelled_by` its caption (egui clears a DragValue's own Name), so an
+        // AI / screen reader can find the control by the caption text. Both the
+        // Nernst and Faraday sections are shown at once (no mode switch).
+        let mut app = ValenxApp::default();
+        app.show_electrochem_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // E cathode, E anode, electrons n, temperature, quotient Q, current I,
+        // time t, molar mass M, electrons n.
+        assert!(
+            spin_buttons.len() >= 9,
+            "expected the electrochem numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every electrochem DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["E cathode (V)", "quotient Q", "molar mass M (g/mol)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        // The Analyze button stays a named, invokable node.
+        assert!(
+            nodes.iter().any(|(_, n)| n.role() == Role::Button
+                && n.name().is_some_and(|s| s.contains("Analyze"))),
+            "the Analyze button is a named, invokable node"
+        );
     }
 }
