@@ -230,6 +230,7 @@ pub mod transmissionline_workbench;
 pub mod truss_workbench;
 pub mod types;
 pub mod undo;
+pub mod uq_workbench;
 pub mod vibration_workbench;
 pub mod viewport;
 pub mod viewport_2d;
@@ -2007,6 +2008,16 @@ pub struct ValenxApp {
     /// Form + result state for the ROM workbench (POD energy spectrum +
     /// snapshot reconstruction over the in-process `valenx-rom` engine).
     pub rom: crate::rom_workbench::RomWorkbenchState,
+
+    /// Whether the right-side UQ (uncertainty quantification) workbench panel is
+    /// visible. Defaults to `false`; toggled from the View menu or opened by the
+    /// agent bridge under the id `"uq"`. Wraps `valenx-uq` (Monte-Carlo
+    /// propagation + Sobol sensitivity + FORM reliability). See
+    /// [`crate::uq_workbench`].
+    pub show_uq_workbench: bool,
+    /// Form + result state for the UQ workbench (output histogram + Sobol bar
+    /// chart + FORM Pf over the in-process `valenx-uq` engine).
+    pub uq: crate::uq_workbench::UqWorkbenchState,
 
     /// Whether the right-side Autonomy V&V workbench panel is visible. Defaults
     /// to `false`; toggled from the View menu or opened by the agent bridge

@@ -224,6 +224,10 @@ valenx-ocean         = { path = "../valenx-ocean" }
 # the ROM workbench (src/rom_workbench.rs). Pure-Rust (nalgebra SVD); no new
 # external deps.
 valenx-rom           = { path = "../valenx-rom" }
+# Native uncertainty quantification (Monte-Carlo propagation, Sobol sensitivity,
+# FORM reliability) — surfaced by the UQ workbench (src/uq_workbench.rs).
+# Pure-Rust, dependency-light (nalgebra + a seeded in-crate PRNG, no `rand`).
+valenx-uq            = { path = "../valenx-uq" }
 # Native propeller / rotor blade-element-momentum (BEMT) performance —
 # surfaced by the Rotor / Drone (BEMT) workbench (src/rotor_workbench.rs).
 # Pure-Rust solver; the workbench calls its real API directly (no subprocess).
