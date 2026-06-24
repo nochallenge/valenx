@@ -9094,6 +9094,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-rom"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "nalgebra",
+ "ndarray",
+ "num-complex",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-rootfind"
 version = "0.1.0-alpha.1"
 dependencies = [
