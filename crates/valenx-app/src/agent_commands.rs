@@ -84,11 +84,15 @@ pub enum AgentValue {
 }
 
 impl AgentValue {
-    /// Interpret this value as an `f64` for a floating-point control. An `Int`
-    /// widens losslessly; a `Bool` / `Str` is a type error (fail-loud).
+    /// Interpret this value as an `f64` for a floating-point control. NaN/Inf is
+    /// rejected (fail-loud, mirroring `as_i64`) so a hostile value can never be
+    /// written to a control and reported `Ok` — this single gate closes the
+    /// write-then-Ok gap across every bare `as_f64()?` setter. An `Int` widens
+    /// losslessly; a `Bool` / `Str` is a type error.
     pub fn as_f64(&self) -> Result<f64, String> {
         match self {
-            AgentValue::Float(v) => Ok(*v),
+            AgentValue::Float(v) if v.is_finite() => Ok(*v),
+            AgentValue::Float(v) => Err(format!("expected a finite number, got {v}")),
             AgentValue::Int(v) => Ok(*v as f64),
             other => Err(format!("expected a number, got {other:?}")),
         }
@@ -1413,16 +1417,28 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
         }
         AgentCommand::AddSketchPoint { x, y } => {
             // Append a Line-tool vertex to the in-house CAD sketch through the
-            // SAME `sketch_add_point` the canvas click uses.
-            app.cad.sketch_add_point(x, y);
-            let n = app.cad.sketch_anchor_count();
-            crate::assistant_workbench::append_feed_note(
-                app,
-                ch,
-                "Claude",
-                &format!("sketch point ({x}, {y}) — {n} anchor(s)"),
-                "result",
-            );
+            // SAME `sketch_add_point` the canvas click uses. Guard non-finite
+            // coordinates (a real click can't produce them) so a hostile 1e400
+            // can't seed a degenerate profile for a later extrude.
+            if !(x.is_finite() && y.is_finite()) {
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    &format!("add_sketch_point: non-finite coordinate ignored ({x}, {y})"),
+                    "warn",
+                );
+            } else {
+                app.cad.sketch_add_point(x, y);
+                let n = app.cad.sketch_anchor_count();
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    &format!("sketch point ({x}, {y}) — {n} anchor(s)"),
+                    "result",
+                );
+            }
         }
         AgentCommand::AddSketchArc { start, via, end } => {
             // Append a 3-point arc to the in-house CAD sketch through the SAME
@@ -1482,18 +1498,29 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
         AgentCommand::Add2dLine { x1, y1, x2, y2 } => {
             // Add a line to the in-house 2-D drawing through the SAME
             // `Drawing2D::add(Entity2D::Line)` path the form's `+` button uses.
-            app.draft2d.agent_add_line([x1, y1], [x2, y2]);
-            let n = app.draft2d.entity_count();
-            crate::assistant_workbench::append_feed_note(
-                app,
-                ch,
-                "Claude",
-                &format!(
-                    "2-D line added — {n} entit{}",
-                    if n == 1 { "y" } else { "ies" }
-                ),
-                "result",
-            );
+            // Guard non-finite endpoints (matching add_2d_circle's r guard).
+            if !(x1.is_finite() && y1.is_finite() && x2.is_finite() && y2.is_finite()) {
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    "add_2d_line: non-finite coordinate ignored",
+                    "warn",
+                );
+            } else {
+                app.draft2d.agent_add_line([x1, y1], [x2, y2]);
+                let n = app.draft2d.entity_count();
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    &format!(
+                        "2-D line added — {n} entit{}",
+                        if n == 1 { "y" } else { "ies" }
+                    ),
+                    "result",
+                );
+            }
         }
         AgentCommand::Add2dCircle { cx, cy, r } => {
             // Add a circle to the in-house 2-D drawing through the SAME

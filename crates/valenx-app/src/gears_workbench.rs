@@ -95,8 +95,8 @@ impl GearsWorkbenchState {
             }
             "teeth z" => {
                 let z = value.as_i64()?;
-                if z < 1 {
-                    return Err(format!("teeth z must be >= 1, got {z}"));
+                if !(1..=u32::MAX as i64).contains(&z) {
+                    return Err(format!("teeth z must be in [1, {}], got {z}", u32::MAX));
                 }
                 self.teeth = z as u32;
             }
@@ -123,8 +123,11 @@ impl GearsWorkbenchState {
             }
             "mating teeth" => {
                 let z = value.as_i64()?;
-                if z < 1 {
-                    return Err(format!("mating teeth must be >= 1, got {z}"));
+                if !(1..=u32::MAX as i64).contains(&z) {
+                    return Err(format!(
+                        "mating teeth must be in [1, {}], got {z}",
+                        u32::MAX
+                    ));
                 }
                 self.mate_teeth = z as u32;
             }
