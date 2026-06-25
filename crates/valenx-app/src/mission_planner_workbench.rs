@@ -26,7 +26,8 @@
 //! `missionplanner.play` / `missionplanner.pause`.
 
 use eframe::egui;
-use valenx_mission_sim::planner::{Affiliation, PlannerScenario};
+use valenx_mission_sim::planner::{Affiliation, PlannerScenario, M_PER_DEG_LAT};
+use valenx_mission_sim::routing::{astar, demo_field, CostGrid};
 use walkers::sources::{OpenStreetMap, TileSource};
 use walkers::{HttpTiles, Map, MapMemory, Position, Projector};
 
@@ -34,6 +35,11 @@ use crate::ValenxApp;
 
 /// The number of entities the demo scenario is seeded with by default.
 const DEFAULT_ENTITY_COUNT: u32 = 4;
+
+/// Width (columns) of the tactical-routing demo cost grid laid over the map.
+const ROUTE_GRID_W: usize = 32;
+/// Height (rows) of the tactical-routing demo cost grid laid over the map.
+const ROUTE_GRID_H: usize = 20;
 
 // ---------------------------------------------------------------------------
 // Workbench state
@@ -65,6 +71,22 @@ pub struct MissionPlannerWorkbenchState {
     /// (the combo `changed`, or the `Affiliation (all)` agent control) overrides
     /// every entity's [`Affiliation`]; purely a display/iconography choice.
     pub set_all_affiliation: Affiliation,
+
+    // --- Tactical routing (in-house A* over a cost field) -------------------
+    /// The demo traversal-cost grid (with obstacle walls) the A\* route is
+    /// planned over. `ROUTE_GRID_W × ROUTE_GRID_H` cells, mapped onto the current
+    /// map extent at draw time so the route overlays the basemap geographically.
+    pub route_grid: CostGrid,
+    /// Routing start cell `(x, y)` in grid coordinates (`0..W`, `0..H`).
+    pub route_start: (usize, usize),
+    /// Routing goal cell `(x, y)` in grid coordinates.
+    pub route_goal: (usize, usize),
+    /// The most recently computed A\* path as grid cells (`start..=goal`), or
+    /// `None` if not yet computed or the goal was unreachable.
+    pub route: Option<Vec<(usize, usize)>>,
+    /// Human-readable status of the last `Compute route` (length in cells / km,
+    /// or "no route"). Surfaced in the readout and the agent readout.
+    pub route_status: String,
 }
 
 impl Default for MissionPlannerWorkbenchState {
@@ -77,6 +99,12 @@ impl Default for MissionPlannerWorkbenchState {
             tiles: None,
             map_memory: MapMemory::default(),
             set_all_affiliation: Affiliation::Friendly,
+            route_grid: demo_field(ROUTE_GRID_W, ROUTE_GRID_H),
+            // Default corner-to-corner planning problem across the demo field.
+            route_start: (0, 0),
+            route_goal: (ROUTE_GRID_W - 1, ROUTE_GRID_H - 1),
+            route: None,
+            route_status: "no route computed".to_string(),
         }
     }
 }
@@ -91,7 +119,65 @@ impl MissionPlannerWorkbenchState {
     /// The user-visible captions of every control the agent bridge can set via
     /// `SetControl` (returned by `ListControls`). Order follows the form.
     pub fn agent_control_names() -> &'static [&'static str] {
-        &["Entity count", "Playback speed x", "Affiliation (all)"]
+        &[
+            "Entity count",
+            "Playback speed x",
+            "Affiliation (all)",
+            "Route start X",
+            "Route start Y",
+            "Route goal X",
+            "Route goal Y",
+        ]
+    }
+
+    /// Compute the A\* tactical route over the demo cost field from
+    /// [`Self::route_start`] to [`Self::route_goal`], storing the cell path in
+    /// [`Self::route`] and a human-readable summary in [`Self::route_status`].
+    /// Shared by the in-panel `Compute route` button and the
+    /// `missionplanner.route` bridge id. Pure aside from updating `self`.
+    pub(crate) fn compute_route(&mut self) {
+        self.route = astar(&self.route_grid, self.route_start, self.route_goal);
+        self.route_status = match &self.route {
+            Some(path) => {
+                // Approx ground length: each step is one cell; map the grid to the
+                // current scenario extent to size a cell in km (diagonal = √2·cell).
+                let km = self.route_length_km(path);
+                format!(
+                    "route: {} cells \u{00B7} ~{:.1} km \u{00B7} ({},{}) \u{2192} ({},{})",
+                    path.len(),
+                    km,
+                    self.route_start.0,
+                    self.route_start.1,
+                    self.route_goal.0,
+                    self.route_goal.1,
+                )
+            }
+            None => format!(
+                "no route: ({},{}) \u{2192} ({},{}) unreachable / invalid",
+                self.route_start.0, self.route_start.1, self.route_goal.0, self.route_goal.1
+            ),
+        };
+    }
+
+    /// Approximate the ground length of a grid path in kilometres by mapping the
+    /// cell grid onto the current scenario geographic extent and summing the
+    /// great-circle-ish (equirectangular) length of each leg. Returns `0.0` for a
+    /// path of fewer than two cells.
+    fn route_length_km(&self, path: &[(usize, usize)]) -> f64 {
+        if path.len() < 2 {
+            return 0.0;
+        }
+        let bbox = route_bbox(&self.scenario);
+        let mut total_m = 0.0;
+        for w in path.windows(2) {
+            let (a_lat, a_lon) = cell_to_latlon(w[0], &self.route_grid, bbox);
+            let (b_lat, b_lon) = cell_to_latlon(w[1], &self.route_grid, bbox);
+            let cos_lat = ((a_lat + b_lat) * 0.5).to_radians().cos();
+            let north_m = (b_lat - a_lat) * M_PER_DEG_LAT;
+            let east_m = (b_lon - a_lon) * M_PER_DEG_LAT * cos_lat;
+            total_m += (north_m * north_m + east_m * east_m).sqrt();
+        }
+        total_m / 1000.0
     }
 
     /// Set every entity's APP-6 affiliation at once (the per-side override). Used
@@ -152,6 +238,14 @@ impl MissionPlannerWorkbenchState {
                 })?;
                 self.set_all_affiliations(a);
             }
+            "Route start X" => {
+                self.route_start.0 = route_coord(value, ROUTE_GRID_W, "Route start X")?
+            }
+            "Route start Y" => {
+                self.route_start.1 = route_coord(value, ROUTE_GRID_H, "Route start Y")?
+            }
+            "Route goal X" => self.route_goal.0 = route_coord(value, ROUTE_GRID_W, "Route goal X")?,
+            "Route goal Y" => self.route_goal.1 = route_coord(value, ROUTE_GRID_H, "Route goal Y")?,
             other => return Err(format!("unknown mission-planner control: {other:?}")),
         }
         Ok(())
@@ -170,7 +264,7 @@ impl MissionPlannerWorkbenchState {
         let [fr, ho, ne, un] = self.affiliation_counts();
         Some(format!(
             "Sim time {:.1}s \u{00B7} {} entities ({} arrived) \u{00B7} \
-             affiliation F{} H{} N{} U{} \u{00B7} playback {}x \u{00B7} {}",
+             affiliation F{} H{} N{} U{} \u{00B7} playback {}x \u{00B7} {} \u{00B7} {}",
             self.scenario.sim_time_s,
             self.scenario.entities.len(),
             done,
@@ -180,8 +274,24 @@ impl MissionPlannerWorkbenchState {
             un,
             self.playback_speed,
             if self.playing { "playing" } else { "paused" },
+            self.route_status,
         ))
     }
+}
+
+/// Validate an `AgentValue` as a routing grid coordinate in `0..extent` and
+/// return it as a `usize`. Fail-loud on a non-integer or out-of-range value so a
+/// bad `SetControl` is rejected without mutating state.
+fn route_coord(
+    value: &crate::agent_commands::AgentValue,
+    extent: usize,
+    caption: &str,
+) -> Result<usize, String> {
+    let n = value.as_i64()?;
+    if n < 0 || n as usize >= extent {
+        return Err(format!("{caption} must be in 0..{extent}, got {n}"));
+    }
+    Ok(n as usize)
 }
 
 // ---------------------------------------------------------------------------
@@ -198,6 +308,13 @@ pub(crate) fn play(app: &mut ValenxApp) {
 /// button and the `missionplanner.pause` bridge id share one path.
 pub(crate) fn pause(app: &mut ValenxApp) {
     app.mission_planner.playing = false;
+}
+
+/// Compute the A\* tactical route (the in-panel `Compute route` action).
+/// Factored out so the button and the `missionplanner.route` bridge id share one
+/// path; delegates to [`MissionPlannerWorkbenchState::compute_route`].
+pub(crate) fn route(app: &mut ValenxApp) {
+    app.mission_planner.compute_route();
 }
 
 // ---------------------------------------------------------------------------
@@ -305,6 +422,77 @@ fn mission_planner_workbench_body_inner(app: &mut ValenxApp, ui: &mut egui::Ui) 
             }
             ui.end_row();
         });
+
+    // --- Tactical routing (A* over the cost field) --------------------------
+    ui.add_space(6.0);
+    ui.separator();
+    ui.label(
+        egui::RichText::new(
+            "Tactical routing \u{00B7} in-house A* over a grid cost field with obstacles \
+             [defensive route planning \u{2014} finds a least-cost path AROUND obstacles]",
+        )
+        .weak()
+        .small(),
+    );
+    egui::Grid::new("mission_planner_routing")
+        .num_columns(4)
+        .striped(true)
+        .show(ui, |ui| {
+            // Start cell (X, Y).
+            let lbl = ui.label("Route start X");
+            ui.add(
+                egui::DragValue::new(&mut s.route_start.0)
+                    .speed(1)
+                    .range(0..=ROUTE_GRID_W - 1),
+            )
+            .labelled_by(lbl.id)
+            .on_hover_text("Start cell column (0..grid width) over the cost field.");
+            let lbl = ui.label("Route start Y");
+            ui.add(
+                egui::DragValue::new(&mut s.route_start.1)
+                    .speed(1)
+                    .range(0..=ROUTE_GRID_H - 1),
+            )
+            .labelled_by(lbl.id)
+            .on_hover_text("Start cell row (0 = north edge).");
+            ui.end_row();
+
+            // Goal cell (X, Y).
+            let lbl = ui.label("Route goal X");
+            ui.add(
+                egui::DragValue::new(&mut s.route_goal.0)
+                    .speed(1)
+                    .range(0..=ROUTE_GRID_W - 1),
+            )
+            .labelled_by(lbl.id)
+            .on_hover_text("Goal cell column (0..grid width).");
+            let lbl = ui.label("Route goal Y");
+            ui.add(
+                egui::DragValue::new(&mut s.route_goal.1)
+                    .speed(1)
+                    .range(0..=ROUTE_GRID_H - 1),
+            )
+            .labelled_by(lbl.id)
+            .on_hover_text("Goal cell row (grid height - 1 = south edge).");
+            ui.end_row();
+        });
+
+    if ui
+        .button("\u{1F9ED} Compute route")
+        .on_hover_text(
+            "Run in-house A* over the demo cost field (with obstacle walls) from start to goal; \
+             the least-cost path is drawn as an amber polyline on the map.",
+        )
+        .clicked()
+    {
+        s.compute_route();
+    }
+    // Route status readout (cells / approx km, or 'no route').
+    ui.label(
+        egui::RichText::new(&s.route_status)
+            .strong()
+            .color(egui::Color32::from_rgb(255, 180, 90)),
+    );
 
     ui.add_space(4.0);
     ui.horizontal(|ui| {
@@ -416,6 +604,50 @@ fn scenario_extent(sc: &PlannerScenario) -> Option<(f64, f64, f64, f64)> {
     seen.then_some((min_lat, max_lat, min_lon, max_lon))
 }
 
+/// The geographic bounding box `(min_lat, max_lat, min_lon, max_lon)` the routing
+/// cost grid is laid over: the scenario extent, padded ~20% so the grid frames
+/// the action, with a fixed fallback (a ~1°×1° Bay-Area box) when the scenario
+/// is empty. The route grid's cell `(0,0)` maps to the box's NW corner.
+fn route_bbox(sc: &PlannerScenario) -> (f64, f64, f64, f64) {
+    match scenario_extent(sc) {
+        Some((min_lat, max_lat, min_lon, max_lon)) => {
+            let pad_lat = ((max_lat - min_lat).abs() * 0.2).max(0.05);
+            let pad_lon = ((max_lon - min_lon).abs() * 0.2).max(0.05);
+            (
+                min_lat - pad_lat,
+                max_lat + pad_lat,
+                min_lon - pad_lon,
+                max_lon + pad_lon,
+            )
+        }
+        None => (37.0, 38.0, -122.5, -121.5),
+    }
+}
+
+/// Map a routing grid cell `(x, y)` to a geographic `(lat, lon)` inside `bbox`
+/// `(min_lat, max_lat, min_lon, max_lon)`. Cell centres are placed across the box
+/// so the path overlays the basemap; `y = 0` is the **north** (max-lat) edge so
+/// the grid reads top-down like the screen. Robust to a 1×1 grid (no divide by
+/// zero).
+fn cell_to_latlon(cell: (usize, usize), grid: &CostGrid, bbox: (f64, f64, f64, f64)) -> (f64, f64) {
+    let (min_lat, max_lat, min_lon, max_lon) = bbox;
+    let (x, y) = cell;
+    let fx = if grid.w > 1 {
+        x as f64 / (grid.w - 1) as f64
+    } else {
+        0.5
+    };
+    let fy = if grid.h > 1 {
+        y as f64 / (grid.h - 1) as f64
+    } else {
+        0.5
+    };
+    let lon = min_lon + fx * (max_lon - min_lon);
+    // y grows southward: y=0 -> max_lat (north), y=h-1 -> min_lat (south).
+    let lat = max_lat - fy * (max_lat - min_lat);
+    (lat, lon)
+}
+
 /// Pick a slippy-map zoom (web-mercator `z`) whose tiles span the scenario
 /// extent across roughly `view_px` pixels. Clamped to `[2, 18]`. Uses the
 /// standard relation: at zoom `z` the whole 360° of longitude maps to
@@ -474,7 +706,7 @@ fn draw_map(s: &mut MissionPlannerWorkbenchState, ui: &mut egui::Ui) {
 
     // Build the overlay plugin from a cheap snapshot of what to draw, so the
     // closure-free `Plugin` impl borrows nothing from `s` during `ui.add`.
-    let overlay = MissionOverlay::from_scenario(&s.scenario);
+    let overlay = MissionOverlay::from_scenario_with_route(s);
 
     ui.allocate_ui(map_size, |ui| {
         let map = Map::new(
@@ -615,10 +847,21 @@ fn draw_app6_frame(painter: &egui::Painter, c: egui::Pos2, r: f32, a: Affiliatio
 /// [`Projector`] so the overlay stays pinned to the map as it pans / zooms.
 struct MissionOverlay {
     entities: Vec<OverlayEntity>,
+    /// The computed A\* tactical route as geographic `(lat, lon)` points (empty
+    /// when no route is computed) — drawn as a DISTINCT-coloured polyline,
+    /// separate from the per-entity blue routes.
+    tactical_route: Vec<(f64, f64)>,
+    /// The geographic centres of the routing grid's **obstacle** cells, drawn as
+    /// small hatched markers so the user sees what the route is avoiding.
+    obstacles: Vec<(f64, f64)>,
 }
 
 impl MissionOverlay {
-    fn from_scenario(sc: &PlannerScenario) -> Self {
+    /// Build the overlay from the scenario plus the tactical-routing state: the
+    /// A\* path and the cost-grid obstacles are mapped from grid cells to lat/lon
+    /// over the routing bbox so they pin to the basemap with the entity routes.
+    fn from_scenario_with_route(s: &MissionPlannerWorkbenchState) -> Self {
+        let sc = &s.scenario;
         let entities = sc
             .entities
             .iter()
@@ -631,7 +874,36 @@ impl MissionOverlay {
                 route: e.route.iter().map(|wp| (wp.lat, wp.lon)).collect(),
             })
             .collect();
-        Self { entities }
+
+        let bbox = route_bbox(sc);
+        let tactical_route = s
+            .route
+            .as_ref()
+            .map(|path| {
+                path.iter()
+                    .map(|&cell| cell_to_latlon(cell, &s.route_grid, bbox))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        // Snapshot obstacle cell centres (only when a route exists, to keep the
+        // idle map uncluttered) for context.
+        let mut obstacles = Vec::new();
+        if s.route.is_some() {
+            for y in 0..s.route_grid.h {
+                for x in 0..s.route_grid.w {
+                    if s.route_grid.cost_at(x, y).is_infinite() {
+                        obstacles.push(cell_to_latlon((x, y), &s.route_grid, bbox));
+                    }
+                }
+            }
+        }
+
+        Self {
+            entities,
+            tactical_route,
+            obstacles,
+        }
     }
 }
 
@@ -647,6 +919,19 @@ impl walkers::Plugin for MissionOverlay {
         let route_col = egui::Color32::from_rgb(70, 150, 240);
         let wp_col = egui::Color32::from_rgb(170, 200, 240);
         let done_col = egui::Color32::from_rgb(120, 200, 140);
+        // The tactical A* route uses a DISTINCT amber/orange, deliberately unlike
+        // the blue entity routes and every APP-6 affiliation colour.
+        let tac_col = egui::Color32::from_rgb(255, 160, 30);
+        let obstacle_col = egui::Color32::from_rgb(200, 60, 60);
+
+        // Cost-field OBSTACLES (drawn first, under everything) as small red X's.
+        for &(lat, lon) in &self.obstacles {
+            let p = to_px(lat, lon);
+            let r = 2.2;
+            let st = egui::Stroke::new(1.2, obstacle_col.gamma_multiply(0.85));
+            painter.line_segment([p + egui::vec2(-r, -r), p + egui::vec2(r, r)], st);
+            painter.line_segment([p + egui::vec2(-r, r), p + egui::vec2(r, -r)], st);
+        }
 
         // Routes (polylines) + waypoint dots.
         for e in &self.entities {
@@ -657,6 +942,35 @@ impl walkers::Plugin for MissionOverlay {
             for p in &pts {
                 painter.circle_stroke(*p, 2.5, egui::Stroke::new(1.2, wp_col));
             }
+        }
+
+        // The tactical A* route: a thick amber polyline with a dark halo so it
+        // reads over the basemap, plus a green start dot and a red-ringed goal.
+        if self.tactical_route.len() >= 2 {
+            let pts: Vec<egui::Pos2> = self
+                .tactical_route
+                .iter()
+                .map(|&(lat, lon)| to_px(lat, lon))
+                .collect();
+            for w in pts.windows(2) {
+                // Halo first, then the bright route line on top.
+                painter.line_segment(
+                    [w[0], w[1]],
+                    egui::Stroke::new(4.5, egui::Color32::from_black_alpha(170)),
+                );
+                painter.line_segment([w[0], w[1]], egui::Stroke::new(2.6, tac_col));
+            }
+        }
+        // Start / goal markers (shown whenever a route has been computed).
+        if let (Some(&start), Some(&goal)) =
+            (self.tactical_route.first(), self.tactical_route.last())
+        {
+            let sp = to_px(start.0, start.1);
+            let gp = to_px(goal.0, goal.1);
+            painter.circle_filled(sp, 4.0, done_col);
+            painter.circle_stroke(sp, 5.0, egui::Stroke::new(1.5, egui::Color32::BLACK));
+            painter.circle_stroke(gp, 5.0, egui::Stroke::new(2.0, tac_col));
+            painter.circle_filled(gp, 2.5, egui::Color32::from_rgb(240, 80, 80));
         }
 
         // Entity markers: the standard APP-6 / MIL-STD-2525 affiliation FRAME
@@ -804,6 +1118,99 @@ mod tests {
         assert!(names.contains(&"Entity count"));
         assert!(names.contains(&"Playback speed x"));
         assert!(names.contains(&"Affiliation (all)"));
+        // The tactical-routing controls are also discoverable.
+        assert!(names.contains(&"Route start X"));
+        assert!(names.contains(&"Route start Y"));
+        assert!(names.contains(&"Route goal X"));
+        assert!(names.contains(&"Route goal Y"));
+    }
+
+    #[test]
+    fn compute_route_solves_the_default_demo_field() {
+        // The default corner-to-corner problem over the demo field is solvable;
+        // computing it stores a contiguous path and a km-bearing status.
+        let mut s = MissionPlannerWorkbenchState::default();
+        assert!(s.route.is_none());
+        s.compute_route();
+        let path = s.route.as_ref().expect("demo field is solvable");
+        assert_eq!(path.first(), Some(&s.route_start));
+        assert_eq!(path.last(), Some(&s.route_goal));
+        assert!(s.route_status.contains("route:") && s.route_status.contains("km"));
+        // The path must avoid every obstacle in the cost grid.
+        for &(x, y) in path {
+            assert!(s.route_grid.cost_at(x, y).is_finite());
+        }
+    }
+
+    #[test]
+    fn compute_route_reports_no_route_when_endpoint_is_blocked() {
+        let mut s = MissionPlannerWorkbenchState::default();
+        // Make the start cell an obstacle → unreachable, fail-loud status.
+        s.route_grid.cost[0] = f32::INFINITY;
+        s.route_start = (0, 0);
+        s.compute_route();
+        assert!(s.route.is_none());
+        assert!(s.route_status.starts_with("no route"));
+    }
+
+    #[test]
+    fn agent_set_route_coords_update_endpoints() {
+        use crate::agent_commands::AgentValue;
+        let mut s = MissionPlannerWorkbenchState::default();
+        s.agent_set("Route start X", &AgentValue::Int(3)).unwrap();
+        s.agent_set("Route start Y", &AgentValue::Int(4)).unwrap();
+        s.agent_set("Route goal X", &AgentValue::Int(10)).unwrap();
+        s.agent_set("Route goal Y", &AgentValue::Int(9)).unwrap();
+        assert_eq!(s.route_start, (3, 4));
+        assert_eq!(s.route_goal, (10, 9));
+    }
+
+    #[test]
+    fn agent_set_route_coords_reject_out_of_range_and_type() {
+        use crate::agent_commands::AgentValue;
+        let mut s = MissionPlannerWorkbenchState::default();
+        let before = s.route_goal;
+        assert!(s.agent_set("Route goal X", &AgentValue::Int(9999)).is_err());
+        assert!(s.agent_set("Route start Y", &AgentValue::Int(-1)).is_err());
+        // A fractional float is a type error (an integral float like 2.0 is, per
+        // the AgentValue::as_i64 convention, accepted as a coordinate).
+        assert!(s
+            .agent_set("Route start X", &AgentValue::Float(2.5))
+            .is_err());
+        assert_eq!(s.route_goal, before, "a rejected set must not mutate state");
+    }
+
+    #[test]
+    fn route_bridge_helper_computes_route() {
+        let mut app = ValenxApp::default();
+        assert!(app.mission_planner.route.is_none());
+        route(&mut app);
+        assert!(
+            app.mission_planner.route.is_some(),
+            "the route() bridge helper computes a path"
+        );
+    }
+
+    #[test]
+    fn readout_includes_route_status() {
+        let mut s = MissionPlannerWorkbenchState::default();
+        s.compute_route();
+        let r = s.agent_readout().expect("readout present");
+        assert!(
+            r.contains("route:"),
+            "readout should surface the route status: {r}"
+        );
+    }
+
+    #[test]
+    fn cell_to_latlon_maps_corners_into_the_bbox() {
+        let grid = demo_field(ROUTE_GRID_W, ROUTE_GRID_H);
+        let bbox = (37.0, 38.0, -122.5, -121.5);
+        // NW cell (0,0) -> (max_lat, min_lon); SE cell -> (min_lat, max_lon).
+        let nw = cell_to_latlon((0, 0), &grid, bbox);
+        let se = cell_to_latlon((ROUTE_GRID_W - 1, ROUTE_GRID_H - 1), &grid, bbox);
+        assert!((nw.0 - 38.0).abs() < 1e-9 && (nw.1 - (-122.5)).abs() < 1e-9);
+        assert!((se.0 - 37.0).abs() < 1e-9 && (se.1 - (-121.5)).abs() < 1e-9);
     }
 
     #[test]
