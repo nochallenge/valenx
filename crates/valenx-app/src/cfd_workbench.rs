@@ -222,6 +222,19 @@ impl CfdWorkbenchState {
         }
         Ok(())
     }
+
+    /// The current computed-result text for the agent `ReadReadout` bridge (see
+    /// [`crate::agent_commands`]): the same `Result` string the panel renders
+    /// when a solve has produced one, else the last `error`, else `None` when the
+    /// case has not been run yet. Read-only — closes the live-driving loop by
+    /// letting an agent read the answer back after a `RunCommand`/solve.
+    pub fn agent_readout(&self) -> Option<String> {
+        if !self.result.is_empty() {
+            Some(self.result.clone())
+        } else {
+            self.error.clone()
+        }
+    }
 }
 
 /// Draw the CFD Workbench right-side panel. A no-op when the

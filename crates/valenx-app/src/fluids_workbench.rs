@@ -329,6 +329,21 @@ impl FluidsWorkbenchState {
         }
         Ok(())
     }
+
+    /// The current computed-result text for the agent `ReadReadout` bridge (see
+    /// [`crate::agent_commands`]). This workbench keeps its result as a structured
+    /// [`FluidsResult`] and renders a one-line `status` summary (a `✔ …` line on
+    /// success, a `⚠ …` line on error) — that same `status` string is returned
+    /// here. `None` when it is empty, i.e. the pipeline has not been run yet.
+    /// Read-only — lets an agent read the answer back after driving a run,
+    /// closing the live-driving loop.
+    pub fn agent_readout(&self) -> Option<String> {
+        if self.status.is_empty() {
+            None
+        } else {
+            Some(self.status.clone())
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
