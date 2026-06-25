@@ -1636,6 +1636,31 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Survivability / protection workbench
+                    // (valenx-survivability) — the DEFENSIVE / protective side of
+                    // the shared blast/impact physics; no penetration / lethality.
+                    if ui
+                        .checkbox(
+                            &mut self.show_survivability_workbench,
+                            "Survivability / protection",
+                        )
+                        .on_hover_text(
+                            "Show / hide the Survivability / protection Workbench — the \
+                             PROTECTIVE side of blast & impact physics (civil blast-resistant \
+                             design / crash safety): free-field blast loading (Brode / Newmark-\
+                             Hansen) assembled into a Friedlander P(t), the single-degree-of-\
+                             freedom protective-element response (peak deflection, ductility, \
+                             DAF), the pressure-impulse iso-damage diagram with the current \
+                             design point, the minimum armor thickness + areal density that just \
+                             defeats a projectile, and an occupant acceleration-tolerance margin. \
+                             Every output is \"minimum protection to survive threat X\" \u{2014} \
+                             NO penetration, NO lethality, NO warhead model \u{2014} computed in-\
+                             process by valenx-survivability. Research / educational.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Photogrammetry / SfM workbench
                     // (valenx-photogrammetry).
                     if ui
@@ -3493,6 +3518,14 @@ impl eframe::App for ValenxApp {
             // square-law) on valenx-mission-sim. A no-op unless toggled on via
             // View → Mission simulation.
             crate::missionsim_workbench::draw_missionsim_workbench(self, ctx);
+
+            // Survivability / protection Workbench (right) — the DEFENSIVE /
+            // protective side of the shared blast/impact physics (free-field
+            // blast loading + SDOF protective response + pressure-impulse
+            // iso-damage diagram + minimum-armor sizing + occupant tolerance
+            // screen; no penetration / lethality) on valenx-survivability. A
+            // no-op unless toggled on via View → Survivability / protection.
+            crate::survivability_workbench::draw_survivability_workbench(self, ctx);
 
             // Photogrammetry Workbench (right) — native structure-from-motion
             // (synthetic-scene SfM: features/matching/two-view geometry/incremental

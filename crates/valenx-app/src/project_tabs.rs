@@ -246,6 +246,10 @@ pub enum TabKind {
     // -- General constructive mission simulation (discrete-event / agent;
     //    abstract Pk + Lanchester engagement, no lethality) --
     MissionSim,
+    // -- Defensive survivability / protection (blast loading + SDOF protective
+    //    response + P-I diagram + minimum-armor sizing + occupant screen; the
+    //    PROTECTIVE side only, no penetration / lethality) --
+    Survivability,
     // -- Photogrammetry / structure-from-motion --
     Photogrammetry,
     // -- Co-simulation (FMI / HELICS coupling) --
@@ -259,7 +263,7 @@ pub enum TabKind {
 impl TabKind {
     /// Every *template* kind (i.e. excluding [`TabKind::Blank`]), in
     /// `＋ from template`-menu order (grouped via [`Self::group`]).
-    pub const TEMPLATES: [TabKind; 43] = [
+    pub const TEMPLATES: [TabKind; 44] = [
         TabKind::Rocket,
         TabKind::Engine,
         TabKind::Astro,
@@ -299,6 +303,7 @@ impl TabKind {
         TabKind::Uq,
         TabKind::Uas,
         TabKind::MissionSim,
+        TabKind::Survivability,
         TabKind::Photogrammetry,
         TabKind::Cosim,
         TabKind::Autonomy,
@@ -347,6 +352,7 @@ impl TabKind {
             TabKind::Uq => "Simulation",
             TabKind::Uas => "Aerospace",
             TabKind::MissionSim => "Simulation",
+            TabKind::Survivability => "Simulation",
             TabKind::Cosim => "Simulation",
             TabKind::Mbd => "Simulation",
         }
@@ -396,6 +402,7 @@ impl TabKind {
             TabKind::Uq => "Uncertainty quantification",
             TabKind::Uas => "UAS design & counter-UAS",
             TabKind::MissionSim => "Mission simulation (constructive)",
+            TabKind::Survivability => "Survivability / protection",
             TabKind::Photogrammetry => "Photogrammetry / SfM scan",
             TabKind::Cosim => "Co-Simulation (FMI / HELICS)",
             TabKind::Mbd => "Multibody dynamics (robot / contact)",
@@ -448,6 +455,7 @@ impl TabKind {
             TabKind::Uq => app.show_uq_workbench = true,
             TabKind::Uas => app.show_uas_workbench = true,
             TabKind::MissionSim => app.show_missionsim_workbench = true,
+            TabKind::Survivability => app.show_survivability_workbench = true,
             TabKind::Photogrammetry => app.show_photogrammetry_workbench = true,
             TabKind::Cosim => app.show_cosim_workbench = true,
             TabKind::Mbd => app.show_mbd_workbench = true,
@@ -506,6 +514,7 @@ impl TabKind {
             "uq" | "uncertainty" => Some(TabKind::Uq),
             "uas" | "drone" | "counteruas" => Some(TabKind::Uas),
             "missionsim" | "mission" | "wargame" => Some(TabKind::MissionSim),
+            "survivability" | "protection" | "blast" => Some(TabKind::Survivability),
             "photogrammetry" | "sfm" | "scan" => Some(TabKind::Photogrammetry),
             "cosim" | "co-simulation" | "cosimulation" | "fmi" => Some(TabKind::Cosim),
             "mbd" | "multibody" | "robot" => Some(TabKind::Mbd),
@@ -1268,6 +1277,12 @@ pub const ALL_WORKBENCH_KINDS: &[&str] = &[
     // Pk input + Lanchester square-law ODE; no lethality / targeting / kill-chain)
     // — surfaced by the Mission-Simulation workbench.
     "missionsim",
+    // In-house defensive survivability / protection (free-field blast loading +
+    // SDOF protective response + pressure-impulse iso-damage diagram + minimum-
+    // armor sizing + occupant tolerance screen; PROTECTIVE side only, no
+    // penetration / lethality) — surfaced by the Survivability / protection
+    // workbench.
+    "survivability",
     // Native structure-from-motion / photogrammetry (COLMAP-style SfM) — surfaced by the Photogrammetry workbench.
     "photogrammetry",
     // In-house FMI / HELICS co-simulation coupling — surfaced by the Co-Simulation workbench.
@@ -1447,6 +1462,7 @@ pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
         // here only the UAS-specific ids route to the UAS workbench flag.
         "uas" | "counteruas" => app.show_uas_workbench = on,
         "missionsim" | "mission" | "wargame" => app.show_missionsim_workbench = on,
+        "survivability" | "protection" | "blast" => app.show_survivability_workbench = on,
         "photogrammetry" | "sfm" | "scan" => app.show_photogrammetry_workbench = on,
         "cosim" | "co-simulation" | "cosimulation" | "fmi" => app.show_cosim_workbench = on,
         "ppi" | "interactome" | "network" => app.show_ppi_workbench = on,
@@ -1511,6 +1527,7 @@ fn clear_all_workbenches(app: &mut ValenxApp) {
     app.show_uq_workbench = false;
     app.show_uas_workbench = false;
     app.show_missionsim_workbench = false;
+    app.show_survivability_workbench = false;
     app.show_photogrammetry_workbench = false;
     app.show_cosim_workbench = false;
     app.show_ppi_workbench = false;
@@ -3012,6 +3029,7 @@ mod tests {
             ("uq", TabKind::Uq),
             ("uas", TabKind::Uas),
             ("missionsim", TabKind::MissionSim),
+            ("survivability", TabKind::Survivability),
             ("photogrammetry", TabKind::Photogrammetry),
             ("cosim", TabKind::Cosim),
             ("mbd", TabKind::Mbd),
@@ -3039,6 +3057,8 @@ mod tests {
         assert_eq!(TabKind::from_id("counteruas"), Some(TabKind::Uas));
         assert_eq!(TabKind::from_id("mission"), Some(TabKind::MissionSim));
         assert_eq!(TabKind::from_id("wargame"), Some(TabKind::MissionSim));
+        assert_eq!(TabKind::from_id("protection"), Some(TabKind::Survivability));
+        assert_eq!(TabKind::from_id("blast"), Some(TabKind::Survivability));
         // Unknown ids (and Blank, which has no id) map to None.
         assert_eq!(TabKind::from_id("blank"), None);
         assert_eq!(TabKind::from_id("nope"), None);
@@ -4444,6 +4464,7 @@ mod tests {
             app.show_uq_workbench,
             app.show_uas_workbench,
             app.show_missionsim_workbench,
+            app.show_survivability_workbench,
             app.show_photogrammetry_workbench,
             app.show_cosim_workbench,
             app.show_ppi_workbench,
@@ -4505,6 +4526,9 @@ mod tests {
             TabKind::Uq => crate::uq_workbench::draw_uq_workbench(app, ctx),
             TabKind::Uas => crate::uas_workbench::draw_uas_workbench(app, ctx),
             TabKind::MissionSim => crate::missionsim_workbench::draw_missionsim_workbench(app, ctx),
+            TabKind::Survivability => {
+                crate::survivability_workbench::draw_survivability_workbench(app, ctx)
+            }
             TabKind::Photogrammetry => {
                 crate::photogrammetry_workbench::draw_photogrammetry_workbench(app, ctx)
             }
@@ -4805,8 +4829,8 @@ mod headless_ui_tests {
         }
         assert_eq!(
             ALL_WORKBENCH_KINDS.len(),
-            146,
-            "145 `show_*_workbench` fields + the meshtoolbox alias"
+            147,
+            "146 `show_*_workbench` fields + the meshtoolbox alias"
         );
         assert!(ALL_WORKBENCH_KINDS.contains(&"meshtoolbox"));
         // A couple of representative kinds are present.

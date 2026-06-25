@@ -8065,6 +8065,7 @@ dependencies = [
  "valenx-strainrosette",
  "valenx-structpredict",
  "valenx-surface",
+ "valenx-survivability",
  "valenx-sysbio",
  "valenx-techdraw",
  "valenx-thermalexpansion",
