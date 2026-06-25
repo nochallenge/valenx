@@ -1278,33 +1278,42 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
             }
         }
         AgentCommand::RunCommand { id } => {
-            // Resolve `id` against the EXISTING command-palette registry and
-            // invoke the matching command through the SAME `(cmd.invoke)(app)`
-            // function pointer a user click / Ctrl+P selection runs (see
-            // `commands::dispatch`'s `Static` arm) — no action logic is
-            // duplicated here. An unknown id is a feed note + no-op (no panic).
-            match crate::commands::static_commands()
-                .iter()
-                .find(|c| c.id.0 == id)
-            {
-                Some(cmd) => {
-                    (cmd.invoke)(app);
-                    crate::assistant_workbench::append_feed_note(
-                        app,
-                        ch,
-                        "Claude",
-                        &format!("ran {id}"),
-                        "result",
-                    );
-                }
-                None => {
-                    crate::assistant_workbench::append_feed_note(
-                        app,
-                        ch,
-                        "Claude",
-                        &format!("unknown command id: {id}"),
-                        "warn",
-                    );
+            // A few workbench RUN actions live only as in-panel buttons (no
+            // palette command), but still need to be bridge-drivable. Handle
+            // those ids here BEFORE the palette lookup; they resolve the active
+            // workbench and fire the SAME `*_and_store` path the button calls.
+            // Bridge-only on purpose — kept out of the user-facing palette.
+            if matches!(id.as_str(), "missionsim.run" | "missionsim.run-monte-carlo") {
+                run_missionsim_bridge(app, ch, &id);
+            } else {
+                // Resolve `id` against the EXISTING command-palette registry and
+                // invoke the matching command through the SAME `(cmd.invoke)(app)`
+                // function pointer a user click / Ctrl+P selection runs (see
+                // `commands::dispatch`'s `Static` arm) — no action logic is
+                // duplicated here. An unknown id is a feed note + no-op (no panic).
+                match crate::commands::static_commands()
+                    .iter()
+                    .find(|c| c.id.0 == id)
+                {
+                    Some(cmd) => {
+                        (cmd.invoke)(app);
+                        crate::assistant_workbench::append_feed_note(
+                            app,
+                            ch,
+                            "Claude",
+                            &format!("ran {id}"),
+                            "result",
+                        );
+                    }
+                    None => {
+                        crate::assistant_workbench::append_feed_note(
+                            app,
+                            ch,
+                            "Claude",
+                            &format!("unknown command id: {id}"),
+                            "warn",
+                        );
+                    }
                 }
             }
         }
@@ -1608,6 +1617,42 @@ fn resolve_target_kind(app: &ValenxApp, workbench: Option<&str>) -> Option<TabKi
         Some(id) => TabKind::from_id(id),
         None => app.tab_bar.active_kind(),
     }
+}
+
+/// Fire a Mission-simulation RUN action from the bridge. The Run / Run
+/// Monte-Carlo actions exist only as in-panel buttons; this routes the two
+/// bridge ids (`missionsim.run`, `missionsim.run-monte-carlo`) to the SAME
+/// `*_and_store` functions the buttons call, so a `RunCommand` drives them.
+///
+/// The active tab must be a [`TabKind::MissionSim`] (so the run lands on the
+/// workbench the user is looking at); otherwise this posts a fail-loud `warn`
+/// note and changes nothing. After a run it acks with the workbench status line
+/// (which already carries the single-run summary, plus the Monte-Carlo headline
+/// for the ensemble path); `read_readout` then returns the full MC summary.
+fn run_missionsim_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::MissionSim) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Mission-simulation workbench"),
+            "warn",
+        );
+        return;
+    }
+    match id {
+        "missionsim.run" => crate::missionsim_workbench::run_and_store(app),
+        "missionsim.run-monte-carlo" => crate::missionsim_workbench::run_monte_carlo_and_store(app),
+        _ => unreachable!("run_missionsim_bridge called with a non-missionsim id"),
+    }
+    let status = app.missionsim.status.clone();
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {status}"),
+        "result",
+    );
 }
 
 /// Apply one [`SetControl`](AgentCommand::SetControl): resolve the target

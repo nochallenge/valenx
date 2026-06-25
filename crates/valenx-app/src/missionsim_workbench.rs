@@ -642,6 +642,15 @@ pub fn draw_missionsim_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
 // ---------------------------------------------------------------------------
 
 fn missionsim_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
+    // The 21 controls + Monte-Carlo group + the viewport viz overflow the panel,
+    // so wrap the whole body in a vertical scroll area (auto_shrink([false,false])
+    // so it fills the panel width/height and shows a scrollbar when tall).
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| missionsim_workbench_body_inner(app, ui));
+}
+
+fn missionsim_workbench_body_inner(app: &mut ValenxApp, ui: &mut egui::Ui) {
     ui.label(
         egui::RichText::new(
             "General discrete-event / agent constructive simulation \u{00B7} \
