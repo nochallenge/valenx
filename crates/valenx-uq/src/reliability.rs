@@ -396,7 +396,8 @@ where
         let beta_new = l2_norm_vec(&u_new);
 
         // Check convergence on β.
-        if (beta_new - beta_prev).abs() < config.tol {
+        let delta_beta = (beta_new - beta_prev).abs();
+        if delta_beta < config.tol {
             u = u_new;
             iters = iter + 1;
             break;
@@ -407,8 +408,7 @@ where
         if iter + 1 == config.max_iter {
             return Err(UqError::NotConverged(format!(
                 "HLRF did not converge in {} iterations (|Δβ| = {:.2e})",
-                config.max_iter,
-                (beta_new - beta_prev).abs()
+                config.max_iter, delta_beta
             )));
         }
     }

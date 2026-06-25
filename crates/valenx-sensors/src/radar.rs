@@ -20,7 +20,7 @@
 //!   gain is maximal at boresight and falls off symmetrically with the
 //!   off-boresight angle (a Gaussian beam matched to a half-power beamwidth, or
 //!   the textbook `sinc²` aperture pattern).
-//! * **Doppler** — the radial-velocity shift `fd = 2·vr/λ` (a closing target,
+//! * **Doppler** — the radial-velocity shift `fd = −2·vr/λ` (a closing target,
 //!   `vr < 0` by the sign convention below, gives a positive `fd`).
 //! * **Detection** — the SNR is formed against a thermal-noise floor
 //!   (`kTB` scaled by the receiver noise figure) and compared to a configured
