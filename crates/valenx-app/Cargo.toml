@@ -240,6 +240,16 @@ valenx-uas           = { path = "../valenx-uas" }
 # lethality / targeting / kill-chain. Composes valenx-uas detection geometry;
 # pure-Rust (nalgebra + a seeded in-crate PRNG), no new external deps.
 valenx-mission-sim   = { path = "../valenx-mission-sim" }
+# Defensive survivability & protection (M7 of the defense M&S roadmap) — the
+# PROTECTIVE side of the shared blast/impact physics: free-field blast loading
+# (Brode/Newmark-Hansen), SDOF protective response + the pressure-impulse
+# iso-damage diagram (reusing the valenx-fem transient solver), minimum-armor
+# sizing (plug-shear ballistic-limit), and an occupant tolerance screen —
+# surfaced by the Survivability / protection workbench
+# (src/survivability_workbench.rs). Every output is "minimum protection to
+# survive threat X"; NO penetration / lethality / warhead model. Composes
+# valenx-fem; pure-Rust (nalgebra), no new external deps.
+valenx-survivability = { path = "../valenx-survivability" }
 # Native structure-from-motion / photogrammetry (COLMAP-style SfM: FAST/ORB
 # features, descriptor matching, two-view geometry, the incremental mapper +
 # bundle adjustment) — surfaced by the Photogrammetry workbench

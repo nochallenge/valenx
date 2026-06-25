@@ -223,6 +223,7 @@ pub mod springs_workbench;
 pub mod statics_workbench;
 pub mod straingauge_workbench;
 pub mod strainrosette_workbench;
+pub mod survivability_workbench;
 pub mod thermalexpansion_workbench;
 pub mod thermistor_workbench;
 pub mod thermocouple_workbench;
@@ -2050,6 +2051,22 @@ pub struct ValenxApp {
     /// tracks + Lanchester force-vs-time plot + outcome metrics over the
     /// in-process `valenx-mission-sim` engine).
     pub missionsim: crate::missionsim_workbench::MissionSimWorkbenchState,
+
+    /// Whether the right-side Survivability / protection workbench panel is
+    /// visible. Defaults to `false`; toggled from the View menu or opened by the
+    /// agent bridge under the id `"survivability"` (aliases `"protection"` /
+    /// `"blast"`). Wraps `valenx-survivability` — the DEFENSIVE / protective side
+    /// of the shared blast/impact physics: free-field blast loading, SDOF
+    /// protective response + the pressure-impulse iso-damage diagram, minimum
+    /// armor sizing, and an occupant tolerance screen. Every output is "minimum
+    /// protection to survive threat X"; no penetration / lethality is modeled.
+    /// See [`crate::survivability_workbench`].
+    pub show_survivability_workbench: bool,
+    /// Form + result state for the Survivability / protection workbench
+    /// (Friedlander pressure-time curve + P-I iso-damage diagram with the design
+    /// point + armor / occupant readouts over the in-process
+    /// `valenx-survivability` crate).
+    pub survivability: crate::survivability_workbench::SurvivabilityWorkbenchState,
 
     /// Whether the right-side Photogrammetry / SfM scan workbench panel is
     /// visible. Defaults to `false`; toggled from the View menu or opened by the
