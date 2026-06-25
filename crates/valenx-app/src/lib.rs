@@ -176,6 +176,7 @@ pub mod plate_workbench;
 pub mod pneumatics_workbench;
 pub mod popdynamics_workbench;
 pub mod powerfactor_workbench;
+pub mod ppi_workbench;
 pub mod pressurevessel_workbench;
 /// Per-file registry of agent-bridge `show_3d` mesh producers (replaces the old
 /// per-kind reducer arms; new 3-D tools register from their own module).
@@ -2045,6 +2046,20 @@ pub struct ValenxApp {
     /// coordinator: exchanged-signal history + coupling iterations + error vs a
     /// monolithic reference).
     pub cosim: crate::cosim_workbench::CosimWorkbenchState,
+
+    /// Whether the right-side Protein-interaction (PPI / interactome) workbench
+    /// panel is visible. Defaults to `false`; toggled from the View menu or
+    /// opened by the agent bridge under the id `"ppi"` (aliases `"interactome"`
+    /// / `"network"`). Wraps `valenx-ppi` (the in-house sequence-first
+    /// coevolution PPI engine — APC-corrected mutual-information over a paired
+    /// MSA folded into a fused [0,1] score, plus an all-vs-all interactome
+    /// screen). See [`crate::ppi_workbench`].
+    pub show_ppi_workbench: bool,
+    /// Form + result state for the PPI / interactome workbench (a named demo
+    /// host × pathogen interactome screened through the in-process valenx-ppi
+    /// engine: the real scored interaction network + degree / betweenness
+    /// centrality + BFS shortest path computed over it).
+    pub ppi: crate::ppi_workbench::PpiWorkbenchState,
 
     /// Whether the right-side Autonomy V&V workbench panel is visible. Defaults
     /// to `false`; toggled from the View menu or opened by the agent bridge

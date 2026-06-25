@@ -429,6 +429,11 @@ valenx-rnastruct     = { path = "../valenx-rnastruct" }
 valenx-md            = { path = "../valenx-md" }
 valenx-cheminf       = { path = "../valenx-cheminf" }
 valenx-biostruct     = { path = "../valenx-biostruct" }
+# In-house sequence-first protein-protein interaction / interactome
+# inference (APC-corrected MI coevolution -> fused PPI score -> ranked
+# all-vs-all screen), surfaced by the PPI / interactome workbench
+# (src/ppi_workbench.rs).
+valenx-ppi           = { path = "../valenx-ppi" }
 valenx-qchem         = { path = "../valenx-qchem" }
 valenx-genomics      = { path = "../valenx-genomics" }
 valenx-sysbio        = { path = "../valenx-sysbio" }

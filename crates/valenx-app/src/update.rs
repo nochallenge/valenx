@@ -1633,6 +1633,28 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Protein-interaction (PPI / interactome)
+                    // workbench (valenx-ppi).
+                    if ui
+                        .checkbox(
+                            &mut self.show_ppi_workbench,
+                            "Protein interaction (PPI)",
+                        )
+                        .on_hover_text(
+                            "Show / hide the PPI / interactome Workbench — a named demo host \
+                             \u{00D7} pathogen interactome (deterministic coevolving orthologue \
+                             alignments) screened through the in-house valenx-ppi engine \
+                             (APC-corrected mutual-information coevolution -> a fused [0,1] PPI \
+                             score per pair -> a ranked all-vs-all screen), drawing the \
+                             interaction network with degree / betweenness centrality + BFS \
+                             shortest path computed over the real scored edges. Research / \
+                             educational coevolution heuristic \u{2014} ranks candidates, never \
+                             a verdict; every result requires human + wet-lab review.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Autonomy V&V workbench (valenx-autonomy-vnv).
                     if ui
                         .checkbox(&mut self.show_autonomy_workbench, "Autonomy V&V")
@@ -3409,6 +3431,13 @@ impl eframe::App for ValenxApp {
             // fixed-point implicit coupling). A no-op unless toggled on via
             // View → Co-Simulation.
             crate::cosim_workbench::draw_cosim_workbench(self, ctx);
+
+            // PPI / interactome Workbench (right) — a native demo host × pathogen
+            // interactome screened through the in-house valenx-ppi coevolution
+            // engine (fused PPI scores -> interaction network -> centrality /
+            // shortest path). A no-op unless toggled on via View → Protein
+            // interaction (PPI).
+            crate::ppi_workbench::draw_ppi_workbench(self, ctx);
 
             // Autonomy V&V Workbench (right) — native scenario-based verification of
             // an autonomous vehicle + simulated sensors on valenx-autonomy-vnv. A

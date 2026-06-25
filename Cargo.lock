@@ -8018,6 +8018,7 @@ dependencies = [
  "valenx-popdynamics",
  "valenx-popgen",
  "valenx-powerfactor",
+ "valenx-ppi",
  "valenx-pressure-vessel",
  "valenx-projectile",
  "valenx-psychrometrics",

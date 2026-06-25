@@ -253,6 +253,7 @@ fn tab_kind_id(kind: TabKind) -> String {
         TabKind::Genetics => "genetics",
         TabKind::Neuro => "neuro",
         TabKind::VariantEffect => "varianteffect",
+        TabKind::Ppi => "ppi",
         TabKind::Sensors => "sensors",
         TabKind::Autonomy => "autonomy",
         TabKind::Fluids => "fluids",
