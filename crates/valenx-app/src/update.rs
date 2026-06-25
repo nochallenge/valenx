@@ -529,16 +529,41 @@ impl eframe::App for ValenxApp {
                              (wind tunnel), and Astro (launch). Toggle whichever you're \
                              working in.",
                         );
+                    // Domain-focus filter: when a focus category is set, the
+                    // primary-workbench toggles below are limited to that
+                    // domain's workbenches (those that map to a `TabKind`). The
+                    // specialised single-purpose calculators further down have
+                    // no `TabKind` category and so are always listed. `None`
+                    // ("All") lists everything. Captured once so each gate is a
+                    // cheap `in_focus` check with no per-toggle `self` re-borrow.
+                    use crate::project_tabs::TabKind;
+                    let view_focus = self.focus_category.clone();
+                    let vf = view_focus.as_deref();
+                    if let Some(cat) = vf {
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "Focus: {cat} — domain-filtered (Focus picker in ribbon)"
+                            ))
+                            .weak()
+                            .small(),
+                        )
+                        .on_hover_text(
+                            "Only this domain's primary workbenches are listed. \
+                             Set Focus back to \"All\" in the ribbon to see every \
+                             workbench again.",
+                        );
+                    }
                     // Toggle the right-side Mesh Toolbox. Hidden by
                     // default once flipped off; reopen from here or
                     // from the command palette.
-                    if ui
-                        .checkbox(&mut self.show_mesh_toolbox, "Mesh Toolbox")
-                        .on_hover_text(
-                            "Show / hide the right-side Mesh Toolbox panel \
-                             (Inspector + Transformations + Cut plane + Repair).",
-                        )
-                        .changed()
+                    if TabKind::MeshToolbox.in_focus_of(vf)
+                        && ui
+                            .checkbox(&mut self.show_mesh_toolbox, "Mesh Toolbox")
+                            .on_hover_text(
+                                "Show / hide the right-side Mesh Toolbox panel \
+                                 (Inspector + Transformations + Cut plane + Repair).",
+                            )
+                            .changed()
                     {
                         ui.close_menu();
                     }
@@ -547,17 +572,18 @@ impl eframe::App for ValenxApp {
                     // alignment, phylogenetics, RNA folding, MD,
                     // cheminformatics, quantum chemistry, genomics,
                     // docking, gene editing, …). Off by default.
-                    if ui
-                        .checkbox(&mut self.show_genetics_workbench, "Genetics Workbench")
-                        .on_hover_text(
-                            "Show / hide the right-side Genetics Workbench — 15 native \
-                             computational-biology panels (sequence, alignment, \
-                             phylogenetics, population genetics, RNA structure, RNA \
-                             design, molecular dynamics, cheminformatics, macromolecular \
-                             structure, quantum chemistry, genomics, systems biology, \
-                             docking, gene editing, structure prediction).",
-                        )
-                        .changed()
+                    if TabKind::Genetics.in_focus_of(vf)
+                        && ui
+                            .checkbox(&mut self.show_genetics_workbench, "Genetics Workbench")
+                            .on_hover_text(
+                                "Show / hide the right-side Genetics Workbench — 15 native \
+                                 computational-biology panels (sequence, alignment, \
+                                 phylogenetics, population genetics, RNA structure, RNA \
+                                 design, molecular dynamics, cheminformatics, macromolecular \
+                                 structure, quantum chemistry, genomics, systems biology, \
+                                 docking, gene editing, structure prediction).",
+                            )
+                            .changed()
                     {
                         // When the Genetics Workbench is first opened,
                         // auto-switch the central viewport to the 2D DNA /
@@ -577,18 +603,19 @@ impl eframe::App for ValenxApp {
                     // engine (virtual wind tunnel: drag/lift/moment
                     // coefficients, Cp / flow fields, AoA polar sweep).
                     // Off by default.
-                    if ui
-                        .checkbox(
-                            &mut self.show_aero_workbench,
-                            "Aerodynamics / Wind Tunnel",
-                        )
-                        .on_hover_text(
-                            "Show / hide the right-side Wind Tunnel workbench — a \
-                             virtual wind tunnel (3-D external-aerodynamics CFD): \
-                             drag / lift / moment coefficients, Cp and flow-field \
-                             visualization, and an angle-of-attack polar sweep.",
-                        )
-                        .changed()
+                    if TabKind::Aero.in_focus_of(vf)
+                        && ui
+                            .checkbox(
+                                &mut self.show_aero_workbench,
+                                "Aerodynamics / Wind Tunnel",
+                            )
+                            .on_hover_text(
+                                "Show / hide the right-side Wind Tunnel workbench — a \
+                                 virtual wind tunnel (3-D external-aerodynamics CFD): \
+                                 drag / lift / moment coefficients, Cp and flow-field \
+                                 visualization, and an angle-of-attack polar sweep.",
+                            )
+                            .changed()
                     {
                         ui.close_menu();
                     }
@@ -596,50 +623,53 @@ impl eframe::App for ValenxApp {
                     // finite-element analysis (linear-static bending +
                     // modal natural frequencies) on valenx-fem's
                     // in-process solvers. Off by default.
-                    if ui
-                        .checkbox(&mut self.show_fem_workbench, "FEM Workbench")
-                        .on_hover_text(
-                            "Show / hide the right-side FEM Workbench — native \
-                             finite-element analysis (linear-static bending + modal \
-                             natural frequencies) on a built-in structured mesh, \
-                             solved in-process by valenx-fem (no external solver).",
-                        )
-                        .changed()
+                    if TabKind::Fem.in_focus_of(vf)
+                        && ui
+                            .checkbox(&mut self.show_fem_workbench, "FEM Workbench")
+                            .on_hover_text(
+                                "Show / hide the right-side FEM Workbench — native \
+                                 finite-element analysis (linear-static bending + modal \
+                                 natural frequencies) on a built-in structured mesh, \
+                                 solved in-process by valenx-fem (no external solver).",
+                            )
+                            .changed()
                     {
                         ui.close_menu();
                     }
                     // Toggle the right-side Black-Hole / Relativity workbench —
                     // native general relativity (Kerr–Newman observables,
                     // thermodynamics, shadow ray-tracer) on valenx-relativity.
-                    if ui
-                        .checkbox(&mut self.show_blackhole_workbench, "Black Hole")
-                        .on_hover_text(
-                            "Show / hide the right-side Black-Hole / Relativity \
-                             workbench — pick a Kerr–Newman spacetime and read \
-                             horizons, photon sphere, ISCO, shadow radius, \
-                             redshift and Hawking thermodynamics, plus a \
-                             ray-traced shadow image, on the in-house \
-                             valenx-relativity engine.",
-                        )
-                        .changed()
+                    if TabKind::BlackHole.in_focus_of(vf)
+                        && ui
+                            .checkbox(&mut self.show_blackhole_workbench, "Black Hole")
+                            .on_hover_text(
+                                "Show / hide the right-side Black-Hole / Relativity \
+                                 workbench — pick a Kerr–Newman spacetime and read \
+                                 horizons, photon sphere, ISCO, shadow radius, \
+                                 redshift and Hawking thermodynamics, plus a \
+                                 ray-traced shadow image, on the in-house \
+                                 valenx-relativity engine.",
+                            )
+                            .changed()
                     {
                         ui.close_menu();
                     }
                     // Toggle the right-side Rotor / Drone (BEMT) workbench —
                     // native propeller / rotor blade-element-momentum-theory
                     // performance on valenx-rotor.
-                    if ui
-                        .checkbox(&mut self.show_rotor_workbench, "Rotor / Drone (BEMT)")
-                        .on_hover_text(
-                            "Show / hide the right-side Rotor / Drone (BEMT) \
-                             workbench — set the blade geometry (count, tip & hub \
-                             radius, radial chord/twist stations) and operating \
-                             point (rpm, freestream, air density), then read \
-                             thrust, torque, power, efficiency, hover figure of \
-                             merit and per-element aerodynamics from the in-house \
-                             valenx-rotor blade-element-momentum engine.",
-                        )
-                        .changed()
+                    if TabKind::Rotor.in_focus_of(vf)
+                        && ui
+                            .checkbox(&mut self.show_rotor_workbench, "Rotor / Drone (BEMT)")
+                            .on_hover_text(
+                                "Show / hide the right-side Rotor / Drone (BEMT) \
+                                 workbench — set the blade geometry (count, tip & hub \
+                                 radius, radial chord/twist stations) and operating \
+                                 point (rpm, freestream, air density), then read \
+                                 thrust, torque, power, efficiency, hover figure of \
+                                 merit and per-element aerodynamics from the in-house \
+                                 valenx-rotor blade-element-momentum engine.",
+                            )
+                            .changed()
                     {
                         ui.close_menu();
                     }
@@ -661,15 +691,16 @@ impl eframe::App for ValenxApp {
                     // incompressible laminar CFD (SIMPLE): the lid-driven
                     // cavity + developing channel-flow cases on
                     // valenx-cfd-native. Off by default.
-                    if ui
-                        .checkbox(&mut self.show_cfd_workbench, "CFD Workbench")
-                        .on_hover_text(
-                            "Show / hide the right-side CFD Workbench — native 2-D \
-                             incompressible laminar CFD (the SIMPLE algorithm): the \
-                             lid-driven cavity and developing channel-flow benchmarks, \
-                             solved in-process by valenx-cfd-native (no external solver).",
-                        )
-                        .changed()
+                    if TabKind::Cfd.in_focus_of(vf)
+                        && ui
+                            .checkbox(&mut self.show_cfd_workbench, "CFD Workbench")
+                            .on_hover_text(
+                                "Show / hide the right-side CFD Workbench — native 2-D \
+                                 incompressible laminar CFD (the SIMPLE algorithm): the \
+                                 lid-driven cavity and developing channel-flow benchmarks, \
+                                 solved in-process by valenx-cfd-native (no external solver).",
+                            )
+                            .changed()
                     {
                         ui.close_menu();
                     }
@@ -677,28 +708,30 @@ impl eframe::App for ValenxApp {
                     // native ab-initio MD (AIMD): small molecules move and
                     // react in 3-D under first-principles quantum forces
                     // (valenx-reactdyn). Off by default.
-                    if ui
-                        .checkbox(&mut self.show_reactdyn_workbench, "Reaction Dynamics")
-                        .on_hover_text(
-                            "Show / hide the right-side Reaction Dynamics workbench — native \
-                             ab-initio molecular dynamics (Born-Oppenheimer AIMD): watch small \
-                             molecules move and react under first-principles quantum forces, \
-                             solved in-process by valenx-reactdyn.",
-                        )
-                        .changed()
+                    if TabKind::Reactdyn.in_focus_of(vf)
+                        && ui
+                            .checkbox(&mut self.show_reactdyn_workbench, "Reaction Dynamics")
+                            .on_hover_text(
+                                "Show / hide the right-side Reaction Dynamics workbench — native \
+                                 ab-initio molecular dynamics (Born-Oppenheimer AIMD): watch small \
+                                 molecules move and react under first-principles quantum forces, \
+                                 solved in-process by valenx-reactdyn.",
+                            )
+                            .changed()
                     {
                         ui.close_menu();
                     }
                     // Toggle the right-side Springs Workbench — native
                     // helical-spring design (valenx-springs). Off by default.
-                    if ui
-                        .checkbox(&mut self.show_springs_workbench, "Springs")
-                        .on_hover_text(
-                            "Show / hide the right-side Springs Workbench — native helical-spring \
-                             design: spring index, axial stiffness, Wahl factor, the diameters, \
-                             pitch, and developed wire length, computed in-process by valenx-springs.",
-                        )
-                        .changed()
+                    if TabKind::Springs.in_focus_of(vf)
+                        && ui
+                            .checkbox(&mut self.show_springs_workbench, "Springs")
+                            .on_hover_text(
+                                "Show / hide the right-side Springs Workbench — native helical-spring \
+                                 design: spring index, axial stiffness, Wahl factor, the diameters, \
+                                 pitch, and developed wire length, computed in-process by valenx-springs.",
+                            )
+                            .changed()
                     {
                         ui.close_menu();
                     }
@@ -904,14 +937,15 @@ impl eframe::App for ValenxApp {
                     }
                     // Toggle the right-side Gears Workbench — native
                     // involute-gear design (valenx-gears). Off by default.
-                    if ui
-                        .checkbox(&mut self.show_gears_workbench, "Gears")
-                        .on_hover_text(
-                            "Show / hide the right-side Gears Workbench — native involute-gear \
-                             design: circular pitch, the pitch / base / addendum / dedendum \
-                             diameters, and the meshing gear ratio, computed in-process by valenx-gears.",
-                        )
-                        .changed()
+                    if TabKind::Gears.in_focus_of(vf)
+                        && ui
+                            .checkbox(&mut self.show_gears_workbench, "Gears")
+                            .on_hover_text(
+                                "Show / hide the right-side Gears Workbench — native involute-gear \
+                                 design: circular pitch, the pitch / base / addendum / dedendum \
+                                 diameters, and the meshing gear ratio, computed in-process by valenx-gears.",
+                            )
+                            .changed()
                     {
                         ui.close_menu();
                     }
@@ -1063,7 +1097,8 @@ impl eframe::App for ValenxApp {
                     }
                     // Toggle the right-side Geomatics Workbench — native
                     // geodesic calculations (valenx-geomatics). Off by default.
-                    if ui
+                    if TabKind::Geomatics.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_geomatics_workbench, "Geomatics")
                         .on_hover_text(
                             "Show / hide the right-side Geomatics Workbench — native geodesic \
@@ -1276,7 +1311,8 @@ impl eframe::App for ValenxApp {
                     }
                     // Toggle the right-side Piping Workbench — native
                     // pipe-section sizing (valenx-piping). Off by default.
-                    if ui
+                    if TabKind::Piping.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_piping_workbench, "Piping")
                         .on_hover_text(
                             "Show / hide the right-side Piping Workbench — native pipe-section \
@@ -1479,7 +1515,8 @@ impl eframe::App for ValenxApp {
                     }
                     // Toggle the right-side Collision Workbench — native AABB
                     // geometry + overlap tests (valenx-collision). Off by default.
-                    if ui
+                    if TabKind::Collision.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_collision_workbench, "Collision")
                         .on_hover_text(
                             "Show / hide the right-side Collision Workbench — native AABB \
@@ -1538,7 +1575,8 @@ impl eframe::App for ValenxApp {
                         ui.close_menu();
                     }
                     // Toggle the right-side SPH Fluids workbench (valenx-fluids).
-                    if ui
+                    if TabKind::Fluids.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_fluids_workbench, "SPH Fluids")
                         .on_hover_text(
                             "Show / hide the Fluids (SPH) Workbench — native particle-based \
@@ -1550,7 +1588,8 @@ impl eframe::App for ValenxApp {
                         ui.close_menu();
                     }
                     // Toggle the right-side Ocean workbench (valenx-ocean).
-                    if ui
+                    if TabKind::Ocean.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_ocean_workbench, "Ocean (waves + buoyancy)")
                         .on_hover_text(
                             "Show / hide the Ocean Workbench — native sum-of-N Gerstner \
@@ -1563,7 +1602,8 @@ impl eframe::App for ValenxApp {
                         ui.close_menu();
                     }
                     // Toggle the right-side ROM workbench (valenx-rom).
-                    if ui
+                    if TabKind::Rom.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_rom_workbench, "Reduced-order model (POD)")
                         .on_hover_text(
                             "Show / hide the ROM Workbench — native reduced-order modelling \
@@ -1744,7 +1784,8 @@ impl eframe::App for ValenxApp {
                         ui.close_menu();
                     }
                     // Toggle the right-side Autonomy V&V workbench (valenx-autonomy-vnv).
-                    if ui
+                    if TabKind::Autonomy.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_autonomy_workbench, "Autonomy V&V")
                         .on_hover_text(
                             "Show / hide the Autonomy V&V Workbench — native scenario-based \
@@ -1836,7 +1877,8 @@ impl eframe::App for ValenxApp {
                     }
                     // Toggle the right-side Sheet Metal Workbench — native bend
                     // allowance / deduction (valenx-sheet-metal). Off by default.
-                    if ui
+                    if TabKind::Sheetmetal.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_sheetmetal_workbench, "Sheet Metal")
                         .on_hover_text(
                             "Show / hide the right-side Sheet Metal Workbench — native bend \
@@ -1850,7 +1892,8 @@ impl eframe::App for ValenxApp {
                     }
                     // Toggle the right-side Field Statistics Workbench — descriptive
                     // statistics over a pasted number list (valenx-fields). Off by default.
-                    if ui
+                    if TabKind::Fields.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_fields_workbench, "Field Statistics")
                         .on_hover_text(
                             "Show / hide the right-side Field Statistics Workbench — descriptive \
@@ -1932,7 +1975,8 @@ impl eframe::App for ValenxApp {
                     }
                     // Toggle the right-side Fasteners Workbench — ISO 4017 hex-bolt
                     // dimensions (valenx-fasteners). Off by default.
-                    if ui
+                    if TabKind::Fasteners.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_fasteners_workbench, "Fasteners")
                         .on_hover_text(
                             "Show / hide the right-side Fasteners Workbench — ISO 4017 hex-bolt \
@@ -2153,7 +2197,8 @@ impl eframe::App for ValenxApp {
                     }
                     // Toggle the right-side Frames Workbench — structural
                     // cross-section properties (valenx-frames). Off by default.
-                    if ui
+                    if TabKind::Frames.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_frames_workbench, "Frames")
                         .on_hover_text(
                             "Show / hide the right-side Frames Workbench — structural \
@@ -2181,7 +2226,8 @@ impl eframe::App for ValenxApp {
                     }
                     // Toggle the right-side Gas Dynamics workbench — 1-D
                     // compressible-flow relations (valenx-gasdynamics). Off by default.
-                    if ui
+                    if TabKind::Gasdynamics.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_gasdynamics_workbench, "Gas Dynamics")
                         .on_hover_text(
                             "Show / hide the right-side Gas Dynamics workbench — 1-D \
@@ -2194,7 +2240,8 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
-                    if ui
+                    if TabKind::Neuro.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_neuro_workbench, "Neural Interface")
                         .on_hover_text(
                             "Show / hide the right-side Neural-Interface workbench — native \
@@ -2218,7 +2265,8 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
-                    if ui
+                    if TabKind::Cad.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_cad_workbench, "Parametric CAD")
                         .on_hover_text(
                             "Show / hide the right-side Parametric-CAD workbench — named \
@@ -2243,7 +2291,8 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
-                    if ui
+                    if TabKind::Draft2d.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_draft2d_workbench, "2D Drafting")
                         .on_hover_text(
                             "Show / hide the right-side 2D Drafting workbench — a \
@@ -2254,7 +2303,8 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
-                    if ui
+                    if TabKind::Reinforcement.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_reinforcement_workbench, "Reinforcement")
                         .on_hover_text(
                             "Show / hide the right-side Concrete-Reinforcement workbench — \
@@ -2265,7 +2315,8 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
-                    if ui
+                    if TabKind::Render.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_render_workbench, "Path-Traced Render")
                         .on_hover_text(
                             "Show / hide the right-side Path-Traced Render workbench — a \
@@ -2288,7 +2339,8 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
-                    if ui
+                    if TabKind::Hvac.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_hvac_workbench, "HVAC")
                         .on_hover_text(
                             "Show / hide the right-side HVAC workbench — duct sizing and \
@@ -2298,7 +2350,8 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
-                    if ui
+                    if TabKind::Reverse.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_reverse_workbench, "Reverse Engineering")
                         .on_hover_text(
                             "Show / hide the right-side Reverse-Engineering workbench — \
@@ -2321,7 +2374,8 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
-                    if ui
+                    if TabKind::Interior.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_interior_workbench, "Interior Design")
                         .on_hover_text(
                             "Show / hide the right-side Interior-Design workbench — a 2D \
@@ -2345,7 +2399,8 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
-                    if ui
+                    if TabKind::Animate.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_animate_workbench, "Animation")
                         .on_hover_text(
                             "Show / hide the right-side Animation workbench — a joint \
@@ -2369,7 +2424,8 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
-                    if ui
+                    if TabKind::VariantEffect.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_variant_effect_workbench, "Variant Effect")
                         .on_hover_text(
                             "Show / hide the right-side Variant-Effect workbench — an HGVS \
@@ -2399,7 +2455,8 @@ impl eframe::App for ValenxApp {
                     // simulator (fly a rocket to orbit) plus the
                     // closed-form mission planners (Hohmann, hoverslam,
                     // rendezvous, launch azimuth). Off by default.
-                    if ui
+                    if TabKind::Astro.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_astro_workbench, "Astro / Launch")
                         .on_hover_text(
                             "Show / hide the right-side Astro / Launch workbench — a \
@@ -2980,6 +3037,12 @@ impl eframe::App for ValenxApp {
                 });
                 ui.separator();
                 ui.label(format!("Valenx {} — pre-alpha", env!("CARGO_PKG_VERSION")));
+                ui.separator();
+                // Domain-focus picker — `Focus: [All v]`. Narrows the Tools /
+                // template menus + the Ctrl+P launcher + the View-menu workbench
+                // toggles to one working domain (pure view filter, nothing
+                // removed). `labelled_by` "Focus" so it is AI-drivable.
+                crate::workbench_focus::focus_selector(self, ui);
                 // One-click panel toggles — "make space" controls pinned to
                 // the far right of the ribbon (Blender / Fusion style).
                 // A toggle is highlighted while its panel is visible.
@@ -4123,15 +4186,25 @@ impl eframe::App for ValenxApp {
             let show_non_oss = self.settings.show_non_oss_adapters;
             let registry_len = self.registry.len();
             let projects_rev = self.library.content_rev();
+            // Domain-focus filter narrows the launcher's workbench-tab entries,
+            // so it is part of the cache key — flipping it rebuilds the list.
+            let focus = self.focus_category.clone();
             let cache_valid = matches!(
                 &self.palette_cache,
-                Some((len, prev, oss, _))
-                    if *len == registry_len && *prev == projects_rev && *oss == show_non_oss
+                Some((len, prev, oss, foc, _))
+                    if *len == registry_len
+                        && *prev == projects_rev
+                        && *oss == show_non_oss
+                        && *foc == focus
             );
             if !cache_valid {
-                let built =
-                    commands::build_visible_commands(&self.registry, show_non_oss, &self.library);
-                self.palette_cache = Some((registry_len, projects_rev, show_non_oss, built));
+                let built = commands::build_visible_commands(
+                    &self.registry,
+                    show_non_oss,
+                    &self.library,
+                    focus.as_deref(),
+                );
+                self.palette_cache = Some((registry_len, projects_rev, show_non_oss, focus, built));
             }
             // Take the cached Vec by clone — the dispatch step needs
             // exclusive `&mut self`, so we can't hold a borrow into
@@ -4142,7 +4215,7 @@ impl eframe::App for ValenxApp {
             let visible: Vec<commands::CommandKind> = self
                 .palette_cache
                 .as_ref()
-                .map(|(_, _, _, v)| v.clone())
+                .map(|(_, _, _, _, v)| v.clone())
                 .unwrap_or_default();
             if let Some(idx) = commands::show(ctx, &mut self.palette, &visible) {
                 if let Some(kind) = visible.get(idx) {

@@ -522,6 +522,14 @@ impl TabKind {
         }
     }
 
+    /// Convenience wrapper over [`crate::workbench_focus::in_focus`]: is this
+    /// kind shown under the domain-focus filter `focus` (`None` = "All" ⇒
+    /// always)? Lets the View-menu workbench toggles gate themselves with a
+    /// readable `TabKind::X.in_focus_of(vf)` instead of the free function.
+    pub fn in_focus_of(self, focus: Option<&str>) -> bool {
+        crate::workbench_focus::in_focus(self, focus)
+    }
+
     /// The central viewport this kind prefers (genetics is the 2D DNA
     /// view; everything else — including a blank project — is the 3D
     /// viewport).
@@ -1845,10 +1853,19 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
             // body is wrapped in `scrollable_menu` so the long category list
             // stays on-screen and scrolls instead of running off the bottom.
             // ASCII label (no glyph caret) so it never renders as tofu.
+            //
+            // Honours the **domain-focus filter**: when a focus category is
+            // set, only that domain's templates are listed (the launcher /
+            // View menu agree). "All" (`None`) lists everything.
+            let focus = app.focus_category.clone();
             ui.menu_button("From template", |ui| {
                 crate::menu_ui::scrollable_menu(ui, |ui| {
                     let mut last_group = "";
+                    let mut shown = 0usize;
                     for kind in TabKind::TEMPLATES {
+                        if !crate::workbench_focus::in_focus(kind, focus.as_deref()) {
+                            continue;
+                        }
                         let group = kind.group();
                         if group != last_group {
                             if !last_group.is_empty() {
@@ -1861,6 +1878,16 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
                             intent.open_template = Some(kind);
                             ui.close_menu();
                         }
+                        shown += 1;
+                    }
+                    if shown == 0 {
+                        // Defensive: a focus with no templates (shouldn't happen
+                        // for a real category) still leaves the menu usable.
+                        ui.label(
+                            egui::RichText::new("(no templates in this focus)")
+                                .weak()
+                                .small(),
+                        );
                     }
                 });
             });
