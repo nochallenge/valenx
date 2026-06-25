@@ -549,6 +549,16 @@ members = [
     # detection timeline (pure kinematics; no weapon/targeting/lethality).
     "crates/valenx-uas",
 
+    # Defense / M&S (M2) — general discrete-event / agent constructive-simulation
+    # framework (AFSIM-class), equally for logistics / epidemiology / traffic /
+    # policy wargaming. A deterministic min-heap event scheduler, entities with
+    # constant-velocity / waypoint movers, range-based sensor detection (reusing
+    # valenx-uas detection geometry), and ABSTRACT, PROBABILISTIC engagement:
+    # probability-of-kill (Pk) is an INPUT parameter (seeded draw) plus a
+    # Lanchester-square-law attrition ODE. Infrastructure + analysis only — NO
+    # detailed lethality, NO targeting / fire-control, NO kill chains.
+    "crates/valenx-mission-sim",
+
     # Phone-as-2nd-screen companion: serves the live valenx window to a phone
     # browser (PIN-gated, LAN-bound, frame-poll JPEG) and relays touch as OS
     # mouse input. Default build is std-only (CI-green on headless Linux);
