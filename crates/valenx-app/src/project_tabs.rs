@@ -247,12 +247,14 @@ pub enum TabKind {
     Cosim,
     // -- Autonomy --
     Autonomy,
+    // -- Multibody dynamics (robot / contact) --
+    Mbd,
 }
 
 impl TabKind {
     /// Every *template* kind (i.e. excluding [`TabKind::Blank`]), in
     /// `＋ from template`-menu order (grouped via [`Self::group`]).
-    pub const TEMPLATES: [TabKind; 40] = [
+    pub const TEMPLATES: [TabKind; 41] = [
         TabKind::Rocket,
         TabKind::Engine,
         TabKind::Astro,
@@ -293,6 +295,7 @@ impl TabKind {
         TabKind::Photogrammetry,
         TabKind::Cosim,
         TabKind::Autonomy,
+        TabKind::Mbd,
     ];
 
     /// Group header shown in the `＋ from template` new-tab menu. Blank is
@@ -336,6 +339,7 @@ impl TabKind {
             TabKind::Rom => "Simulation",
             TabKind::Uq => "Simulation",
             TabKind::Cosim => "Simulation",
+            TabKind::Mbd => "Simulation",
         }
     }
 
@@ -383,6 +387,7 @@ impl TabKind {
             TabKind::Uq => "Uncertainty quantification",
             TabKind::Photogrammetry => "Photogrammetry / SfM scan",
             TabKind::Cosim => "Co-Simulation (FMI / HELICS)",
+            TabKind::Mbd => "Multibody dynamics (robot / contact)",
         }
     }
 
@@ -432,6 +437,7 @@ impl TabKind {
             TabKind::Uq => app.show_uq_workbench = true,
             TabKind::Photogrammetry => app.show_photogrammetry_workbench = true,
             TabKind::Cosim => app.show_cosim_workbench = true,
+            TabKind::Mbd => app.show_mbd_workbench = true,
         }
     }
 
@@ -487,6 +493,7 @@ impl TabKind {
             "uq" | "uncertainty" => Some(TabKind::Uq),
             "photogrammetry" | "sfm" | "scan" => Some(TabKind::Photogrammetry),
             "cosim" | "co-simulation" | "cosimulation" | "fmi" => Some(TabKind::Cosim),
+            "mbd" | "multibody" | "robot" => Some(TabKind::Mbd),
             _ => None,
         }
     }
@@ -1242,6 +1249,10 @@ pub const ALL_WORKBENCH_KINDS: &[&str] = &[
     "photogrammetry",
     // In-house FMI / HELICS co-simulation coupling — surfaced by the Co-Simulation workbench.
     "cosim",
+    // In-house planar multibody dynamics (constrained-DAE System + Featherstone
+    // ABA + penalty contact / Coulomb friction) — surfaced by the
+    // Multibody-dynamics (robot / contact) workbench.
+    "mbd",
     // In-house sequence-first protein-protein interaction / interactome
     // (coevolution MI -> fused PPI score -> ranked screen) — surfaced by the
     // PPI / interactome workbench.
@@ -1412,6 +1423,7 @@ pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
         "photogrammetry" | "sfm" | "scan" => app.show_photogrammetry_workbench = on,
         "cosim" | "co-simulation" | "cosimulation" | "fmi" => app.show_cosim_workbench = on,
         "ppi" | "interactome" | "network" => app.show_ppi_workbench = on,
+        "mbd" | "multibody" | "robot" => app.show_mbd_workbench = on,
         // Mesh Toolbox (a `_toolbox` flag, mapped here for parity).
         "mesh" | "meshtoolbox" => app.show_mesh_toolbox = on,
         // Unknown kind: no-op — a stale/hostile registry string is ignored.
@@ -1473,6 +1485,7 @@ fn clear_all_workbenches(app: &mut ValenxApp) {
     app.show_photogrammetry_workbench = false;
     app.show_cosim_workbench = false;
     app.show_ppi_workbench = false;
+    app.show_mbd_workbench = false;
 }
 
 /// Reconcile the visible workbench + central viewport with the active
@@ -2970,6 +2983,7 @@ mod tests {
             ("uq", TabKind::Uq),
             ("photogrammetry", TabKind::Photogrammetry),
             ("cosim", TabKind::Cosim),
+            ("mbd", TabKind::Mbd),
         ];
         // Every TEMPLATES kind is covered by the canonical table above.
         assert_eq!(canonical.len(), TabKind::TEMPLATES.len());
@@ -2988,6 +3002,8 @@ mod tests {
         assert_eq!(TabKind::from_id("fmi"), Some(TabKind::Cosim));
         assert_eq!(TabKind::from_id("interactome"), Some(TabKind::Ppi));
         assert_eq!(TabKind::from_id("network"), Some(TabKind::Ppi));
+        assert_eq!(TabKind::from_id("multibody"), Some(TabKind::Mbd));
+        assert_eq!(TabKind::from_id("robot"), Some(TabKind::Mbd));
         // Unknown ids (and Blank, which has no id) map to None.
         assert_eq!(TabKind::from_id("blank"), None);
         assert_eq!(TabKind::from_id("nope"), None);
@@ -4394,6 +4410,7 @@ mod tests {
             app.show_photogrammetry_workbench,
             app.show_cosim_workbench,
             app.show_ppi_workbench,
+            app.show_mbd_workbench,
         ]
         .into_iter()
         .filter(|&b| b)
@@ -4454,6 +4471,7 @@ mod tests {
             }
             TabKind::Cosim => crate::cosim_workbench::draw_cosim_workbench(app, ctx),
             TabKind::Ppi => crate::ppi_workbench::draw_ppi_workbench(app, ctx),
+            TabKind::Mbd => crate::mbd_workbench::draw_mbd_workbench(app, ctx),
         });
     }
 
@@ -4748,8 +4766,8 @@ mod headless_ui_tests {
         }
         assert_eq!(
             ALL_WORKBENCH_KINDS.len(),
-            143,
-            "142 `show_*_workbench` fields + the meshtoolbox alias"
+            144,
+            "143 `show_*_workbench` fields + the meshtoolbox alias"
         );
         assert!(ALL_WORKBENCH_KINDS.contains(&"meshtoolbox"));
         // A couple of representative kinds are present.

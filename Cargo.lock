@@ -7993,6 +7993,7 @@ dependencies = [
  "valenx-macro",
  "valenx-marine",
  "valenx-marine-hydro",
+ "valenx-mbd",
  "valenx-md",
  "valenx-mesh",
  "valenx-mesh-to-brep",
