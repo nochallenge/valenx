@@ -10571,6 +10571,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-uas"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "nalgebra",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "valenx-drone",
+ "valenx-fixedwing",
+ "valenx-rotor",
+]
+
+[[package]]
 name = "valenx-uq"
 version = "0.1.0-alpha.1"
 dependencies = [
