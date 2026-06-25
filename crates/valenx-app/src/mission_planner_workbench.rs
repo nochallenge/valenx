@@ -26,9 +26,10 @@
 //! `missionplanner.play` / `missionplanner.pause`.
 
 use eframe::egui;
-use valenx_mission_sim::los::line_of_sight;
+use valenx_mission_sim::los::{line_of_sight, line_of_sight_terrain};
 use valenx_mission_sim::planner::{Affiliation, PlannerScenario, M_PER_DEG_LAT};
 use valenx_mission_sim::routing::{astar, demo_field, CostGrid};
+use valenx_mission_sim::terrain::{demo_terrain, HeightGrid};
 use walkers::sources::{OpenStreetMap, TileSource};
 use walkers::{HttpTiles, Map, MapMemory, Position, Projector};
 
@@ -41,6 +42,17 @@ const DEFAULT_ENTITY_COUNT: u32 = 4;
 const ROUTE_GRID_W: usize = 32;
 /// Height (rows) of the tactical-routing demo cost grid laid over the map.
 const ROUTE_GRID_H: usize = 20;
+
+/// Base traversal cost of a flat cell when the cost field is derived from terrain
+/// slope (`cost = TERRAIN_BASE + TERRAIN_SLOPE_K · slope`).
+const TERRAIN_BASE: f32 = 1.0;
+/// Slope-to-cost gain: how much each unit of terrain slope (rise-over-run) adds to
+/// a cell's traversal cost, so A\* prefers gentle ground.
+const TERRAIN_SLOPE_K: f32 = 6.0;
+/// Slope above which terrain is **impassable** (a cliff / sheer ridge flank): such
+/// cells become `f32::INFINITY` so the route goes around them. Tuned to the demo
+/// landscape's steep ridge flanks (~5-6) while leaving valleys (~0.9) traversable.
+const TERRAIN_IMPASSABLE_SLOPE: f32 = 4.0;
 
 // ---------------------------------------------------------------------------
 // Workbench state
@@ -101,10 +113,37 @@ pub struct MissionPlannerWorkbenchState {
     /// Human-readable status of the last `Compute LoS` (visible / blocked
     /// counts). Surfaced in the readout and the agent readout.
     pub los_status: String,
+
+    // --- Terrain elevation (in-house procedural heightfield) ----------------
+    /// The procedural elevation heightfield (metres) laid under the routes / LoS,
+    /// same `ROUTE_GRID_W × ROUTE_GRID_H` extent as [`Self::route_grid`] so the two
+    /// overlay cell-for-cell. When [`Self::terrain_on`] the routing cost field is
+    /// derived from this terrain's slope and line-of-sight is terrain-masked (2.5-D).
+    pub terrain: HeightGrid,
+    /// Whether terrain-awareness is active: when `true`, the routing cost grid is
+    /// derived from terrain slope (gentle = cheap, steep ridge = impassable) and
+    /// LoS uses the 2.5-D elevation ray-march; when `false`, routing/LoS fall back
+    /// to the flat obstacle-wall [`demo_field`]. Drawn as a colour shade either way.
+    pub terrain_on: bool,
+    /// Observer height above the ground in metres, used by terrain-masked LoS (a
+    /// taller observer sees over low hills). Display + LoS only.
+    pub obs_height_m: f32,
+    /// Target height above the ground in metres, used by terrain-masked LoS.
+    pub tgt_height_m: f32,
 }
 
 impl Default for MissionPlannerWorkbenchState {
     fn default() -> Self {
+        // Build the procedural terrain and derive the routing cost field from its
+        // slope (terrain-aware by default — this is the capstone tying routing +
+        // LoS to elevation). The grid extent matches the route grid cell-for-cell.
+        let terrain = demo_terrain(ROUTE_GRID_W, ROUTE_GRID_H);
+        let route_grid = CostGrid::from_terrain(
+            &terrain,
+            TERRAIN_BASE,
+            TERRAIN_SLOPE_K,
+            TERRAIN_IMPASSABLE_SLOPE,
+        );
         Self {
             scenario: PlannerScenario::demo(DEFAULT_ENTITY_COUNT as usize),
             entity_count: DEFAULT_ENTITY_COUNT,
@@ -113,16 +152,23 @@ impl Default for MissionPlannerWorkbenchState {
             tiles: None,
             map_memory: MapMemory::default(),
             set_all_affiliation: Affiliation::Friendly,
-            route_grid: demo_field(ROUTE_GRID_W, ROUTE_GRID_H),
-            // Default corner-to-corner planning problem across the demo field.
-            route_start: (0, 0),
-            route_goal: (ROUTE_GRID_W - 1, ROUTE_GRID_H - 1),
+            route_grid,
+            // Default cross-ridge planning problem: SW area (NW side of the ridge)
+            // to NE area (SE side). The diagonal ridge lies between them, so the
+            // slope-aware route must thread the mountain PASS rather than climb the
+            // crest — the capstone demo of terrain-aware routing.
+            route_start: (1, ROUTE_GRID_H - 2),
+            route_goal: (ROUTE_GRID_W - 1, 1),
             route: None,
             route_status: "no route computed".to_string(),
             // Observe from the route start by default; LoS to the goal + entities.
-            los_observer: (0, 0),
+            los_observer: (1, ROUTE_GRID_H - 2),
             los_results: Vec::new(),
             los_status: "no LoS computed".to_string(),
+            terrain,
+            terrain_on: true,
+            obs_height_m: 2.0,
+            tgt_height_m: 0.0,
         }
     }
 }
@@ -132,6 +178,28 @@ impl MissionPlannerWorkbenchState {
     /// (also stops playback so the reset is visible before it resumes).
     fn reseed(&mut self) {
         self.scenario = PlannerScenario::demo(self.entity_count.max(1) as usize);
+    }
+
+    /// Rebuild the routing [`Self::route_grid`] to match the current terrain mode:
+    /// when [`Self::terrain_on`], derive the cost field from the terrain's slope
+    /// (gentle = cheap, steep ridge = impassable); otherwise fall back to the flat
+    /// obstacle-wall [`demo_field`]. Invalidates any stale computed route so the
+    /// map does not show a path planned over the previous field. Called whenever
+    /// the terrain toggle flips.
+    fn rebuild_route_grid(&mut self) {
+        self.route_grid = if self.terrain_on {
+            CostGrid::from_terrain(
+                &self.terrain,
+                TERRAIN_BASE,
+                TERRAIN_SLOPE_K,
+                TERRAIN_IMPASSABLE_SLOPE,
+            )
+        } else {
+            demo_field(ROUTE_GRID_W, ROUTE_GRID_H)
+        };
+        // The old route was planned over a different cost field — clear it.
+        self.route = None;
+        self.route_status = "no route computed".to_string();
     }
 
     /// The user-visible captions of every control the agent bridge can set via
@@ -147,6 +215,9 @@ impl MissionPlannerWorkbenchState {
             "Route goal Y",
             "Observer X",
             "Observer Y",
+            "Terrain",
+            "Observer height (m)",
+            "Target height (m)",
         ]
     }
 
@@ -224,15 +295,35 @@ impl MissionPlannerWorkbenchState {
         targets.dedup();
         targets.retain(|&c| c != self.los_observer);
 
+        // Terrain-aware (2.5-D dead-ground masking via the elevation ray-march)
+        // when terrain is on; otherwise flat occupancy over the obstacle field.
         self.los_results = targets
             .iter()
-            .map(|&t| (t, line_of_sight(&self.route_grid, self.los_observer, t)))
+            .map(|&t| {
+                let vis = if self.terrain_on {
+                    line_of_sight_terrain(
+                        &self.terrain,
+                        self.los_observer,
+                        t,
+                        self.obs_height_m,
+                        self.tgt_height_m,
+                    )
+                } else {
+                    line_of_sight(&self.route_grid, self.los_observer, t)
+                };
+                (t, vis)
+            })
             .collect();
 
         let visible = self.los_results.iter().filter(|(_, v)| *v).count();
         let blocked = self.los_results.len() - visible;
         self.los_status = format!(
-            "LoS from ({},{}): {} visible \u{00B7} {} blocked \u{00B7} {} targets",
+            "LoS ({}) from ({},{}): {} visible \u{00B7} {} blocked \u{00B7} {} targets",
+            if self.terrain_on {
+                "terrain-masked 2.5-D"
+            } else {
+                "flat"
+            },
             self.los_observer.0,
             self.los_observer.1,
             visible,
@@ -309,6 +400,29 @@ impl MissionPlannerWorkbenchState {
             "Route goal Y" => self.route_goal.1 = route_coord(value, ROUTE_GRID_H, "Route goal Y")?,
             "Observer X" => self.los_observer.0 = route_coord(value, ROUTE_GRID_W, "Observer X")?,
             "Observer Y" => self.los_observer.1 = route_coord(value, ROUTE_GRID_H, "Observer Y")?,
+            "Terrain" => {
+                // Bool toggle: rebuild the routing cost field for the new mode so
+                // routing + LoS become (or stop being) terrain-aware.
+                let on = value.as_bool()?;
+                if on != self.terrain_on {
+                    self.terrain_on = on;
+                    self.rebuild_route_grid();
+                }
+            }
+            "Observer height (m)" => {
+                let v = value.as_f64()? as f32;
+                if !(0.0..=10_000.0).contains(&v) {
+                    return Err(format!("Observer height (m) must be in 0..=10000, got {v}"));
+                }
+                self.obs_height_m = v;
+            }
+            "Target height (m)" => {
+                let v = value.as_f64()? as f32;
+                if !(0.0..=10_000.0).contains(&v) {
+                    return Err(format!("Target height (m) must be in 0..=10000, got {v}"));
+                }
+                self.tgt_height_m = v;
+            }
             other => return Err(format!("unknown mission-planner control: {other:?}")),
         }
         Ok(())
@@ -325,9 +439,12 @@ impl MissionPlannerWorkbenchState {
             .filter(|e| e.is_done())
             .count();
         let [fr, ho, ne, un] = self.affiliation_counts();
+        let (elev_lo, elev_hi) = self.terrain.minmax();
         Some(format!(
             "Sim time {:.1}s \u{00B7} {} entities ({} arrived) \u{00B7} \
-             affiliation F{} H{} N{} U{} \u{00B7} playback {}x \u{00B7} {} \u{00B7} {} \u{00B7} {}",
+             affiliation F{} H{} N{} U{} \u{00B7} playback {}x \u{00B7} {} \u{00B7} \
+             terrain {} (elev {:.0}\u{2013}{:.0} m; routing + LoS are terrain-aware) \u{00B7} \
+             {} \u{00B7} {}",
             self.scenario.sim_time_s,
             self.scenario.entities.len(),
             done,
@@ -337,6 +454,9 @@ impl MissionPlannerWorkbenchState {
             un,
             self.playback_speed,
             if self.playing { "playing" } else { "paused" },
+            if self.terrain_on { "ON" } else { "OFF" },
+            elev_lo,
+            elev_hi,
             self.route_status,
             self.los_status,
         ))
@@ -564,6 +684,81 @@ fn mission_planner_workbench_body_inner(app: &mut ValenxApp, ui: &mut egui::Ui) 
         egui::RichText::new(&s.route_status)
             .strong()
             .color(egui::Color32::from_rgb(255, 180, 90)),
+    );
+
+    // --- Terrain elevation (in-house procedural heightfield) ----------------
+    ui.add_space(6.0);
+    ui.separator();
+    ui.label(
+        egui::RichText::new(
+            "Terrain elevation \u{00B7} in-house procedural heightfield \
+             [makes routing slope-aware + line-of-sight terrain-masked in 2.5-D; \
+             shaded green\u{2192}tan\u{2192}brown by height under the map]",
+        )
+        .weak()
+        .small(),
+    );
+    let (elev_lo, elev_hi) = s.terrain.minmax();
+    egui::Grid::new("mission_planner_terrain")
+        .num_columns(4)
+        .striped(true)
+        .show(ui, |ui| {
+            // Terrain on/off toggle: flips routing/LoS between terrain-aware and
+            // the flat obstacle field, and rebuilds the cost grid accordingly.
+            let lbl = ui.label("Terrain");
+            let resp = ui
+                .checkbox(&mut s.terrain_on, "slope-aware routing + masked LoS")
+                .labelled_by(lbl.id)
+                .on_hover_text(
+                    "When on, the routing cost field is derived from terrain slope \
+                     (gentle = cheap, steep ridge = impassable) and line-of-sight is \
+                     terrain-masked in 2.5-D (dead ground behind ridges). When off, \
+                     routing/LoS use the flat obstacle field.",
+                );
+            if resp.changed() {
+                s.rebuild_route_grid();
+            }
+            ui.end_row();
+
+            // Observer height above ground (metres) for terrain-masked LoS.
+            let lbl = ui.label("Observer height (m)");
+            ui.add(
+                egui::DragValue::new(&mut s.obs_height_m)
+                    .speed(0.5)
+                    .range(0.0..=10_000.0),
+            )
+            .labelled_by(lbl.id)
+            .on_hover_text(
+                "Observer eye height above the ground, in metres. A taller observer \
+                 (e.g. a mast or high ground) sees OVER low hills in terrain-masked LoS.",
+            );
+            // Target height above ground (metres).
+            let lbl = ui.label("Target height (m)");
+            ui.add(
+                egui::DragValue::new(&mut s.tgt_height_m)
+                    .speed(0.5)
+                    .range(0.0..=10_000.0),
+            )
+            .labelled_by(lbl.id)
+            .on_hover_text("Target height above the ground, in metres, for terrain-masked LoS.");
+            ui.end_row();
+        });
+    // Terrain elevation-range readout.
+    ui.label(
+        egui::RichText::new(format!(
+            "Elevation range: {:.0}\u{2013}{:.0} m \u{00B7} {} \u{00B7} {}\u{00D7}{} grid",
+            elev_lo,
+            elev_hi,
+            if s.terrain_on {
+                "routing + LoS terrain-aware"
+            } else {
+                "terrain display only (flat routing/LoS)"
+            },
+            s.terrain.w,
+            s.terrain.h,
+        ))
+        .strong()
+        .color(egui::Color32::from_rgb(180, 200, 150)),
     );
 
     // --- Line of sight (in-house DDA ray-march over the cost field) ---------
@@ -1035,8 +1230,18 @@ fn dashed_line(
 /// polyline, its waypoint dots, and the entity marker + name label — on top of
 /// the OSM tile basemap, projecting each lat/lon to screen pixels with walkers'
 /// [`Projector`] so the overlay stays pinned to the map as it pans / zooms.
+/// One terrain shading cell: its NW corner `(lat, lon)`, its SE corner
+/// `(lat, lon)`, and its elevation normalized to `[0, 1]` across the field relief.
+/// Drawn as a translucent hypsometric-tinted rect under the map overlay.
+type TerrainShadeCell = ((f64, f64), (f64, f64), f32);
+
 struct MissionOverlay {
     entities: Vec<OverlayEntity>,
+    /// Terrain elevation shading: one [`TerrainShadeCell`] per grid cell. Drawn
+    /// first (under everything) as translucent filled rects ramped green (low) →
+    /// tan (mid) → brown/white (high), so the user sees the landscape the routing
+    /// + LoS are reasoning over. Empty when terrain display is off.
+    terrain_cells: Vec<TerrainShadeCell>,
     /// The computed A\* tactical route as geographic `(lat, lon)` points (empty
     /// when no route is computed) — drawn as a DISTINCT-coloured polyline,
     /// separate from the per-entity blue routes.
@@ -1072,6 +1277,42 @@ impl MissionOverlay {
             .collect();
 
         let bbox = route_bbox(sc);
+
+        // Terrain elevation shading: snapshot each cell as a lat/lon quad plus its
+        // height normalized to [0,1] over the field relief. Shown whenever terrain
+        // is on (the landscape that routing/LoS reason over). Half-cell offsets give
+        // each cell's NW/SE corners so the rects tile the bbox without gaps.
+        let mut terrain_cells = Vec::new();
+        if s.terrain_on {
+            let (elev_lo, elev_hi) = s.terrain.minmax();
+            let span = (elev_hi - elev_lo).max(1e-3);
+            let (min_lat, max_lat, min_lon, max_lon) = bbox;
+            let (gw, gh) = (s.terrain.w, s.terrain.h);
+            // Per-cell half-spans in degrees (so a cell rect spans one grid step).
+            let half_lon = if gw > 1 {
+                0.5 * (max_lon - min_lon) / (gw - 1) as f64
+            } else {
+                0.5 * (max_lon - min_lon)
+            };
+            let half_lat = if gh > 1 {
+                0.5 * (max_lat - min_lat) / (gh - 1) as f64
+            } else {
+                0.5 * (max_lat - min_lat)
+            };
+            terrain_cells.reserve(gw * gh);
+            for y in 0..gh {
+                for x in 0..gw {
+                    // route_grid and terrain share the same extent (cell-for-cell),
+                    // so cell_to_latlon (keyed on grid dims) is valid for both.
+                    let (clat, clon) = cell_to_latlon((x, y), &s.route_grid, bbox);
+                    let nw = (clat + half_lat, clon - half_lon); // north / west
+                    let se = (clat - half_lat, clon + half_lon); // south / east
+                    let hnorm = ((s.terrain.elevation_at(x, y) - elev_lo) / span).clamp(0.0, 1.0);
+                    terrain_cells.push((nw, se, hnorm));
+                }
+            }
+        }
+
         let tactical_route = s
             .route
             .as_ref()
@@ -1112,12 +1353,48 @@ impl MissionOverlay {
 
         Self {
             entities,
+            terrain_cells,
             tactical_route,
             obstacles,
             los_observer,
             los_lines,
         }
     }
+}
+
+/// The elevation colour ramp for the terrain shade: `h` in `[0, 1]` maps low → a
+/// translucent **green** lowland, mid → **tan**, high → **brown**, top → near
+/// **white** (snow-capped), a conventional hypsometric tint. Alpha is kept low so
+/// the basemap, routes, and markers stay legible over it.
+fn elevation_color(h: f32) -> egui::Color32 {
+    let h = h.clamp(0.0, 1.0);
+    // Piecewise-linear over four stops: green, tan, brown, white.
+    let stops = [
+        (0.0_f32, (70.0, 130.0, 70.0)), // low: green
+        (0.45, (170.0, 160.0, 95.0)),   // mid: tan
+        (0.80, (130.0, 95.0, 70.0)),    // high: brown
+        (1.0, (235.0, 235.0, 235.0)),   // peak: near-white
+    ];
+    let mut col = stops[stops.len() - 1].1;
+    for w in stops.windows(2) {
+        let (h0, c0) = w[0];
+        let (h1, c1) = w[1];
+        if h <= h1 {
+            let t = if (h1 - h0).abs() > f32::EPSILON {
+                (h - h0) / (h1 - h0)
+            } else {
+                0.0
+            };
+            col = (
+                c0.0 + (c1.0 - c0.0) * t,
+                c0.1 + (c1.1 - c0.1) * t,
+                c0.2 + (c1.2 - c0.2) * t,
+            );
+            break;
+        }
+    }
+    // Translucent so the OSM basemap and overlays read through the shade.
+    egui::Color32::from_rgba_unmultiplied(col.0 as u8, col.1 as u8, col.2 as u8, 90)
 }
 
 impl walkers::Plugin for MissionOverlay {
@@ -1136,6 +1413,17 @@ impl walkers::Plugin for MissionOverlay {
         // the blue entity routes and every APP-6 affiliation colour.
         let tac_col = egui::Color32::from_rgb(255, 160, 30);
         let obstacle_col = egui::Color32::from_rgb(200, 60, 60);
+
+        // TERRAIN elevation shade (drawn first, UNDER everything): one translucent
+        // filled rect per grid cell, hypsometric-tinted by normalized height
+        // (green lowland → tan → brown ridge → white peak). Pinned to the map via
+        // the projector so it pans / zooms with the basemap.
+        for &(nw, se, hnorm) in &self.terrain_cells {
+            let p_nw = to_px(nw.0, nw.1);
+            let p_se = to_px(se.0, se.1);
+            let rect = egui::Rect::from_two_pos(p_nw, p_se);
+            painter.rect_filled(rect, 0.0, elevation_color(hnorm));
+        }
 
         // Cost-field OBSTACLES (drawn first, under everything) as small red X's.
         for &(lat, lon) in &self.obstacles {
@@ -1456,12 +1744,16 @@ mod tests {
     }
 
     #[test]
-    fn compute_los_classifies_targets_over_the_demo_field() {
+    fn compute_los_classifies_targets_over_the_flat_field() {
+        // With terrain OFF the LoS runs over the flat obstacle field (demo_field).
         // From the NW corner observer, computing LoS produces one result per
         // distinct target (goal + entities, minus the observer's own cell) and a
-        // visible/blocked summary. The demo field has obstacle walls, so at least
-        // one of the far targets is masked.
+        // visible/blocked summary; each stored flag matches a direct flat
+        // line_of_sight call, and the SE corner goal is masked by the demo walls.
         let mut s = MissionPlannerWorkbenchState::default();
+        s.terrain_on = false;
+        s.rebuild_route_grid();
+        s.route_goal = (ROUTE_GRID_W - 1, ROUTE_GRID_H - 1); // SE corner (behind walls)
         assert!(s.los_results.is_empty());
         s.los_observer = (0, 0);
         s.compute_los();
@@ -1469,8 +1761,9 @@ mod tests {
             !s.los_results.is_empty(),
             "LoS computes at least the goal target"
         );
+        assert!(s.los_status.contains("flat"));
         assert!(s.los_status.contains("visible") && s.los_status.contains("blocked"));
-        // Every result's `visible` flag matches a direct line_of_sight call.
+        // Every result's `visible` flag matches a direct (flat) line_of_sight call.
         for &(target, vis) in &s.los_results {
             assert_eq!(
                 vis,
@@ -1529,9 +1822,136 @@ mod tests {
         s.compute_los();
         let r = s.agent_readout().expect("readout present");
         assert!(
-            r.contains("LoS from"),
+            r.contains("LoS") && r.contains("from"),
             "readout should surface the LoS status: {r}"
         );
+    }
+
+    #[test]
+    fn terrain_controls_are_listed() {
+        let names = MissionPlannerWorkbenchState::agent_control_names();
+        assert!(names.contains(&"Terrain"));
+        assert!(names.contains(&"Observer height (m)"));
+        assert!(names.contains(&"Target height (m)"));
+    }
+
+    #[test]
+    fn default_state_is_terrain_aware() {
+        // By default terrain is on, the heightfield has real relief, and the cost
+        // grid was derived from it (it contains impassable steep cells).
+        let s = MissionPlannerWorkbenchState::default();
+        assert!(s.terrain_on);
+        let (lo, hi) = s.terrain.minmax();
+        assert!(hi - lo > 100.0, "default terrain should have relief");
+        assert_eq!((s.terrain.w, s.terrain.h), (ROUTE_GRID_W, ROUTE_GRID_H));
+        assert!(
+            s.route_grid.cost.iter().any(|c| c.is_infinite()),
+            "the terrain-derived cost grid should mark steep ridge cells impassable"
+        );
+    }
+
+    #[test]
+    fn toggling_terrain_off_rebuilds_to_the_flat_field() {
+        use crate::agent_commands::AgentValue;
+        let mut s = MissionPlannerWorkbenchState::default();
+        // Turn terrain OFF via the bridge → cost grid becomes the flat demo_field.
+        s.agent_set("Terrain", &AgentValue::Bool(false)).unwrap();
+        assert!(!s.terrain_on);
+        assert_eq!(
+            s.route_grid,
+            demo_field(ROUTE_GRID_W, ROUTE_GRID_H),
+            "terrain off should restore the flat obstacle field"
+        );
+        // Toggling back on re-derives from terrain (impassable steep cells return).
+        s.agent_set("Terrain", &AgentValue::Bool(true)).unwrap();
+        assert!(s.terrain_on);
+        assert!(s.route_grid.cost.iter().any(|c| c.is_infinite()));
+    }
+
+    #[test]
+    fn agent_set_observer_target_height_validate() {
+        use crate::agent_commands::AgentValue;
+        let mut s = MissionPlannerWorkbenchState::default();
+        s.agent_set("Observer height (m)", &AgentValue::Float(35.0))
+            .unwrap();
+        s.agent_set("Target height (m)", &AgentValue::Float(2.0))
+            .unwrap();
+        assert!((s.obs_height_m - 35.0).abs() < 1e-6);
+        assert!((s.tgt_height_m - 2.0).abs() < 1e-6);
+        // Out-of-range is fail-loud, leaving state intact.
+        let before = (s.obs_height_m, s.tgt_height_m);
+        assert!(s
+            .agent_set("Observer height (m)", &AgentValue::Float(-1.0))
+            .is_err());
+        assert!(s
+            .agent_set("Target height (m)", &AgentValue::Float(99_999.0))
+            .is_err());
+        assert_eq!((s.obs_height_m, s.tgt_height_m), before);
+    }
+
+    #[test]
+    fn terrain_masked_los_masks_dead_ground_and_a_tall_observer_sees_more() {
+        // With terrain on, an observer on one side of the diagonal ridge cannot
+        // see a target in the dead ground on the far side at ground level; raising
+        // the observer high enough recovers at least as many sight lines (it sees
+        // over the terrain). Uses an explicit cross-ridge observer/target so the
+        // masking is deterministic regardless of the demo entity positions.
+        let mut s = MissionPlannerWorkbenchState::default();
+        s.los_observer = (1, ROUTE_GRID_H - 2); // NW side of the ridge
+        let across = (ROUTE_GRID_W - 1, 1); // SE side, beyond the ridge
+        s.obs_height_m = 2.0;
+        s.tgt_height_m = 0.0;
+        // Directly assert the cross-ridge sight line is dead ground at ground level.
+        assert!(
+            !line_of_sight_terrain(&s.terrain, s.los_observer, across, 2.0, 0.0),
+            "a ground observer must be masked across the ridge (dead ground)"
+        );
+        // A tall mast lifts the sight line over the ridge crest → now visible.
+        assert!(
+            line_of_sight_terrain(&s.terrain, s.los_observer, across, 5000.0, 0.0),
+            "a very tall observer should see over the ridge"
+        );
+
+        // Through the workbench API: the terrain-masked status is reported, and a
+        // taller observer never sees fewer of the goal/entity targets.
+        s.compute_los();
+        assert!(s.los_status.contains("terrain-masked"));
+        let visible_low = s.los_results.iter().filter(|(_, v)| *v).count();
+        s.obs_height_m = 5000.0;
+        s.compute_los();
+        let visible_high = s.los_results.iter().filter(|(_, v)| *v).count();
+        assert!(
+            visible_high >= visible_low,
+            "a taller observer must not see fewer targets ({visible_high} < {visible_low})"
+        );
+    }
+
+    #[test]
+    fn readout_mentions_terrain_elevation_range_and_awareness() {
+        let s = MissionPlannerWorkbenchState::default();
+        let r = s.agent_readout().expect("readout present");
+        assert!(
+            r.contains("terrain ON"),
+            "readout should report terrain mode: {r}"
+        );
+        assert!(
+            r.contains("elev") && r.contains("terrain-aware"),
+            "readout should surface the elevation range + terrain-awareness: {r}"
+        );
+    }
+
+    #[test]
+    fn elevation_color_ramps_low_to_high() {
+        // The hypsometric ramp must be translucent and vary across the range.
+        let low = elevation_color(0.0);
+        let mid = elevation_color(0.5);
+        let high = elevation_color(1.0);
+        assert!(low.a() < 255, "terrain shade must be translucent");
+        assert_ne!(low, mid);
+        assert_ne!(mid, high);
+        // Out-of-range inputs clamp without panicking.
+        let _ = elevation_color(-5.0);
+        let _ = elevation_color(5.0);
     }
 
     #[test]

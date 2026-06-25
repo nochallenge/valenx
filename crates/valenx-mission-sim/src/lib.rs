@@ -109,6 +109,7 @@ pub mod routing;
 pub mod scenario;
 pub mod scheduler;
 pub mod sensor;
+pub mod terrain;
 
 mod rng;
 mod scenario_metrics;
@@ -126,3 +127,4 @@ pub use scenario::{survivors_on, Event, Scenario, ScenarioResult, TimelineEntry}
 pub use scenario_metrics::OutcomeMetrics;
 pub use scheduler::{ScheduledEvent, Scheduler};
 pub use sensor::{detect, range_between, Detection};
+pub use terrain::{demo_terrain, HeightGrid};

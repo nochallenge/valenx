@@ -110,6 +110,46 @@ impl CostGrid {
         }
     }
 
+    /// Derive a routing cost field from a terrain [`HeightGrid`](crate::terrain::HeightGrid)
+    /// by its **slope**: gentle ground is cheap, steep ground is expensive, and an
+    /// impassably steep slope is an obstacle. This is what makes A\* routing
+    /// **terrain-aware** — the planner prefers gentle terrain and routes around
+    /// steep ridges.
+    ///
+    /// For each cell the cost is `base + slope_k · slope(cell)` where
+    /// `slope(cell)` is the dimensionless rise-over-run from
+    /// [`HeightGrid::slope_at`](crate::terrain::HeightGrid::slope_at). When that
+    /// slope **exceeds** `impassable_slope` (and `impassable_slope > 0`) the cell
+    /// is set to `f32::INFINITY` — a wall the route never enters (e.g. a cliff). A
+    /// non-positive `impassable_slope` disables the cutoff (every cell is
+    /// passable). `base` is floored at a small positive value so every passable
+    /// cell has a positive cost (keeps the A\* heuristic well-scaled).
+    ///
+    /// The returned grid has the **same dimensions** as `height`, indexing
+    /// cell-for-cell, so a derived cost grid and the terrain overlay align exactly.
+    /// Pure — deterministic in the terrain and parameters.
+    pub fn from_terrain(
+        height: &crate::terrain::HeightGrid,
+        base: f32,
+        slope_k: f32,
+        impassable_slope: f32,
+    ) -> Self {
+        let (w, h) = (height.w, height.h);
+        let base = base.max(1e-3);
+        let mut cost = vec![base; w.saturating_mul(h)];
+        for y in 0..h {
+            for x in 0..w {
+                let s = height.slope_at(x, y);
+                cost[y * w + x] = if impassable_slope > 0.0 && s > impassable_slope {
+                    f32::INFINITY
+                } else {
+                    base + slope_k.max(0.0) * s
+                };
+            }
+        }
+        Self { w, h, cost }
+    }
+
     /// The smallest **finite, positive** cell cost in the grid (used to scale the
     /// admissible heuristic). Falls back to `1.0` when the grid has no positive
     /// finite cell (all-zero or all-obstacle), keeping the heuristic valid.
@@ -483,6 +523,66 @@ mod tests {
         for &(x, y) in &path {
             assert!(grid.cost_at(x, y).is_finite());
         }
+    }
+
+    #[test]
+    fn from_terrain_makes_routing_slope_aware() {
+        use crate::terrain::demo_terrain;
+        // Derive a cost field from the demo landscape. The long diagonal ridge has
+        // very steep FLANKS (rise-over-run ~5-6) while open valleys are gentle
+        // (~0.9), so a slope cutoff of 4.0 turns the steep ridge flanks into
+        // impassable walls and leaves the rest of the field traversable. A
+        // least-cost route from the NW to the SE corner must then go AROUND those
+        // steep flanks rather than climbing them.
+        let terrain = demo_terrain(40, 40);
+        let cutoff = 4.0;
+        let grid = CostGrid::from_terrain(&terrain, 1.0, 5.0, cutoff);
+        // The derived grid matches the terrain dimensions cell-for-cell.
+        assert_eq!((grid.w, grid.h), (terrain.w, terrain.h));
+        // Some cells (the steep ridge flanks) must have been marked impassable...
+        let blocked = grid.cost.iter().filter(|c| c.is_infinite()).count();
+        assert!(blocked > 0, "steep ridge flanks should be impassable");
+        // ...but not so many that the whole map is walled off.
+        assert!(
+            blocked < grid.cost.len() / 2,
+            "most of the field should remain traversable, blocked {blocked}/{}",
+            grid.cost.len()
+        );
+        // Routing across the field still succeeds (it skirts the steep flanks).
+        let path = astar(&grid, (0, 0), (39, 39)).expect("a route around the steep ridge exists");
+        assert!(is_contiguous(&path));
+        // The route never steps onto a too-steep (impassable) cell, and every cell
+        // it uses is below the impassability slope — i.e. it prefers gentle ground.
+        for &(x, y) in &path {
+            assert!(
+                grid.cost_at(x, y).is_finite(),
+                "slope-aware route entered an impassable ridge cell at ({x},{y})"
+            );
+            assert!(
+                terrain.slope_at(x, y) <= cutoff,
+                "route used a slope steeper than the cutoff at ({x},{y})"
+            );
+        }
+    }
+
+    #[test]
+    fn from_terrain_cutoff_disabled_keeps_all_cells_passable() {
+        use crate::terrain::demo_terrain;
+        // A non-positive impassable_slope disables the cutoff: no cell is INFINITY,
+        // but steep cells are still more expensive than gentle ones.
+        let terrain = demo_terrain(30, 30);
+        let grid = CostGrid::from_terrain(&terrain, 1.0, 500.0, 0.0);
+        assert!(
+            grid.cost.iter().all(|c| c.is_finite()),
+            "no cutoff => every cell passable"
+        );
+        // A cell on the steep ridge costs more than a gentle corner cell.
+        let ridge = grid.cost_at(15, 15);
+        let corner = grid.cost_at(2, 27);
+        assert!(
+            ridge > corner,
+            "steep ridge cost {ridge} should exceed gentle corner cost {corner}"
+        );
     }
 
     #[test]
