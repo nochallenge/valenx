@@ -1285,6 +1285,8 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
             // Bridge-only on purpose — kept out of the user-facing palette.
             if matches!(id.as_str(), "missionsim.run" | "missionsim.run-monte-carlo") {
                 run_missionsim_bridge(app, ch, &id);
+            } else if matches!(id.as_str(), "missionplanner.play" | "missionplanner.pause") {
+                run_mission_planner_bridge(app, ch, &id);
             } else {
                 // Resolve `id` against the EXISTING command-palette registry and
                 // invoke the matching command through the SAME `(cmd.invoke)(app)`
@@ -1655,6 +1657,43 @@ fn run_missionsim_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
     );
 }
 
+/// Fire a Mission Planner playback action from the bridge. The Play / Pause
+/// toggles exist only as in-panel buttons; this routes the two bridge ids
+/// (`missionplanner.play`, `missionplanner.pause`) to the SAME `play` / `pause`
+/// functions the buttons call, so a `RunCommand` drives real-time playback.
+///
+/// The active tab must be a [`TabKind::MissionPlanner`]; otherwise this posts a
+/// fail-loud `warn` note and changes nothing. After toggling it acks with the
+/// planner readout (sim time + entity count + playing/paused).
+fn run_mission_planner_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::MissionPlanner) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Mission Planner workbench"),
+            "warn",
+        );
+        return;
+    }
+    match id {
+        "missionplanner.play" => crate::mission_planner_workbench::play(app),
+        "missionplanner.pause" => crate::mission_planner_workbench::pause(app),
+        _ => unreachable!("run_mission_planner_bridge called with a non-missionplanner id"),
+    }
+    let readout = app
+        .mission_planner
+        .agent_readout()
+        .unwrap_or_else(|| "(no readout)".to_string());
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {readout}"),
+        "result",
+    );
+}
+
 /// Apply one [`SetControl`](AgentCommand::SetControl): resolve the target
 /// workbench (explicit id or the active tab), then assign `value` to the
 /// caption-named control through that workbench's **own** validated `agent_set`.
@@ -1696,6 +1735,7 @@ fn set_control(
         TabKind::Uq => app.uq.agent_set(name, value),
         TabKind::Uas => app.uas.agent_set(name, value),
         TabKind::MissionSim => app.missionsim.agent_set(name, value),
+        TabKind::MissionPlanner => app.mission_planner.agent_set(name, value),
         TabKind::Survivability => app.survivability.agent_set(name, value),
         TabKind::Draft2d => app.draft2d.agent_set(name, value),
         // ---- agent_set sweep, batch 1 ----
@@ -1779,6 +1819,9 @@ fn list_controls(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
         TabKind::Uas => crate::uas_workbench::UasWorkbenchState::agent_control_names(),
         TabKind::MissionSim => {
             crate::missionsim_workbench::MissionSimWorkbenchState::agent_control_names()
+        }
+        TabKind::MissionPlanner => {
+            crate::mission_planner_workbench::MissionPlannerWorkbenchState::agent_control_names()
         }
         TabKind::Survivability => {
             crate::survivability_workbench::SurvivabilityWorkbenchState::agent_control_names()
@@ -1906,6 +1949,7 @@ fn read_readout(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
         TabKind::Fluids => Some(app.fluids.agent_readout()),
         TabKind::Uas => Some(app.uas.agent_readout()),
         TabKind::MissionSim => Some(app.missionsim.agent_readout()),
+        TabKind::MissionPlanner => Some(app.mission_planner.agent_readout()),
         TabKind::Survivability => Some(app.survivability.agent_readout()),
         _ => None,
     };

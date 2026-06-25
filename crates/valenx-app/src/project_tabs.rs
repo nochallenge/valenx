@@ -246,6 +246,9 @@ pub enum TabKind {
     // -- General constructive mission simulation (discrete-event / agent;
     //    abstract Pk + Lanchester engagement, no lethality) --
     MissionSim,
+    // -- Visual mission planner (geographic lat/lon map + waypoint routes +
+    //    real-time playback; movement only, no engagement / sensors / orbits) --
+    MissionPlanner,
     // -- Defensive survivability / protection (blast loading + SDOF protective
     //    response + P-I diagram + minimum-armor sizing + occupant screen; the
     //    PROTECTIVE side only, no penetration / lethality) --
@@ -263,7 +266,7 @@ pub enum TabKind {
 impl TabKind {
     /// Every *template* kind (i.e. excluding [`TabKind::Blank`]), in
     /// `＋ from template`-menu order (grouped via [`Self::group`]).
-    pub const TEMPLATES: [TabKind; 44] = [
+    pub const TEMPLATES: [TabKind; 45] = [
         TabKind::Rocket,
         TabKind::Engine,
         TabKind::Astro,
@@ -303,6 +306,7 @@ impl TabKind {
         TabKind::Uq,
         TabKind::Uas,
         TabKind::MissionSim,
+        TabKind::MissionPlanner,
         TabKind::Survivability,
         TabKind::Photogrammetry,
         TabKind::Cosim,
@@ -352,6 +356,7 @@ impl TabKind {
             TabKind::Uq => "Simulation",
             TabKind::Uas => "Aerospace",
             TabKind::MissionSim => "Simulation",
+            TabKind::MissionPlanner => "Simulation",
             TabKind::Survivability => "Simulation",
             TabKind::Cosim => "Simulation",
             TabKind::Mbd => "Simulation",
@@ -402,6 +407,7 @@ impl TabKind {
             TabKind::Uq => "Uncertainty quantification",
             TabKind::Uas => "UAS design & counter-UAS",
             TabKind::MissionSim => "Mission simulation (constructive)",
+            TabKind::MissionPlanner => "Mission Planner",
             TabKind::Survivability => "Survivability / protection",
             TabKind::Photogrammetry => "Photogrammetry / SfM scan",
             TabKind::Cosim => "Co-Simulation (FMI / HELICS)",
@@ -455,6 +461,7 @@ impl TabKind {
             TabKind::Uq => app.show_uq_workbench = true,
             TabKind::Uas => app.show_uas_workbench = true,
             TabKind::MissionSim => app.show_missionsim_workbench = true,
+            TabKind::MissionPlanner => app.show_mission_planner_workbench = true,
             TabKind::Survivability => app.show_survivability_workbench = true,
             TabKind::Photogrammetry => app.show_photogrammetry_workbench = true,
             TabKind::Cosim => app.show_cosim_workbench = true,
@@ -514,6 +521,7 @@ impl TabKind {
             "uq" | "uncertainty" => Some(TabKind::Uq),
             "uas" | "drone" | "counteruas" => Some(TabKind::Uas),
             "missionsim" | "mission" | "wargame" => Some(TabKind::MissionSim),
+            "missionplanner" | "planner" | "missionplan" => Some(TabKind::MissionPlanner),
             "survivability" | "protection" | "blast" => Some(TabKind::Survivability),
             "photogrammetry" | "sfm" | "scan" => Some(TabKind::Photogrammetry),
             "cosim" | "co-simulation" | "cosimulation" | "fmi" => Some(TabKind::Cosim),
@@ -1285,6 +1293,10 @@ pub const ALL_WORKBENCH_KINDS: &[&str] = &[
     // Pk input + Lanchester square-law ODE; no lethality / targeting / kill-chain)
     // — surfaced by the Mission-Simulation workbench.
     "missionsim",
+    // In-house visual mission planner (geographic lat/lon map + waypoint routes +
+    // real-time playback; movement only, no engagement / sensors / orbits) —
+    // surfaced by the Mission Planner workbench.
+    "missionplanner",
     // In-house defensive survivability / protection (free-field blast loading +
     // SDOF protective response + pressure-impulse iso-damage diagram + minimum-
     // armor sizing + occupant tolerance screen; PROTECTIVE side only, no
@@ -1470,6 +1482,7 @@ pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
         // here only the UAS-specific ids route to the UAS workbench flag.
         "uas" | "counteruas" => app.show_uas_workbench = on,
         "missionsim" | "mission" | "wargame" => app.show_missionsim_workbench = on,
+        "missionplanner" | "planner" | "missionplan" => app.show_mission_planner_workbench = on,
         "survivability" | "protection" | "blast" => app.show_survivability_workbench = on,
         "photogrammetry" | "sfm" | "scan" => app.show_photogrammetry_workbench = on,
         "cosim" | "co-simulation" | "cosimulation" | "fmi" => app.show_cosim_workbench = on,
@@ -1535,6 +1548,7 @@ fn clear_all_workbenches(app: &mut ValenxApp) {
     app.show_uq_workbench = false;
     app.show_uas_workbench = false;
     app.show_missionsim_workbench = false;
+    app.show_mission_planner_workbench = false;
     app.show_survivability_workbench = false;
     app.show_photogrammetry_workbench = false;
     app.show_cosim_workbench = false;
@@ -3056,6 +3070,7 @@ mod tests {
             ("uq", TabKind::Uq),
             ("uas", TabKind::Uas),
             ("missionsim", TabKind::MissionSim),
+            ("missionplanner", TabKind::MissionPlanner),
             ("survivability", TabKind::Survivability),
             ("photogrammetry", TabKind::Photogrammetry),
             ("cosim", TabKind::Cosim),
@@ -4491,6 +4506,7 @@ mod tests {
             app.show_uq_workbench,
             app.show_uas_workbench,
             app.show_missionsim_workbench,
+            app.show_mission_planner_workbench,
             app.show_survivability_workbench,
             app.show_photogrammetry_workbench,
             app.show_cosim_workbench,
@@ -4553,6 +4569,9 @@ mod tests {
             TabKind::Uq => crate::uq_workbench::draw_uq_workbench(app, ctx),
             TabKind::Uas => crate::uas_workbench::draw_uas_workbench(app, ctx),
             TabKind::MissionSim => crate::missionsim_workbench::draw_missionsim_workbench(app, ctx),
+            TabKind::MissionPlanner => {
+                crate::mission_planner_workbench::draw_mission_planner_workbench(app, ctx)
+            }
             TabKind::Survivability => {
                 crate::survivability_workbench::draw_survivability_workbench(app, ctx)
             }
@@ -4845,7 +4864,7 @@ mod headless_ui_tests {
 
     #[test]
     fn all_workbench_kinds_is_unique_and_covers_134_plus_mesh() {
-        // The registry list has no duplicate ids, and is the 143
+        // The registry list has no duplicate ids, and is the
         // `show_*_workbench` fields plus the one `meshtoolbox` alias.
         let mut seen = std::collections::HashSet::new();
         for k in ALL_WORKBENCH_KINDS {
@@ -4856,8 +4875,8 @@ mod headless_ui_tests {
         }
         assert_eq!(
             ALL_WORKBENCH_KINDS.len(),
-            147,
-            "146 `show_*_workbench` fields + the meshtoolbox alias"
+            148,
+            "147 `show_*_workbench` fields + the meshtoolbox alias"
         );
         assert!(ALL_WORKBENCH_KINDS.contains(&"meshtoolbox"));
         // A couple of representative kinds are present.

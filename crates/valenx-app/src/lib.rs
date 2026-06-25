@@ -149,6 +149,7 @@ pub mod materials;
 pub mod mbd_workbench;
 pub mod mesh_prims;
 pub mod mesh_toolbox;
+pub mod mission_planner_workbench;
 pub mod missionsim_workbench;
 pub mod mohr_workbench;
 /// Richer molecular-viewer representations (sticks / cartoon / marching-cubes
@@ -2067,6 +2068,16 @@ pub struct ValenxApp {
     /// tracks + Lanchester force-vs-time plot + outcome metrics over the
     /// in-process `valenx-mission-sim` engine).
     pub missionsim: crate::missionsim_workbench::MissionSimWorkbenchState,
+
+    /// Whether the right-side **Mission Planner** workbench panel is visible.
+    /// Defaults to `false`; toggled from the View menu or opened by the agent
+    /// bridge under the id `"missionplanner"`. A geographic (lat/lon) map with
+    /// entities following waypoint routes, played back in real time
+    /// (`valenx-mission-sim::planner`). Movement + routes only (Stage 1) — no
+    /// engagement / sensors / orbits. See [`crate::mission_planner_workbench`].
+    pub show_mission_planner_workbench: bool,
+    /// Live scenario + playback state for the Mission Planner workbench.
+    pub mission_planner: crate::mission_planner_workbench::MissionPlannerWorkbenchState,
 
     /// Whether the right-side Survivability / protection workbench panel is
     /// visible. Defaults to `false`; toggled from the View menu or opened by the

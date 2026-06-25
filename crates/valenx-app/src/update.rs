@@ -1676,6 +1676,28 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Mission Planner workbench
+                    // (valenx-mission-sim::planner) — an in-house visual mission
+                    // planner: a geographic lat/lon map with entities following
+                    // waypoint routes, played back in real time. Movement only.
+                    if ui
+                        .checkbox(
+                            &mut self.show_mission_planner_workbench,
+                            "Mission Planner",
+                        )
+                        .on_hover_text(
+                            "Show / hide the Mission Planner Workbench — an in-house visual \
+                             mission planner (ArduPilot Mission Planner / GMAT style): a \
+                             geographic latitude/longitude map with a graticule, entities that \
+                             follow ordered waypoint routes, and real-time playback (Play / Pause \
+                             + a playback-speed multiplier) so you can watch them move along their \
+                             legs. Stage 1: movement + routes only — no engagement, sensors, or \
+                             orbits. Computed in-process by valenx-mission-sim::planner.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Survivability / protection workbench
                     // (valenx-survivability) — the DEFENSIVE / protective side of
                     // the shared blast/impact physics; no penetration / lethality.
@@ -3581,6 +3603,13 @@ impl eframe::App for ValenxApp {
             // square-law) on valenx-mission-sim. A no-op unless toggled on via
             // View → Mission simulation.
             crate::missionsim_workbench::draw_missionsim_workbench(self, ctx);
+
+            // Mission Planner Workbench (right) — an in-house visual mission
+            // planner: a geographic lat/lon map with entities following waypoint
+            // routes, played back in real time (valenx-mission-sim::planner).
+            // Movement + routes only. A no-op unless toggled on via
+            // View → Mission Planner.
+            crate::mission_planner_workbench::draw_mission_planner_workbench(self, ctx);
 
             // Survivability / protection Workbench (right) — the DEFENSIVE /
             // protective side of the shared blast/impact physics (free-field

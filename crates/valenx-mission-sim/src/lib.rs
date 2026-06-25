@@ -103,6 +103,7 @@ pub mod engagement;
 pub mod entity;
 pub mod error;
 pub mod monte_carlo;
+pub mod planner;
 pub mod scenario;
 pub mod scheduler;
 pub mod sensor;
