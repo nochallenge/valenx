@@ -52,6 +52,80 @@ use serde::Deserialize;
 use crate::project_tabs::{self, TabKind};
 use crate::ValenxApp;
 
+/// A typed value an agent can assign to a labelled workbench control via
+/// [`SetControl`](AgentCommand::SetControl). **Untagged** on the wire, so the
+/// JSON literal is written directly — `42`, `4000`, `0.55`, `true`,
+/// `"linear"` — and serde picks the first matching arm. Order matters: `bool`
+/// is tried before the numbers (a JSON `true` is *only* a bool), then the
+/// integer arm (so a whole number like `4000` arrives as `Int`, not a lossy
+/// float), then the float arm, then the string fallback.
+///
+/// The receiving workbench's `agent_set` decides how to interpret the value for
+/// a given control (e.g. a `usize` sample-count reads [`as_i64`](AgentValue::as_i64),
+/// a `f64` coefficient reads [`as_f64`](AgentValue::as_f64), an enum-by-name
+/// reads [`as_str`](AgentValue::as_str)); a value of the wrong shape for the
+/// named control yields a fail-loud `Err(String)` (→ a `warn` feed note), never
+/// a panic.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(untagged)]
+pub enum AgentValue {
+    /// A boolean (`true` / `false`) — for checkbox / toggle controls.
+    Bool(bool),
+    /// A whole number — for integer controls (`usize` / `u32` / `u64` counts,
+    /// sample sizes, seeds). Also coercible to `f64` for a float control.
+    Int(i64),
+    /// A real number — for floating-point controls.
+    Float(f64),
+    /// A string — for enum-by-name controls (a combo selection like
+    /// `"linear"`), or a free-text field.
+    Str(String),
+}
+
+impl AgentValue {
+    /// Interpret this value as an `f64` for a floating-point control. An `Int`
+    /// widens losslessly; a `Bool` / `Str` is a type error (fail-loud).
+    pub fn as_f64(&self) -> Result<f64, String> {
+        match self {
+            AgentValue::Float(v) => Ok(*v),
+            AgentValue::Int(v) => Ok(*v as f64),
+            other => Err(format!("expected a number, got {other:?}")),
+        }
+    }
+
+    /// Interpret this value as an `i64` for an integer control. A whole-valued
+    /// `Float` (e.g. `4000.0`) is accepted and truncated to the integer; a
+    /// fractional `Float`, a `Bool`, or a `Str` is a type error (fail-loud).
+    pub fn as_i64(&self) -> Result<i64, String> {
+        match self {
+            AgentValue::Int(v) => Ok(*v),
+            // Accept a float that is exactly integral so `{"value": 4000.0}`
+            // still sets a usize control; reject a fractional float loudly.
+            AgentValue::Float(v) if v.fract() == 0.0 && v.is_finite() => Ok(*v as i64),
+            other => Err(format!("expected an integer, got {other:?}")),
+        }
+    }
+
+    /// Interpret this value as a `bool` for a toggle control. Only a JSON
+    /// boolean qualifies; a number / string is a type error (fail-loud) so a
+    /// stray `1` never silently flips a flag.
+    pub fn as_bool(&self) -> Result<bool, String> {
+        match self {
+            AgentValue::Bool(v) => Ok(*v),
+            other => Err(format!("expected a boolean, got {other:?}")),
+        }
+    }
+
+    /// Interpret this value as a string slice for an enum-by-name / text
+    /// control. Only a JSON string qualifies (a number is a type error) so an
+    /// enum selection is always written explicitly as text.
+    pub fn as_str(&self) -> Result<&str, String> {
+        match self {
+            AgentValue::Str(s) => Ok(s),
+            other => Err(format!("expected a string, got {other:?}")),
+        }
+    }
+}
+
 /// Throttle: poll the command files at most this often (matches the ~1 s the
 /// chat feed itself re-reads at).
 ///
@@ -350,6 +424,47 @@ pub enum AgentCommand {
     /// every [`crate::commands::static_commands`] id (the same registry
     /// `RunCommand` resolves against). No app state changes.
     ListCommands,
+    /// **Set a labelled workbench parameter by its user-visible caption.** This
+    /// closes the param-setting half of AI-drivability: where
+    /// [`RunCommand`](AgentCommand::RunCommand) fires *actions*, `SetControl`
+    /// writes a tool's *input values* over the robust polled file-bridge.
+    ///
+    /// `name` is the exact caption the user sees next to the control (e.g.
+    /// `"Monte-Carlo samples N"`, `"a1 (coeff on x1)"`, `"sensor range (m)"`) —
+    /// the **same** string the widget is `labelled_by`, so an agent that read a
+    /// caption from the accessibility tree (or from
+    /// [`ListControls`](AgentCommand::ListControls)) can set it by that name.
+    /// `value` is the typed [`AgentValue`] to assign.
+    ///
+    /// `workbench` selects the target tool by id (a [`TabKind::from_id`] alias,
+    /// e.g. `"uq"`); when omitted the **active tab's** workbench is used (so an
+    /// agent driving the visible tool needn't name it). Resolution + the
+    /// per-workbench validated assignment go through `set_control` → that
+    /// workbench's `agent_set`; an unknown workbench, an unknown caption, or a
+    /// value of the wrong type posts a `warn` feed note and changes nothing
+    /// (never a panic). A successful set posts an ack note naming the control
+    /// and its new value, so the change is visible in the unit's chat.
+    SetControl {
+        /// The control's user-visible caption (== its `labelled_by` text).
+        name: String,
+        /// The typed value to assign (untagged: `42`, `0.55`, `true`, `"sum"`).
+        value: AgentValue,
+        /// Optional target workbench id (default: the active tab's workbench).
+        #[serde(default)]
+        workbench: Option<String>,
+    },
+    /// **Enumerate the settable control captions** of a workbench into this
+    /// channel's chat feed, so an agent can *discover* what
+    /// [`SetControl`](AgentCommand::SetControl) accepts without hard-coding the
+    /// names. `workbench` selects the tool by id (default: the active tab's
+    /// workbench). Posts a single feed note listing every caption that
+    /// workbench's `agent_set` recognises; a workbench with no `SetControl`
+    /// support yet posts a note saying so. No app state changes.
+    ListControls {
+        /// Optional target workbench id (default: the active tab's workbench).
+        #[serde(default)]
+        workbench: Option<String>,
+    },
 }
 
 /// The per-channel **command file** path for agent channel `n`:
@@ -1053,12 +1168,135 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
             let body = format!("commands ({}): {}", ids.len(), ids.join(", "));
             crate::assistant_workbench::append_feed_note(app, ch, "Claude", &body, "result");
         }
+        AgentCommand::SetControl {
+            name,
+            value,
+            workbench,
+        } => {
+            set_control(app, ch, &name, &value, workbench.as_deref());
+        }
+        AgentCommand::ListControls { workbench } => {
+            list_controls(app, ch, workbench.as_deref());
+        }
         AgentCommand::NewUnit { .. } => {
             // `new_unit` is a **global-channel bootstrap** command (it opens a
             // brand-new unit), handled by `apply_global`. On a per-unit channel
             // there is no new unit to open, so it is a deliberate no-op here.
         }
     }
+}
+
+/// Resolve the target workbench for a [`SetControl`](AgentCommand::SetControl) /
+/// [`ListControls`](AgentCommand::ListControls): an explicit `workbench` id
+/// ([`TabKind::from_id`], case-insensitive, alias-tolerant) when given, else the
+/// **active tab's** workbench. `None` means neither resolved (no active tab, or
+/// an unknown id) — the caller turns that into a fail-loud `warn` note.
+fn resolve_target_kind(app: &ValenxApp, workbench: Option<&str>) -> Option<TabKind> {
+    match workbench {
+        Some(id) => TabKind::from_id(id),
+        None => app.tab_bar.active_kind(),
+    }
+}
+
+/// Apply one [`SetControl`](AgentCommand::SetControl): resolve the target
+/// workbench (explicit id or the active tab), then assign `value` to the
+/// caption-named control through that workbench's **own** validated `agent_set`.
+/// Every failure path posts a `warn` feed note to channel `ch` and changes
+/// nothing — an unresolved/unsupported workbench, an unknown caption, or a
+/// wrong-typed value — so a bad command is loud but never a panic. A successful
+/// set posts an ack note naming the control and its new value.
+///
+/// Dispatch mirrors [`crate::project_tabs::set_workbench_flag`]: a `match` over
+/// the resolved [`TabKind`] routes to the right workbench module. Only the
+/// workbenches wired this round have an `agent_set`; the rest fall through to a
+/// "no settable controls" note (the honest follow-up-sweep surface).
+fn set_control(
+    app: &mut ValenxApp,
+    ch: usize,
+    name: &str,
+    value: &AgentValue,
+    workbench: Option<&str>,
+) {
+    let warn = |app: &mut ValenxApp, msg: String| {
+        crate::assistant_workbench::append_feed_note(app, ch, "Claude", &msg, "warn");
+    };
+
+    let Some(kind) = resolve_target_kind(app, workbench) else {
+        warn(
+            app,
+            match workbench {
+                Some(id) => format!("set_control: unknown workbench id: {id}"),
+                None => "set_control: no active tab to target (pass a workbench id)".to_string(),
+            },
+        );
+        return;
+    };
+
+    // Route to the resolved workbench's validated setter. Each arm calls a
+    // `agent_set(name, value) -> Result<(), String>` that owns the caption ->
+    // field mapping + range validation for that tool.
+    let result: Result<(), String> = match kind {
+        TabKind::Uq => app.uq.agent_set(name, value),
+        TabKind::Uas => app.uas.agent_set(name, value),
+        TabKind::MissionSim => app.missionsim.agent_set(name, value),
+        TabKind::Survivability => app.survivability.agent_set(name, value),
+        TabKind::Draft2d => app.draft2d.agent_set(name, value),
+        other => Err(format!(
+            "set_control: workbench {other:?} ({}) has no settable controls yet",
+            kind.label()
+        )),
+    };
+
+    match result {
+        Ok(()) => crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("set {name} = {value:?}"),
+            "result",
+        ),
+        Err(e) => warn(app, format!("set_control: {e}")),
+    }
+}
+
+/// Apply one [`ListControls`](AgentCommand::ListControls): resolve the target
+/// workbench (explicit id or the active tab) and post a single feed note listing
+/// every settable caption that workbench's `agent_set` recognises, so an agent
+/// can discover the [`SetControl`](AgentCommand::SetControl) name space. A
+/// workbench with no setter yet posts a "no settable controls" note; an
+/// unresolved workbench posts a `warn`. No app state changes.
+fn list_controls(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
+    let Some(kind) = resolve_target_kind(app, workbench) else {
+        let msg = match workbench {
+            Some(id) => format!("list_controls: unknown workbench id: {id}"),
+            None => "list_controls: no active tab to target (pass a workbench id)".to_string(),
+        };
+        crate::assistant_workbench::append_feed_note(app, ch, "Claude", &msg, "warn");
+        return;
+    };
+
+    let names: &[&str] = match kind {
+        TabKind::Uq => crate::uq_workbench::UqWorkbenchState::agent_control_names(),
+        TabKind::Uas => crate::uas_workbench::UasWorkbenchState::agent_control_names(),
+        TabKind::MissionSim => {
+            crate::missionsim_workbench::MissionSimWorkbenchState::agent_control_names()
+        }
+        TabKind::Survivability => {
+            crate::survivability_workbench::SurvivabilityWorkbenchState::agent_control_names()
+        }
+        TabKind::Draft2d => crate::draft2d_workbench::Draft2dWorkbenchState::agent_control_names(),
+        _ => &[],
+    };
+
+    let body = if names.is_empty() {
+        format!(
+            "no settable controls for workbench {} ({kind:?}) yet",
+            kind.label()
+        )
+    } else {
+        format!("controls ({}): {}", names.len(), names.join(", "))
+    };
+    crate::assistant_workbench::append_feed_note(app, ch, "Claude", &body, "result");
 }
 
 /// **LAZY-BUILD materialiser.** Build unit `n`'s deferred product the first time
@@ -3161,5 +3399,300 @@ mod tests {
             );
             assert!(flag_on(&app, kind), "{kind}'s workbench panel is shown");
         }
+    }
+
+    // ---- SetControl / ListControls / AgentValue -----------------------------
+
+    #[test]
+    fn agent_value_parses_untagged_from_each_json_scalar() {
+        // The untagged `AgentValue` reads a bare JSON scalar; the arm order means
+        // a whole number is an Int (not a lossy Float) and `true` is a Bool.
+        fn v(s: &str) -> AgentValue {
+            serde_json::from_str(s).unwrap()
+        }
+        assert_eq!(v("true"), AgentValue::Bool(true));
+        assert_eq!(v("4000"), AgentValue::Int(4000));
+        assert_eq!(v("0.55"), AgentValue::Float(0.55));
+        assert_eq!(v("\"linear\""), AgentValue::Str("linear".into()));
+
+        // Coercions: Int widens to f64; an integral Float reads back as i64; a
+        // fractional Float / bool / string is a typed error, never a panic.
+        assert_eq!(AgentValue::Int(7).as_f64().unwrap(), 7.0);
+        assert_eq!(AgentValue::Float(4000.0).as_i64().unwrap(), 4000);
+        assert!(AgentValue::Float(1.5).as_i64().is_err());
+        assert!(AgentValue::Bool(true).as_f64().is_err());
+        assert!(AgentValue::Int(1).as_bool().is_err());
+        assert!(AgentValue::Int(1).as_str().is_err());
+    }
+
+    #[test]
+    fn set_control_command_round_trips_from_wire() {
+        // The wire form `{"cmd":"set_control",...}` parses, with `workbench`
+        // optional (defaulting to the active tab).
+        let sc: AgentCommand = serde_json::from_str(
+            r#"{"cmd":"set_control","name":"Monte-Carlo samples N","value":256,"workbench":"uq"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            sc,
+            AgentCommand::SetControl {
+                name: "Monte-Carlo samples N".into(),
+                value: AgentValue::Int(256),
+                workbench: Some("uq".into()),
+            }
+        );
+        let sc2: AgentCommand = serde_json::from_str(
+            r#"{"cmd":"set_control","name":"failure threshold t","value":1.5}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            sc2,
+            AgentCommand::SetControl {
+                name: "failure threshold t".into(),
+                value: AgentValue::Float(1.5),
+                workbench: None,
+            }
+        );
+        let lc: AgentCommand =
+            serde_json::from_str(r#"{"cmd":"list_controls","workbench":"uq"}"#).unwrap();
+        assert_eq!(
+            lc,
+            AgentCommand::ListControls {
+                workbench: Some("uq".into())
+            }
+        );
+    }
+
+    #[test]
+    fn set_control_sets_a_uq_param_and_a_run_uses_it() {
+        // End-to-end through the REAL poll/reducer path: an inbound `set_control`
+        // on channel 1 (workbench "uq") writes `Monte-Carlo samples N`; the new
+        // value is visible in app state AND a subsequent run produces exactly that
+        // many output samples (proving the set actually feeds the solver).
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "set_control_uq");
+        let path = cmd_path(&app, 1);
+        assert_ne!(
+            app.uq.params.n_samples, 256,
+            "precondition: not already 256"
+        );
+        std::fs::write(
+            &path,
+            "{\"cmd\":\"set_control\",\"name\":\"Monte-Carlo samples N\",\"value\":256,\"workbench\":\"uq\"}\n",
+        )
+        .unwrap();
+
+        poll_and_apply_agent_commands(&mut app);
+
+        assert_eq!(
+            app.uq.params.n_samples, 256,
+            "set_control wrote the UQ sample count"
+        );
+        // The set value drives the solver: a run yields 256 output samples.
+        let res = app.uq.run().expect("uq run after set_control");
+        assert_eq!(
+            res.output_samples.len(),
+            256,
+            "the run used the agent-set sample count"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn set_control_targets_the_active_tab_when_workbench_omitted() {
+        // With no `workbench` field, the active tab's kind selects the target.
+        // Open a UQ tab, then set a coefficient without naming the workbench.
+        let mut app = ValenxApp::default();
+        app.tab_bar.open(TabKind::Uq);
+        project_tabs::sync_active(&mut app);
+        apply(
+            &mut app,
+            1,
+            AgentCommand::SetControl {
+                name: "a1 (coeff on x1)".into(),
+                value: AgentValue::Float(2.5),
+                workbench: None,
+            },
+        );
+        assert_eq!(app.uq.params.a1, 2.5, "active-tab routing set the coeff");
+    }
+
+    #[test]
+    fn set_control_enum_by_name_selects_the_model() {
+        // The `response model g` combo is set by its menu word.
+        let mut app = ValenxApp::default();
+        apply(
+            &mut app,
+            1,
+            AgentCommand::SetControl {
+                name: "response model g".into(),
+                value: AgentValue::Str("product".into()),
+                workbench: Some("uq".into()),
+            },
+        );
+        assert_eq!(
+            app.uq.params.model,
+            crate::uq_workbench::ModelPreset::Product
+        );
+    }
+
+    #[test]
+    fn set_control_unknown_name_posts_warn_note_and_does_not_panic() {
+        // An unknown caption must NOT panic; it posts a `warn` feed note and
+        // leaves the params untouched.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "set_control_unknown");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        let before = app.uq.params.n_samples;
+
+        apply(
+            &mut app,
+            1,
+            AgentCommand::SetControl {
+                name: "no such control".into(),
+                value: AgentValue::Int(5),
+                workbench: Some("uq".into()),
+            },
+        );
+        assert_eq!(app.uq.params.n_samples, before, "nothing changed");
+
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let warned = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("kind").and_then(|k| k.as_str()) == Some("warn")
+                    && v.get("detail")
+                        .and_then(|d| d.as_str())
+                        .is_some_and(|d| d.contains("unknown UQ control"))
+            });
+        assert!(warned, "unknown name posts a warn note; feed = {body:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn set_control_type_mismatch_posts_warn_note_and_does_not_panic() {
+        // A value of the wrong type (a string into the numeric sample count)
+        // must NOT panic; it posts a `warn` note and leaves the field untouched.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "set_control_typemismatch");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        let before = app.uq.params.n_samples;
+
+        apply(
+            &mut app,
+            1,
+            AgentCommand::SetControl {
+                name: "Monte-Carlo samples N".into(),
+                value: AgentValue::Str("lots".into()),
+                workbench: Some("uq".into()),
+            },
+        );
+        assert_eq!(
+            app.uq.params.n_samples, before,
+            "bad-typed set changed nothing"
+        );
+
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let warned = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("kind").and_then(|k| k.as_str()) == Some("warn")
+                    && v.get("detail")
+                        .and_then(|d| d.as_str())
+                        .is_some_and(|d| d.contains("expected an integer"))
+            });
+        assert!(warned, "type mismatch posts a warn note; feed = {body:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn set_control_unknown_workbench_posts_warn_note() {
+        // An unknown workbench id is a fail-loud `warn`, not a panic.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "set_control_badwb");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        apply(
+            &mut app,
+            1,
+            AgentCommand::SetControl {
+                name: "whatever".into(),
+                value: AgentValue::Int(1),
+                workbench: Some("no-such-workbench".into()),
+            },
+        );
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        assert!(
+            body.contains("unknown workbench id"),
+            "bad workbench id posts a warn note; feed = {body:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn set_control_routed_through_poll_sets_uas_and_survivability() {
+        // Two more representative workbenches set via the REAL poll path on their
+        // own channels, proving the active-tab-independent `workbench:` routing.
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "set_control_multi");
+        let path = cmd_path(&app, 1);
+        std::fs::write(
+            &path,
+            concat!(
+                "{\"cmd\":\"set_control\",\"name\":\"sensor range (m)\",\"value\":1234.0,\"workbench\":\"uas\"}\n",
+                "{\"cmd\":\"set_control\",\"name\":\"charge mass W (kg)\",\"value\":42,\"workbench\":\"survivability\"}\n",
+            ),
+        )
+        .unwrap();
+
+        poll_and_apply_agent_commands(&mut app);
+
+        assert_eq!(app.uas.params.counter.sensor_range_m, 1234.0);
+        assert_eq!(app.survivability.params.charge_kg, 42.0);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn list_controls_posts_the_uq_caption_list() {
+        // `list_controls` posts one feed note enumerating the workbench's settable
+        // captions, so an agent can discover the SetControl name space.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "list_controls_uq");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        apply(
+            &mut app,
+            1,
+            AgentCommand::ListControls {
+                workbench: Some("uq".into()),
+            },
+        );
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let n = crate::uq_workbench::UqWorkbenchState::agent_control_names().len();
+        let posted = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("detail").and_then(|d| d.as_str()).is_some_and(|d| {
+                    d.contains(&format!("controls ({n})"))
+                        && d.contains("Monte-Carlo samples N")
+                        && d.contains("response model g")
+                })
+            });
+        assert!(
+            posted && n > 0,
+            "list_controls posts the caption list; feed = {body:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

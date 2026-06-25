@@ -39,6 +39,58 @@ impl Default for Draft2dWorkbenchState {
     }
 }
 
+impl Draft2dWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`
+    /// so an agent can discover the name space. These are the line-endpoint, the
+    /// circle, and the zoom captions the form draws — note the line captions use
+    /// the Unicode subscripts `x\u{2081}`/`y\u{2081}`/`x\u{2082}`/`y\u{2082}`, so
+    /// the agent must match them exactly (or read them from this list). Setting
+    /// these stages the next primitive to add (the `+` button reads them); they
+    /// are the drawing-input fields, distinct from the entities already drawn.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "x\u{2081}",
+            "y\u{2081}",
+            "x\u{2082}",
+            "y\u{2082}", // line endpoints
+            "cx",
+            "cy",
+            "r", // circle
+            "zoom",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. The captions match exactly what the form draws (the
+    /// line endpoints are the Unicode-subscript captions). Fail-loud on an
+    /// unknown caption / wrong type (the bridge posts a `warn` note); no field is
+    /// written on error and nothing panics. The line / circle fields read
+    /// [`AgentValue::as_f64`]; `zoom` is the `f32` canvas scale and is clamped to
+    /// the same `0.5..=60.0` range the UI slider enforces.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        match name {
+            // Line endpoint inputs [x1, y1, x2, y2].
+            "x\u{2081}" => self.line[0] = value.as_f64()?,
+            "y\u{2081}" => self.line[1] = value.as_f64()?,
+            "x\u{2082}" => self.line[2] = value.as_f64()?,
+            "y\u{2082}" => self.line[3] = value.as_f64()?,
+            // Circle inputs [cx, cy, r].
+            "cx" => self.circle[0] = value.as_f64()?,
+            "cy" => self.circle[1] = value.as_f64()?,
+            "r" => self.circle[2] = value.as_f64()?,
+            // Canvas zoom (f32, matches the slider's 0.5..=60.0 range).
+            "zoom" => self.scale = (value.as_f64()? as f32).clamp(0.5, 60.0),
+            other => return Err(format!("unknown draft2d control: {other:?}")),
+        }
+        Ok(())
+    }
+}
+
 /// A small sample drawing: a closed rectangle, a circle, a diagonal, a label.
 fn demo_drawing() -> Drawing2D {
     let mut d = Drawing2D::new();
