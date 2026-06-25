@@ -243,6 +243,9 @@ pub enum TabKind {
     Uq,
     // -- Small-UAS design + defensive counter-UAS geometry --
     Uas,
+    // -- General constructive mission simulation (discrete-event / agent;
+    //    abstract Pk + Lanchester engagement, no lethality) --
+    MissionSim,
     // -- Photogrammetry / structure-from-motion --
     Photogrammetry,
     // -- Co-simulation (FMI / HELICS coupling) --
@@ -256,7 +259,7 @@ pub enum TabKind {
 impl TabKind {
     /// Every *template* kind (i.e. excluding [`TabKind::Blank`]), in
     /// `＋ from template`-menu order (grouped via [`Self::group`]).
-    pub const TEMPLATES: [TabKind; 42] = [
+    pub const TEMPLATES: [TabKind; 43] = [
         TabKind::Rocket,
         TabKind::Engine,
         TabKind::Astro,
@@ -295,6 +298,7 @@ impl TabKind {
         TabKind::Rom,
         TabKind::Uq,
         TabKind::Uas,
+        TabKind::MissionSim,
         TabKind::Photogrammetry,
         TabKind::Cosim,
         TabKind::Autonomy,
@@ -342,6 +346,7 @@ impl TabKind {
             TabKind::Rom => "Simulation",
             TabKind::Uq => "Simulation",
             TabKind::Uas => "Aerospace",
+            TabKind::MissionSim => "Simulation",
             TabKind::Cosim => "Simulation",
             TabKind::Mbd => "Simulation",
         }
@@ -390,6 +395,7 @@ impl TabKind {
             TabKind::Rom => "Reduced-order model (POD)",
             TabKind::Uq => "Uncertainty quantification",
             TabKind::Uas => "UAS design & counter-UAS",
+            TabKind::MissionSim => "Mission simulation (constructive)",
             TabKind::Photogrammetry => "Photogrammetry / SfM scan",
             TabKind::Cosim => "Co-Simulation (FMI / HELICS)",
             TabKind::Mbd => "Multibody dynamics (robot / contact)",
@@ -441,6 +447,7 @@ impl TabKind {
             TabKind::Rom => app.show_rom_workbench = true,
             TabKind::Uq => app.show_uq_workbench = true,
             TabKind::Uas => app.show_uas_workbench = true,
+            TabKind::MissionSim => app.show_missionsim_workbench = true,
             TabKind::Photogrammetry => app.show_photogrammetry_workbench = true,
             TabKind::Cosim => app.show_cosim_workbench = true,
             TabKind::Mbd => app.show_mbd_workbench = true,
@@ -498,6 +505,7 @@ impl TabKind {
             "rom" | "pod" => Some(TabKind::Rom),
             "uq" | "uncertainty" => Some(TabKind::Uq),
             "uas" | "drone" | "counteruas" => Some(TabKind::Uas),
+            "missionsim" | "mission" | "wargame" => Some(TabKind::MissionSim),
             "photogrammetry" | "sfm" | "scan" => Some(TabKind::Photogrammetry),
             "cosim" | "co-simulation" | "cosimulation" | "fmi" => Some(TabKind::Cosim),
             "mbd" | "multibody" | "robot" => Some(TabKind::Mbd),
@@ -1255,6 +1263,11 @@ pub const ALL_WORKBENCH_KINDS: &[&str] = &[
     // Native small-UAS design + defensive counter-UAS intercept geometry (no weapon
     // employment) — surfaced by the UAS workbench.
     "uas",
+    // In-house general discrete-event / agent constructive-simulation framework
+    // (scheduler + analytic movers + range-based detection + ABSTRACT engagement:
+    // Pk input + Lanchester square-law ODE; no lethality / targeting / kill-chain)
+    // — surfaced by the Mission-Simulation workbench.
+    "missionsim",
     // Native structure-from-motion / photogrammetry (COLMAP-style SfM) — surfaced by the Photogrammetry workbench.
     "photogrammetry",
     // In-house FMI / HELICS co-simulation coupling — surfaced by the Co-Simulation workbench.
@@ -1433,6 +1446,7 @@ pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
         // Note: "drone" stays mapped to the valenx-drone Drone workbench above;
         // here only the UAS-specific ids route to the UAS workbench flag.
         "uas" | "counteruas" => app.show_uas_workbench = on,
+        "missionsim" | "mission" | "wargame" => app.show_missionsim_workbench = on,
         "photogrammetry" | "sfm" | "scan" => app.show_photogrammetry_workbench = on,
         "cosim" | "co-simulation" | "cosimulation" | "fmi" => app.show_cosim_workbench = on,
         "ppi" | "interactome" | "network" => app.show_ppi_workbench = on,
@@ -1496,6 +1510,7 @@ fn clear_all_workbenches(app: &mut ValenxApp) {
     app.show_rom_workbench = false;
     app.show_uq_workbench = false;
     app.show_uas_workbench = false;
+    app.show_missionsim_workbench = false;
     app.show_photogrammetry_workbench = false;
     app.show_cosim_workbench = false;
     app.show_ppi_workbench = false;
@@ -2996,6 +3011,7 @@ mod tests {
             ("rom", TabKind::Rom),
             ("uq", TabKind::Uq),
             ("uas", TabKind::Uas),
+            ("missionsim", TabKind::MissionSim),
             ("photogrammetry", TabKind::Photogrammetry),
             ("cosim", TabKind::Cosim),
             ("mbd", TabKind::Mbd),
@@ -3021,6 +3037,8 @@ mod tests {
         assert_eq!(TabKind::from_id("robot"), Some(TabKind::Mbd));
         assert_eq!(TabKind::from_id("drone"), Some(TabKind::Uas));
         assert_eq!(TabKind::from_id("counteruas"), Some(TabKind::Uas));
+        assert_eq!(TabKind::from_id("mission"), Some(TabKind::MissionSim));
+        assert_eq!(TabKind::from_id("wargame"), Some(TabKind::MissionSim));
         // Unknown ids (and Blank, which has no id) map to None.
         assert_eq!(TabKind::from_id("blank"), None);
         assert_eq!(TabKind::from_id("nope"), None);
@@ -4425,6 +4443,7 @@ mod tests {
             app.show_rom_workbench,
             app.show_uq_workbench,
             app.show_uas_workbench,
+            app.show_missionsim_workbench,
             app.show_photogrammetry_workbench,
             app.show_cosim_workbench,
             app.show_ppi_workbench,
@@ -4485,6 +4504,7 @@ mod tests {
             TabKind::Rom => crate::rom_workbench::draw_rom_workbench(app, ctx),
             TabKind::Uq => crate::uq_workbench::draw_uq_workbench(app, ctx),
             TabKind::Uas => crate::uas_workbench::draw_uas_workbench(app, ctx),
+            TabKind::MissionSim => crate::missionsim_workbench::draw_missionsim_workbench(app, ctx),
             TabKind::Photogrammetry => {
                 crate::photogrammetry_workbench::draw_photogrammetry_workbench(app, ctx)
             }
@@ -4785,8 +4805,8 @@ mod headless_ui_tests {
         }
         assert_eq!(
             ALL_WORKBENCH_KINDS.len(),
-            145,
-            "144 `show_*_workbench` fields + the meshtoolbox alias"
+            146,
+            "145 `show_*_workbench` fields + the meshtoolbox alias"
         );
         assert!(ALL_WORKBENCH_KINDS.contains(&"meshtoolbox"));
         // A couple of representative kinds are present.

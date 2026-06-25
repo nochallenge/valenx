@@ -1613,6 +1613,29 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Mission-Simulation workbench
+                    // (valenx-mission-sim) — general discrete-event / agent
+                    // constructive simulation; abstract engagement only.
+                    if ui
+                        .checkbox(
+                            &mut self.show_missionsim_workbench,
+                            "Mission simulation (constructive)",
+                        )
+                        .on_hover_text(
+                            "Show / hide the Mission-Simulation Workbench — a general \
+                             discrete-event / agent constructive simulation (the same engine \
+                             serves logistics, epidemiology, traffic, and policy wargaming): a \
+                             tunable blue-vs-red demo scenario run to a stop time for a timeline, \
+                             final state, and metrics (survivors, detections, time-to-first-\
+                             detection), plus a Lanchester square-law aggregate curve. Engagement \
+                             is ABSTRACT (a probability-of-kill input + the Lanchester ODE) — no \
+                             lethality, no targeting, no kill chain — computed in-process by \
+                             valenx-mission-sim. Research / educational.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Photogrammetry / SfM workbench
                     // (valenx-photogrammetry).
                     if ui
@@ -3463,6 +3486,13 @@ impl eframe::App for ValenxApp {
             // trade study + DEFENSIVE counter-UAS intercept geometry on
             // valenx-uas. A no-op unless toggled on via View → UAS.
             crate::uas_workbench::draw_uas_workbench(self, ctx);
+
+            // Mission-Simulation Workbench (right) — general discrete-event /
+            // agent constructive simulation (scheduler + analytic movers +
+            // range-based detection + ABSTRACT engagement: Pk input + Lanchester
+            // square-law) on valenx-mission-sim. A no-op unless toggled on via
+            // View → Mission simulation.
+            crate::missionsim_workbench::draw_missionsim_workbench(self, ctx);
 
             // Photogrammetry Workbench (right) — native structure-from-motion
             // (synthetic-scene SfM: features/matching/two-view geometry/incremental
