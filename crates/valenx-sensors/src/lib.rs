@@ -28,7 +28,7 @@
 //!   range equation `Pr = Pt·G²·λ²·σ / ((4π)³·R⁴)` gives received power and an
 //!   SNR-vs-threshold detection against a `kTB` noise floor, with closed-form
 //!   [`Rcs`] cross-sections (sphere / plate / corner / cylinder), a main-lobe
-//!   [`AntennaPattern`] (Gaussian or `sinc²`), and the `fd = 2·vr/λ` Doppler
+//!   [`AntennaPattern`] (Gaussian or `sinc²`), and the `fd = −2·vr/λ` Doppler
 //!   shift. **Defensive** sensing (detection / ranging / tracking input only).
 //!
 //! ## The autonomy harness
