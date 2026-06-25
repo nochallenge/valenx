@@ -320,6 +320,36 @@ pub enum AgentCommand {
         #[serde(default)]
         speed: Option<f32>,
     },
+    /// **Run a command-palette action by its stable id.** Bridges the file
+    /// channel into the *existing* command-palette registry
+    /// ([`crate::commands::static_commands`]): `id` is matched against a
+    /// [`crate::commands::Command::id`] (the stable `&'static str` like
+    /// `"view.front"`, `"run.selected-case"`, `"settings.open"`) and the
+    /// matching command is invoked through the **same** `(cmd.invoke)(app)`
+    /// function pointer a user click / `Ctrl+P` selection runs — so the ~66
+    /// palette actions become drivable over the robust polled file-bridge with
+    /// **no duplicated action logic**. An unknown `id` posts an "unknown command
+    /// id" feed note and is otherwise a no-op (never a panic); a successful run
+    /// posts a "ran <id>" ack note.
+    ///
+    /// Honest scope: most ids are pure in-process state (the 8 camera views,
+    /// shading, run/sweep/cancel, settings, audit-tail) and drive cleanly
+    /// headless. A handful open a **native file dialog** (`file.new-project`,
+    /// `file.open-project`, `file.import-stl`, `file.load-mesh`,
+    /// `file.save-mesh-stl`, the HTML/CSV/audit-open file-browser actions) —
+    /// they are still exposed (a user driving the GUI may want them) but are not
+    /// usefully driven headless. The bridge does **not** try to suppress those
+    /// dialogs.
+    RunCommand {
+        /// The stable command id to run (e.g. `"view.front"`).
+        id: String,
+    },
+    /// **Enumerate the available command-palette ids** into this channel's chat
+    /// feed, so an agent can *discover* what [`RunCommand`](AgentCommand::RunCommand)
+    /// accepts without hard-coding the list. Posts a single feed note listing
+    /// every [`crate::commands::static_commands`] id (the same registry
+    /// `RunCommand` resolves against). No app state changes.
+    ListCommands,
 }
 
 /// The per-channel **command file** path for agent channel `n`:
@@ -981,6 +1011,48 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
                 }
             }
         }
+        AgentCommand::RunCommand { id } => {
+            // Resolve `id` against the EXISTING command-palette registry and
+            // invoke the matching command through the SAME `(cmd.invoke)(app)`
+            // function pointer a user click / Ctrl+P selection runs (see
+            // `commands::dispatch`'s `Static` arm) — no action logic is
+            // duplicated here. An unknown id is a feed note + no-op (no panic).
+            match crate::commands::static_commands()
+                .iter()
+                .find(|c| c.id.0 == id)
+            {
+                Some(cmd) => {
+                    (cmd.invoke)(app);
+                    crate::assistant_workbench::append_feed_note(
+                        app,
+                        ch,
+                        "Claude",
+                        &format!("ran {id}"),
+                        "result",
+                    );
+                }
+                None => {
+                    crate::assistant_workbench::append_feed_note(
+                        app,
+                        ch,
+                        "Claude",
+                        &format!("unknown command id: {id}"),
+                        "warn",
+                    );
+                }
+            }
+        }
+        AgentCommand::ListCommands => {
+            // Enumerate the SAME registry `RunCommand` resolves against so an
+            // agent can discover the runnable ids. One feed note listing every
+            // static command id; no app state changes.
+            let ids: Vec<&str> = crate::commands::static_commands()
+                .iter()
+                .map(|c| c.id.0)
+                .collect();
+            let body = format!("commands ({}): {}", ids.len(), ids.join(", "));
+            crate::assistant_workbench::append_feed_note(app, ch, "Claude", &body, "result");
+        }
         AgentCommand::NewUnit { .. } => {
             // `new_unit` is a **global-channel bootstrap** command (it opens a
             // brand-new unit), handled by `apply_global`. On a per-unit channel
@@ -1371,6 +1443,131 @@ mod tests {
             },
         );
         assert_eq!(app.tab_close_confirm, Some(0)); // "keep" is index 0
+    }
+
+    #[test]
+    fn run_command_parses_and_invokes_a_camera_view() {
+        // The wire form round-trips.
+        let rc: AgentCommand =
+            serde_json::from_str(r#"{"cmd":"run_command","id":"view.front"}"#).unwrap();
+        assert_eq!(
+            rc,
+            AgentCommand::RunCommand {
+                id: "view.front".into()
+            }
+        );
+
+        // Applying it actually invokes the palette command through the SAME
+        // `(cmd.invoke)(app)` path a click uses: the default camera is
+        // (az 45, el 25); `view.front`'s ViewDirection snaps it to (0, 0). The
+        // changed azimuth/elevation prove the registry command really ran.
+        let mut app = ValenxApp::default();
+        assert_eq!(app.camera.azimuth_deg, 45.0);
+        assert_eq!(app.camera.elevation_deg, 25.0);
+        apply(
+            &mut app,
+            1,
+            AgentCommand::RunCommand {
+                id: "view.front".into(),
+            },
+        );
+        assert_eq!(app.camera.azimuth_deg, 0.0, "view.front sets azimuth 0");
+        assert_eq!(app.camera.elevation_deg, 0.0, "view.front sets elevation 0");
+    }
+
+    #[test]
+    fn run_command_routed_through_poll_changes_app_state() {
+        // End-to-end through the REAL poll/reducer path: an inbound
+        // `{"cmd":"run_command","id":"view.top"}` on channel 1 runs the palette
+        // command, snapping the camera to Top (az 0, el 90).
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "run_command_poll");
+        let path = cmd_path(&app, 1);
+        std::fs::write(&path, "{\"cmd\":\"run_command\",\"id\":\"view.top\"}\n").unwrap();
+
+        poll_and_apply_agent_commands(&mut app);
+
+        assert_eq!(app.camera.elevation_deg, 90.0, "view.top sets elevation 90");
+        assert_eq!(app.camera.azimuth_deg, 0.0, "view.top sets azimuth 0");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn run_command_unknown_id_posts_a_note_and_does_not_panic() {
+        // An unknown id must NOT panic; it posts an "unknown command id" feed
+        // note and leaves app state untouched. Point the per-unit feed at an
+        // isolated dir so we can read the note back.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "run_command_unknown");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+
+        let before_az = app.camera.azimuth_deg;
+        apply(
+            &mut app,
+            1,
+            AgentCommand::RunCommand {
+                id: "no.such.command".into(),
+            },
+        );
+        // No state change (nothing ran).
+        assert_eq!(app.camera.azimuth_deg, before_az);
+
+        // A `warn` note naming the bad id was posted to unit 1's feed.
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed file written");
+        let posted = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("kind").and_then(|k| k.as_str()) == Some("warn")
+                    && v.get("detail").and_then(|d| d.as_str()).is_some_and(|d| {
+                        d.contains("unknown command id") && d.contains("no.such.command")
+                    })
+            });
+        assert!(
+            posted,
+            "unknown id posts a warn note naming the id; feed = {body:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn list_commands_posts_a_non_empty_list_of_ids() {
+        // `ListCommands` posts one feed note enumerating every static command
+        // id (the same registry `RunCommand` resolves against), so an agent can
+        // discover what's runnable. Assert the note is present, non-empty, and
+        // mentions a known id.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "list_commands");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+
+        // Sanity: the wire form parses.
+        let lc: AgentCommand = serde_json::from_str(r#"{"cmd":"list_commands"}"#).unwrap();
+        assert_eq!(lc, AgentCommand::ListCommands);
+
+        apply(&mut app, 1, AgentCommand::ListCommands);
+
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed file written");
+        let n_ids = crate::commands::static_commands().len();
+        let posted = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("detail").and_then(|d| d.as_str()).is_some_and(|d| {
+                    d.contains(&format!("commands ({n_ids})"))
+                        && d.contains("view.front")
+                        && d.contains("run.selected-case")
+                })
+            });
+        assert!(
+            posted && n_ids > 0,
+            "list_commands posts a non-empty id list; feed = {body:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
