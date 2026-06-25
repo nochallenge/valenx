@@ -1285,7 +1285,10 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
             // Bridge-only on purpose — kept out of the user-facing palette.
             if matches!(id.as_str(), "missionsim.run" | "missionsim.run-monte-carlo") {
                 run_missionsim_bridge(app, ch, &id);
-            } else if matches!(id.as_str(), "missionplanner.play" | "missionplanner.pause") {
+            } else if matches!(
+                id.as_str(),
+                "missionplanner.play" | "missionplanner.pause" | "missionplanner.route"
+            ) {
                 run_mission_planner_bridge(app, ch, &id);
             } else if matches!(id.as_str(), "morphogenesis.play" | "morphogenesis.pause") {
                 run_morphogenesis_bridge(app, ch, &id);
@@ -1659,14 +1662,16 @@ fn run_missionsim_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
     );
 }
 
-/// Fire a Mission Planner playback action from the bridge. The Play / Pause
-/// toggles exist only as in-panel buttons; this routes the two bridge ids
-/// (`missionplanner.play`, `missionplanner.pause`) to the SAME `play` / `pause`
-/// functions the buttons call, so a `RunCommand` drives real-time playback.
+/// Fire a Mission Planner action from the bridge. The Play / Pause toggles and
+/// the `Compute route` action exist only as in-panel buttons; this routes the
+/// bridge ids (`missionplanner.play`, `missionplanner.pause`,
+/// `missionplanner.route`) to the SAME `play` / `pause` / `route` functions the
+/// buttons call, so a `RunCommand` drives real-time playback or computes the
+/// tactical A\* route.
 ///
 /// The active tab must be a [`TabKind::MissionPlanner`]; otherwise this posts a
-/// fail-loud `warn` note and changes nothing. After toggling it acks with the
-/// planner readout (sim time + entity count + playing/paused).
+/// fail-loud `warn` note and changes nothing. After acting it acks with the
+/// planner readout (sim time + entity count + playing/paused + route status).
 fn run_mission_planner_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
     if resolve_target_kind(app, None) != Some(TabKind::MissionPlanner) {
         crate::assistant_workbench::append_feed_note(
@@ -1681,6 +1686,7 @@ fn run_mission_planner_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
     match id {
         "missionplanner.play" => crate::mission_planner_workbench::play(app),
         "missionplanner.pause" => crate::mission_planner_workbench::pause(app),
+        "missionplanner.route" => crate::mission_planner_workbench::route(app),
         _ => unreachable!("run_mission_planner_bridge called with a non-missionplanner id"),
     }
     let readout = app
