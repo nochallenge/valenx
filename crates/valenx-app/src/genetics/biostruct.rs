@@ -525,12 +525,38 @@ fn draw_representation_picker(app: &mut ValenxApp, ui: &mut egui::Ui) {
     // Per-representation tuning, only shown when relevant.
     match p.representation {
         Representation::Surface => {
+            // Probe-based surface mode: a row of named `selectable_value` buttons
+            // (vdW / SAS / SES), each `labelled_by` the "Surface" caption so it
+            // carries an unambiguous accessibility / UI-Automation Name — an agent
+            // flips the surface type by selecting the button by its `label()`.
+            ui.horizontal_wrapped(|ui| {
+                let caption = ui.label("Surface type");
+                for mode in molviz::SurfaceMode::ALL {
+                    ui.selectable_value(&mut p.molviz_params.surface_mode, mode, mode.label())
+                        .labelled_by(caption.id)
+                        .on_hover_text(match mode {
+                            molviz::SurfaceMode::Vdw => {
+                                "Van-der-Waals surface: union of the bare atom spheres \
+                                 (probe ignored)."
+                            }
+                            molviz::SurfaceMode::Sas => {
+                                "Solvent-accessible surface (Lee–Richards): union of \
+                                 probe-inflated spheres — the path of the probe centre."
+                            }
+                            molviz::SurfaceMode::Ses => {
+                                "Solvent-excluded / Connolly surface (Richards): the smooth \
+                                 re-entrant surface, built by eroding the SAS solid by the \
+                                 probe radius on the grid."
+                            }
+                        });
+                }
+            });
             ui.horizontal(|ui| {
                 ui.label("Surface grid:");
                 ui.add(egui::Slider::new(&mut p.molviz_params.grid_max, 16..=128).text("cells"))
                     .on_hover_text(
                         "Marching-cubes resolution along the longest axis — higher is \
-                     smoother but costs O(n³).",
+                     smoother but costs O(n³). SES re-entrant detail sharpens with resolution.",
                     );
                 ui.add(
                     egui::DragValue::new(&mut p.molviz_params.probe_radius)
@@ -538,7 +564,10 @@ fn draw_representation_picker(app: &mut ValenxApp, ui: &mut egui::Ui) {
                         .range(0.0..=3.0)
                         .prefix("probe Å "),
                 )
-                .on_hover_text("Probe radius inflating each atom before the isosurface.");
+                .on_hover_text(
+                    "Rolling-probe radius (1.4 Å ≈ water). Inflates each atom for SAS \
+                     and is the erosion radius for SES; ignored for vdW.",
+                );
             });
         }
         Representation::Density => {
