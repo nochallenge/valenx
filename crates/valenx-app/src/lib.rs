@@ -156,6 +156,8 @@ pub mod mohr_workbench;
 /// surface) extending [`genetics::molecule_view`]; pure mesh generators wired
 /// into the Macromolecular-Structure panel's representation picker.
 pub mod molviz;
+pub mod morphogenesis;
+pub mod morphogenesis_workbench;
 pub mod mosfet_workbench;
 pub mod new_project_dialog;
 pub mod opamp_workbench;
@@ -2078,6 +2080,16 @@ pub struct ValenxApp {
     pub show_mission_planner_workbench: bool,
     /// Live scenario + playback state for the Mission Planner workbench.
     pub mission_planner: crate::mission_planner_workbench::MissionPlannerWorkbenchState,
+
+    /// Whether the right-side **Morphogenesis** workbench panel is visible.
+    /// Defaults to `false`; toggled from the View menu or opened by the agent
+    /// bridge under the id `"morphogenesis"`. A live Turing reaction–diffusion
+    /// (Gray–Scott) field grown as a 3-D surface. See
+    /// [`crate::morphogenesis_workbench`].
+    pub show_morphogenesis_workbench: bool,
+    /// Live reaction–diffusion field + playback state for the Morphogenesis
+    /// workbench.
+    pub morphogenesis: crate::morphogenesis_workbench::MorphogenesisWorkbenchState,
 
     /// Whether the right-side Survivability / protection workbench panel is
     /// visible. Defaults to `false`; toggled from the View menu or opened by the

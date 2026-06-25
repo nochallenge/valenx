@@ -231,6 +231,9 @@ pub enum TabKind {
     Neuro,
     VariantEffect,
     Ppi,
+    // -- Turing morphogenesis (Gray–Scott reaction–diffusion; live 3-D
+    //    organic-pattern growth: spots / coral / mitosis / mazes) --
+    Morphogenesis,
     // -- Sensors --
     Sensors,
     // -- Fluids --
@@ -266,7 +269,7 @@ pub enum TabKind {
 impl TabKind {
     /// Every *template* kind (i.e. excluding [`TabKind::Blank`]), in
     /// `＋ from template`-menu order (grouped via [`Self::group`]).
-    pub const TEMPLATES: [TabKind; 45] = [
+    pub const TEMPLATES: [TabKind; 46] = [
         TabKind::Rocket,
         TabKind::Engine,
         TabKind::Astro,
@@ -299,6 +302,7 @@ impl TabKind {
         TabKind::Neuro,
         TabKind::VariantEffect,
         TabKind::Ppi,
+        TabKind::Morphogenesis,
         TabKind::Sensors,
         TabKind::Fluids,
         TabKind::Ocean,
@@ -345,9 +349,11 @@ impl TabKind {
             | TabKind::Reinforcement
             | TabKind::Interior
             | TabKind::Geomatics => "Civil & AEC",
-            TabKind::Genetics | TabKind::Neuro | TabKind::VariantEffect | TabKind::Ppi => {
-                "Life sciences"
-            }
+            TabKind::Genetics
+            | TabKind::Neuro
+            | TabKind::VariantEffect
+            | TabKind::Ppi
+            | TabKind::Morphogenesis => "Life sciences",
             TabKind::Sensors => "Sensors",
             TabKind::Autonomy => "Sensors",
             TabKind::Fluids => "Simulation",
@@ -399,6 +405,7 @@ impl TabKind {
             TabKind::Neuro => "Neural interface",
             TabKind::VariantEffect => "Variant effect",
             TabKind::Ppi => "Protein interaction (PPI)",
+            TabKind::Morphogenesis => "Morphogenesis",
             TabKind::Sensors => "Sensors (LiDAR / Radar)",
             TabKind::Autonomy => "Autonomy V&V",
             TabKind::Fluids => "Fluids (SPH particle sim)",
@@ -453,6 +460,7 @@ impl TabKind {
             TabKind::Neuro => app.show_neuro_workbench = true,
             TabKind::VariantEffect => app.show_variant_effect_workbench = true,
             TabKind::Ppi => app.show_ppi_workbench = true,
+            TabKind::Morphogenesis => app.show_morphogenesis_workbench = true,
             TabKind::Sensors => app.show_sensors_workbench = true,
             TabKind::Autonomy => app.show_autonomy_workbench = true,
             TabKind::Fluids => app.show_fluids_workbench = true,
@@ -513,6 +521,7 @@ impl TabKind {
             "neuro" => Some(TabKind::Neuro),
             "variant" | "varianteffect" => Some(TabKind::VariantEffect),
             "ppi" | "interactome" | "network" => Some(TabKind::Ppi),
+            "morphogenesis" | "turing" | "reactiondiffusion" => Some(TabKind::Morphogenesis),
             "sensors" => Some(TabKind::Sensors),
             "autonomy" | "vnv" => Some(TabKind::Autonomy),
             "fluids" | "sph" => Some(TabKind::Fluids),
@@ -1315,6 +1324,9 @@ pub const ALL_WORKBENCH_KINDS: &[&str] = &[
     // (coevolution MI -> fused PPI score -> ranked screen) — surfaced by the
     // PPI / interactome workbench.
     "ppi",
+    // In-house Turing morphogenesis (Gray–Scott reaction–diffusion; live 3-D
+    // organic-pattern growth) — surfaced by the Morphogenesis workbench.
+    "morphogenesis",
     // The Mesh Toolbox is gated on `show_mesh_toolbox` (a `_toolbox`, not a
     // `_workbench`, field) but behaves like a per-tab workbench, so it is
     // mappable here under the same id the agent registry / `TabKind::from_id`
@@ -1487,6 +1499,7 @@ pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
         "photogrammetry" | "sfm" | "scan" => app.show_photogrammetry_workbench = on,
         "cosim" | "co-simulation" | "cosimulation" | "fmi" => app.show_cosim_workbench = on,
         "ppi" | "interactome" | "network" => app.show_ppi_workbench = on,
+        "morphogenesis" | "turing" | "reactiondiffusion" => app.show_morphogenesis_workbench = on,
         "mbd" | "multibody" | "robot" => app.show_mbd_workbench = on,
         // Mesh Toolbox (a `_toolbox` flag, mapped here for parity).
         "mesh" | "meshtoolbox" => app.show_mesh_toolbox = on,
@@ -3062,6 +3075,7 @@ mod tests {
             ("neuro", TabKind::Neuro),
             ("varianteffect", TabKind::VariantEffect),
             ("ppi", TabKind::Ppi),
+            ("morphogenesis", TabKind::Morphogenesis),
             ("sensors", TabKind::Sensors),
             ("autonomy", TabKind::Autonomy),
             ("fluids", TabKind::Fluids),
@@ -4511,6 +4525,7 @@ mod tests {
             app.show_photogrammetry_workbench,
             app.show_cosim_workbench,
             app.show_ppi_workbench,
+            app.show_morphogenesis_workbench,
             app.show_mbd_workbench,
         ]
         .into_iter()
@@ -4580,6 +4595,9 @@ mod tests {
             }
             TabKind::Cosim => crate::cosim_workbench::draw_cosim_workbench(app, ctx),
             TabKind::Ppi => crate::ppi_workbench::draw_ppi_workbench(app, ctx),
+            TabKind::Morphogenesis => {
+                crate::morphogenesis_workbench::draw_morphogenesis_workbench(app, ctx)
+            }
             TabKind::Mbd => crate::mbd_workbench::draw_mbd_workbench(app, ctx),
         });
     }
@@ -4863,7 +4881,7 @@ mod headless_ui_tests {
     }
 
     #[test]
-    fn all_workbench_kinds_is_unique_and_covers_134_plus_mesh() {
+    fn all_workbench_kinds_is_unique_and_covers_135_plus_mesh() {
         // The registry list has no duplicate ids, and is the
         // `show_*_workbench` fields plus the one `meshtoolbox` alias.
         let mut seen = std::collections::HashSet::new();
@@ -4875,8 +4893,8 @@ mod headless_ui_tests {
         }
         assert_eq!(
             ALL_WORKBENCH_KINDS.len(),
-            148,
-            "147 `show_*_workbench` fields + the meshtoolbox alias"
+            149,
+            "148 `show_*_workbench` fields + the meshtoolbox alias"
         );
         assert!(ALL_WORKBENCH_KINDS.contains(&"meshtoolbox"));
         // A couple of representative kinds are present.

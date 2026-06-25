@@ -1287,6 +1287,8 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
                 run_missionsim_bridge(app, ch, &id);
             } else if matches!(id.as_str(), "missionplanner.play" | "missionplanner.pause") {
                 run_mission_planner_bridge(app, ch, &id);
+            } else if matches!(id.as_str(), "morphogenesis.play" | "morphogenesis.pause") {
+                run_morphogenesis_bridge(app, ch, &id);
             } else {
                 // Resolve `id` against the EXISTING command-palette registry and
                 // invoke the matching command through the SAME `(cmd.invoke)(app)`
@@ -1694,6 +1696,43 @@ fn run_mission_planner_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
     );
 }
 
+/// Fire a Morphogenesis playback action from the bridge. The Play / Pause
+/// toggles exist only as in-panel buttons; this routes the two bridge ids
+/// (`morphogenesis.play`, `morphogenesis.pause`) to the SAME `play` / `pause`
+/// functions the buttons call, so a `RunCommand` drives real-time growth.
+///
+/// The active tab must be a [`TabKind::Morphogenesis`]; otherwise this posts a
+/// fail-loud `warn` note and changes nothing. After toggling it acks with the
+/// morphogenesis readout (preset + step count + mean V + playing/paused).
+fn run_morphogenesis_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::Morphogenesis) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Morphogenesis workbench"),
+            "warn",
+        );
+        return;
+    }
+    match id {
+        "morphogenesis.play" => crate::morphogenesis_workbench::play(app),
+        "morphogenesis.pause" => crate::morphogenesis_workbench::pause(app),
+        _ => unreachable!("run_morphogenesis_bridge called with a non-morphogenesis id"),
+    }
+    let readout = app
+        .morphogenesis
+        .agent_readout()
+        .unwrap_or_else(|| "(no readout)".to_string());
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {readout}"),
+        "result",
+    );
+}
+
 /// Apply one [`SetControl`](AgentCommand::SetControl): resolve the target
 /// workbench (explicit id or the active tab), then assign `value` to the
 /// caption-named control through that workbench's **own** validated `agent_set`.
@@ -1736,6 +1775,7 @@ fn set_control(
         TabKind::Uas => app.uas.agent_set(name, value),
         TabKind::MissionSim => app.missionsim.agent_set(name, value),
         TabKind::MissionPlanner => app.mission_planner.agent_set(name, value),
+        TabKind::Morphogenesis => app.morphogenesis.agent_set(name, value),
         TabKind::Survivability => app.survivability.agent_set(name, value),
         TabKind::Draft2d => app.draft2d.agent_set(name, value),
         // ---- agent_set sweep, batch 1 ----
@@ -1822,6 +1862,9 @@ fn list_controls(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
         }
         TabKind::MissionPlanner => {
             crate::mission_planner_workbench::MissionPlannerWorkbenchState::agent_control_names()
+        }
+        TabKind::Morphogenesis => {
+            crate::morphogenesis_workbench::MorphogenesisWorkbenchState::agent_control_names()
         }
         TabKind::Survivability => {
             crate::survivability_workbench::SurvivabilityWorkbenchState::agent_control_names()
@@ -1950,6 +1993,7 @@ fn read_readout(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
         TabKind::Uas => Some(app.uas.agent_readout()),
         TabKind::MissionSim => Some(app.missionsim.agent_readout()),
         TabKind::MissionPlanner => Some(app.mission_planner.agent_readout()),
+        TabKind::Morphogenesis => Some(app.morphogenesis.agent_readout()),
         TabKind::Survivability => Some(app.survivability.agent_readout()),
         _ => None,
     };

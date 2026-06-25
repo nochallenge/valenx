@@ -448,6 +448,10 @@ const PANELS: &[(&str, fn(&mut ValenxApp, &egui::Context))] = &[
         app.show_mission_planner_workbench = true;
         crate::mission_planner_workbench::draw_mission_planner_workbench(app, ctx);
     }),
+    ("morphogenesis_workbench", |app, ctx| {
+        app.show_morphogenesis_workbench = true;
+        crate::morphogenesis_workbench::draw_morphogenesis_workbench(app, ctx);
+    }),
     ("missionsim_workbench", |app, ctx| {
         app.show_missionsim_workbench = true;
         crate::missionsim_workbench::draw_missionsim_workbench(app, ctx);
@@ -751,7 +755,7 @@ fn panel_table_covers_every_workbench_in_the_dispatch() {
     // `update.rs` (the tab strip is not a workbench and is excluded).
     assert_eq!(
         PANELS.len(),
-        149,
+        150,
         "PANELS must list every show_*_workbench panel drawn in update.rs"
     );
     // No duplicate panel ids.
