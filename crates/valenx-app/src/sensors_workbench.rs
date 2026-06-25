@@ -279,6 +279,111 @@ impl SensorsWorkbenchState {
             max_range_m: max_range,
         })
     }
+
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`.
+    /// Covers the always-visible scene controls plus BOTH sensor families
+    /// (LiDAR + radar) so an agent can set either regardless of which sensor
+    /// kind is currently selected; each string matches the form caption exactly.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            // -- Scene --
+            "sphere X (m)",
+            "sphere Z (m)",
+            "sphere radius (m)",
+            // -- LiDAR --
+            "H field-of-view (°)",
+            "V field-of-view (°)",
+            "azimuth beams",
+            "elevation beams",
+            "max range (m)",
+            // -- Radar --
+            "Tx power (W)",
+            "frequency (GHz)",
+            "target X (m)",
+            "target radial vel (m/s)",
+            "RCS sphere radius (m)",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the
+    /// wrong type / out of range returns `Err(String)` — never a panic. Ranges
+    /// mirror the form's `DragValue` clamps exactly. The caption routes the
+    /// value to the right sub-struct (`scene` / `lidar` / `radar`).
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        let ranged = |v: f64, lo: f64, hi: f64, what: &str| -> Result<f64, String> {
+            if v.is_finite() && (lo..=hi).contains(&v) {
+                Ok(v)
+            } else {
+                Err(format!("{what} must be in {lo}..={hi}, got {v}"))
+            }
+        };
+        let ranged_int = |value: &crate::agent_commands::AgentValue,
+                          lo: i64,
+                          hi: i64,
+                          what: &str|
+         -> Result<usize, String> {
+            let n = value.as_i64()?;
+            if (lo..=hi).contains(&n) {
+                Ok(n as usize)
+            } else {
+                Err(format!("{what} must be in {lo}..={hi}, got {n}"))
+            }
+        };
+        match name {
+            // -- Scene --
+            "sphere X (m)" => {
+                self.scene.sphere_x_m = ranged(value.as_f64()?, -100.0, 100.0, "sphere X")?
+            }
+            "sphere Z (m)" => {
+                self.scene.sphere_z_m = ranged(value.as_f64()?, 0.1, 200.0, "sphere Z")?
+            }
+            "sphere radius (m)" => {
+                self.scene.sphere_radius_m = ranged(value.as_f64()?, 0.01, 50.0, "sphere radius")?
+            }
+            // -- LiDAR --
+            "H field-of-view (°)" => {
+                self.lidar.h_fov_deg = ranged(value.as_f64()?, 1.0, 360.0, "H field-of-view")?
+            }
+            "V field-of-view (°)" => {
+                self.lidar.v_fov_deg = ranged(value.as_f64()?, 1.0, 90.0, "V field-of-view")?
+            }
+            "azimuth beams" => {
+                self.lidar.azimuth_steps = ranged_int(value, 4, 512, "azimuth beams")?
+            }
+            "elevation beams" => {
+                self.lidar.elevation_steps = ranged_int(value, 1, 64, "elevation beams")?
+            }
+            "max range (m)" => {
+                self.lidar.max_range_m = ranged(value.as_f64()?, 1.0, 500.0, "max range")?
+            }
+            // -- Radar --
+            "Tx power (W)" => {
+                self.radar.tx_power_w = ranged(value.as_f64()?, 1.0, 1e6, "Tx power")?
+            }
+            "frequency (GHz)" => {
+                self.radar.freq_ghz = ranged(value.as_f64()?, 0.1, 100.0, "frequency")?
+            }
+            "target X (m)" => {
+                self.radar.target_x_m = ranged(value.as_f64()?, 0.1, 500.0, "target X")?
+            }
+            "target radial vel (m/s)" => {
+                self.radar.target_vr_m_s =
+                    ranged(value.as_f64()?, -300.0, 300.0, "target radial vel")?
+            }
+            "RCS sphere radius (m)" => {
+                self.radar.rcs_sphere_radius_m =
+                    ranged(value.as_f64()?, 0.01, 20.0, "RCS sphere radius")?
+            }
+            other => return Err(format!("unknown Sensors control: {other:?}")),
+        }
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -771,6 +876,36 @@ fn draw_radar_viz(s: &SensorsWorkbenchState, ui: &mut egui::Ui) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_commands::AgentValue;
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        let mut s = SensorsWorkbenchState::default();
+        // Scene float + LiDAR integer both land in the right sub-struct.
+        s.agent_set("sphere radius (m)", &AgentValue::Float(2.0))
+            .unwrap();
+        assert_eq!(s.scene.sphere_radius_m, 2.0);
+        s.agent_set("azimuth beams", &AgentValue::Int(128)).unwrap();
+        assert_eq!(s.lidar.azimuth_steps, 128);
+        // A radar caption routes to the radar sub-struct.
+        s.agent_set("Tx power (W)", &AgentValue::Float(500.0))
+            .unwrap();
+        assert_eq!(s.radar.tx_power_w, 500.0);
+        // Unknown caption -> Err (no panic).
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (string into a numeric field) -> Err.
+        assert!(s
+            .agent_set("sphere radius (m)", &AgentValue::Str("big".into()))
+            .is_err());
+        // Out-of-range (azimuth beams > 512) -> Err, field untouched.
+        assert!(s
+            .agent_set("azimuth beams", &AgentValue::Int(9999))
+            .is_err());
+        assert_eq!(
+            s.lidar.azimuth_steps, 128,
+            "rejected set leaves field untouched"
+        );
+    }
 
     #[test]
     fn default_lidar_scan_returns_finite_ranges() {

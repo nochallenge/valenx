@@ -1604,6 +1604,22 @@ fn set_control(
         TabKind::MissionSim => app.missionsim.agent_set(name, value),
         TabKind::Survivability => app.survivability.agent_set(name, value),
         TabKind::Draft2d => app.draft2d.agent_set(name, value),
+        // ---- agent_set sweep, batch 1 ----
+        TabKind::Cfd => app.cfd.agent_set(name, value),
+        TabKind::Fem => app.fem.agent_set(name, value),
+        TabKind::Gears => app.gears.agent_set(name, value),
+        TabKind::Springs => app.springs.agent_set(name, value),
+        TabKind::Gasdynamics => app.gasdynamics.agent_set(name, value),
+        TabKind::Rotor => app.rotor.agent_set(name, value),
+        TabKind::Fluids => app.fluids.agent_set(name, value),
+        TabKind::Ocean => app.ocean.agent_set(name, value),
+        TabKind::Rom => app.rom.agent_set(name, value),
+        TabKind::Reinforcement => app.reinforcement.agent_set(name, value),
+        TabKind::Sensors => app.sensors.agent_set(name, value),
+        TabKind::Hvac => app.hvac.agent_set(name, value),
+        TabKind::Frames => app.frames.agent_set(name, value),
+        TabKind::Mbd => app.mbd.agent_set(name, value),
+        TabKind::Piping => app.piping.agent_set(name, value),
         other => Err(format!(
             "set_control: workbench {other:?} ({}) has no settable controls yet",
             kind.label()
@@ -1648,6 +1664,26 @@ fn list_controls(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
             crate::survivability_workbench::SurvivabilityWorkbenchState::agent_control_names()
         }
         TabKind::Draft2d => crate::draft2d_workbench::Draft2dWorkbenchState::agent_control_names(),
+        // ---- agent_set sweep, batch 1 ----
+        TabKind::Cfd => crate::cfd_workbench::CfdWorkbenchState::agent_control_names(),
+        TabKind::Fem => crate::fem_workbench::FemWorkbenchState::agent_control_names(),
+        TabKind::Gears => crate::gears_workbench::GearsWorkbenchState::agent_control_names(),
+        TabKind::Springs => crate::springs_workbench::SpringsWorkbenchState::agent_control_names(),
+        TabKind::Gasdynamics => {
+            crate::gasdynamics_workbench::GasDynamicsWorkbenchState::agent_control_names()
+        }
+        TabKind::Rotor => crate::rotor_workbench::RotorWorkbenchState::agent_control_names(),
+        TabKind::Fluids => crate::fluids_workbench::FluidsWorkbenchState::agent_control_names(),
+        TabKind::Ocean => crate::ocean_workbench::OceanWorkbenchState::agent_control_names(),
+        TabKind::Rom => crate::rom_workbench::RomWorkbenchState::agent_control_names(),
+        TabKind::Reinforcement => {
+            crate::reinforcement_workbench::ReinforcementWorkbenchState::agent_control_names()
+        }
+        TabKind::Sensors => crate::sensors_workbench::SensorsWorkbenchState::agent_control_names(),
+        TabKind::Hvac => crate::hvac_workbench::HvacWorkbenchState::agent_control_names(),
+        TabKind::Frames => crate::frames_workbench::FramesWorkbenchState::agent_control_names(),
+        TabKind::Mbd => crate::mbd_workbench::MbdWorkbenchState::agent_control_names(),
+        TabKind::Piping => crate::piping_workbench::PipingWorkbenchState::agent_control_names(),
         _ => &[],
     };
 
@@ -4021,6 +4057,41 @@ mod tests {
 
         assert_eq!(app.uas.params.counter.sensor_range_m, 1234.0);
         assert_eq!(app.survivability.params.charge_kg, 42.0);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn set_control_routed_through_poll_sets_batch1_workbenches() {
+        // A representative slice of the batch-1 workbenches set via the REAL
+        // poll path on one channel, proving each new `TabKind` arm routes to the
+        // right state's `agent_set` (active-tab-independent `workbench:` routing).
+        // These five expose their parameters publicly (`pub params` with `pub`
+        // fields), so the landed value is asserted directly; the remaining
+        // batch-1 workbenches with private fields have their own in-module
+        // `agent_set` round-trip tests.
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "set_control_batch1");
+        let path = cmd_path(&app, 1);
+        std::fs::write(
+            &path,
+            concat!(
+                "{\"cmd\":\"set_control\",\"name\":\"truncation rank k\",\"value\":5,\"workbench\":\"rom\"}\n",
+                "{\"cmd\":\"set_control\",\"name\":\"number of steps\",\"value\":42,\"workbench\":\"fluids\"}\n",
+                "{\"cmd\":\"set_control\",\"name\":\"number of waves N\",\"value\":8,\"workbench\":\"ocean\"}\n",
+                "{\"cmd\":\"set_control\",\"name\":\"gravity g (m/s^2)\",\"value\":3.71,\"workbench\":\"mbd\"}\n",
+                "{\"cmd\":\"set_control\",\"name\":\"blade count n\",\"value\":3,\"workbench\":\"rotor\"}\n",
+            ),
+        )
+        .unwrap();
+
+        poll_and_apply_agent_commands(&mut app);
+
+        assert_eq!(app.rom.params.rank, 5);
+        assert_eq!(app.fluids.params.num_steps, 42);
+        assert_eq!(app.ocean.params.num_waves, 8);
+        assert_eq!(app.mbd.params.gravity, 3.71);
+        assert_eq!(app.rotor.blade_count, 3);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

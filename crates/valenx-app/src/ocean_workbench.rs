@@ -311,6 +311,82 @@ impl OceanWorkbenchState {
             total_volume,
         })
     }
+
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`;
+    /// each string matches exactly the caption the form draws.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "number of waves N",
+            "base wavelength L (m)",
+            "base amplitude A (m)",
+            "steepness Q",
+            "wind direction (deg)",
+            "mean sea level (m)",
+            "hull width (m)",
+            "hull draft (m)",
+            "body density (kg/m³)",
+            "water density (kg/m³)",
+            "linear drag (N·s/m)",
+            "time t (s)",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the
+    /// wrong type / out of range returns `Err(String)` — never a panic. Ranges
+    /// mirror the form's `DragValue` clamps exactly.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        let ranged = |v: f64, lo: f64, hi: f64, what: &str| -> Result<f64, String> {
+            if v.is_finite() && (lo..=hi).contains(&v) {
+                Ok(v)
+            } else {
+                Err(format!("{what} must be in {lo}..={hi}, got {v}"))
+            }
+        };
+        let p = &mut self.params;
+        match name {
+            "number of waves N" => {
+                let n = value.as_i64()?;
+                if (1..=32).contains(&n) {
+                    p.num_waves = n as usize;
+                } else {
+                    return Err(format!("number of waves N must be in 1..=32, got {n}"));
+                }
+            }
+            "base wavelength L (m)" => {
+                p.base_wavelength = ranged(value.as_f64()?, 0.1, 1000.0, "base wavelength L")?
+            }
+            "base amplitude A (m)" => {
+                p.base_amplitude = ranged(value.as_f64()?, 0.001, 100.0, "base amplitude A")?
+            }
+            "steepness Q" => p.steepness = ranged(value.as_f64()?, 0.0, 1.0, "steepness Q")?,
+            "wind direction (deg)" => {
+                p.wind_dir_deg = ranged(value.as_f64()?, -180.0, 180.0, "wind direction")?
+            }
+            "mean sea level (m)" => {
+                p.mean_level = ranged(value.as_f64()?, -100.0, 100.0, "mean sea level")?
+            }
+            "hull width (m)" => p.hull_width = ranged(value.as_f64()?, 0.01, 100.0, "hull width")?,
+            "hull draft (m)" => p.hull_draft = ranged(value.as_f64()?, 0.01, 100.0, "hull draft")?,
+            "body density (kg/m³)" => {
+                p.body_density = ranged(value.as_f64()?, 1.0, 20_000.0, "body density")?
+            }
+            "water density (kg/m³)" => {
+                p.water_density = ranged(value.as_f64()?, 1.0, 20_000.0, "water density")?
+            }
+            "linear drag (N·s/m)" => {
+                p.drag_linear = ranged(value.as_f64()?, 0.0, 1_000_000.0, "linear drag")?
+            }
+            "time t (s)" => p.time = ranged(value.as_f64()?, 0.0, 30.0, "time t")?,
+            other => return Err(format!("unknown Ocean control: {other:?}")),
+        }
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -754,6 +830,27 @@ fn draw_ocean_viz(s: &OceanWorkbenchState, ui: &mut egui::Ui) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_commands::AgentValue;
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        let mut s = OceanWorkbenchState::default();
+        s.agent_set("base wavelength L (m)", &AgentValue::Float(25.0))
+            .unwrap();
+        assert_eq!(s.params.base_wavelength, 25.0);
+        s.agent_set("number of waves N", &AgentValue::Int(8))
+            .unwrap();
+        assert_eq!(s.params.num_waves, 8);
+        // Unknown caption -> Err (no panic).
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (bool into a numeric field) -> Err.
+        assert!(s
+            .agent_set("base wavelength L (m)", &AgentValue::Bool(true))
+            .is_err());
+        // Out-of-range (steepness > 1) -> Err, field untouched.
+        assert!(s.agent_set("steepness Q", &AgentValue::Float(2.0)).is_err());
+        assert_eq!(s.params.num_waves, 8, "rejected set leaves field untouched");
+    }
 
     #[test]
     fn default_run_succeeds_and_profile_is_populated() {

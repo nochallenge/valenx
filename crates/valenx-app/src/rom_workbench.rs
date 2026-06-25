@@ -319,6 +319,74 @@ impl RomWorkbenchState {
             x_grid,
         })
     }
+
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`;
+    /// each string matches exactly the caption the form draws.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "spatial resolution n",
+            "number of snapshots m",
+            "number of bumps",
+            "feature width σ",
+            "centre travel",
+            "noise amplitude",
+            "truncation rank k",
+            "view snapshot index",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the
+    /// wrong type / out of range returns `Err(String)` — never a panic. Ranges
+    /// mirror the form's `DragValue` clamps exactly (the integer counts are all
+    /// `>= 1` except the zero-based `view snapshot index`).
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        let ranged = |v: f64, lo: f64, hi: f64, what: &str| -> Result<f64, String> {
+            if v.is_finite() && (lo..=hi).contains(&v) {
+                Ok(v)
+            } else {
+                Err(format!("{what} must be in {lo}..={hi}, got {v}"))
+            }
+        };
+        let ranged_int = |value: &crate::agent_commands::AgentValue,
+                          lo: i64,
+                          hi: i64,
+                          what: &str|
+         -> Result<usize, String> {
+            let n = value.as_i64()?;
+            if (lo..=hi).contains(&n) {
+                Ok(n as usize)
+            } else {
+                Err(format!("{what} must be in {lo}..={hi}, got {n}"))
+            }
+        };
+        let p = &mut self.params;
+        match name {
+            "spatial resolution n" => {
+                p.resolution = ranged_int(value, 1, 2000, "spatial resolution n")?
+            }
+            "number of snapshots m" => {
+                p.num_snapshots = ranged_int(value, 1, 2000, "number of snapshots m")?
+            }
+            "number of bumps" => p.num_bumps = ranged_int(value, 1, 16, "number of bumps")?,
+            "feature width σ" => {
+                p.feature_width = ranged(value.as_f64()?, 0.005, 0.5, "feature width σ")?
+            }
+            "centre travel" => p.travel = ranged(value.as_f64()?, 0.0, 1.0, "centre travel")?,
+            "noise amplitude" => p.noise = ranged(value.as_f64()?, 0.0, 2.0, "noise amplitude")?,
+            "truncation rank k" => p.rank = ranged_int(value, 1, 2000, "truncation rank k")?,
+            "view snapshot index" => {
+                p.view_snapshot = ranged_int(value, 0, 2000, "view snapshot index")?
+            }
+            other => return Err(format!("unknown ROM control: {other:?}")),
+        }
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -804,6 +872,29 @@ fn draw_reconstruction_overlay(res: &RomResult, ui: &mut egui::Ui) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_commands::AgentValue;
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        let mut s = RomWorkbenchState::default();
+        s.agent_set("truncation rank k", &AgentValue::Int(5))
+            .unwrap();
+        assert_eq!(s.params.rank, 5);
+        s.agent_set("feature width σ", &AgentValue::Float(0.1))
+            .unwrap();
+        assert_eq!(s.params.feature_width, 0.1);
+        // Unknown caption -> Err (no panic).
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (string into an integer field) -> Err.
+        assert!(s
+            .agent_set("truncation rank k", &AgentValue::Str("five".into()))
+            .is_err());
+        // Out-of-range (rank 0) -> Err, field untouched.
+        assert!(s
+            .agent_set("truncation rank k", &AgentValue::Int(0))
+            .is_err());
+        assert_eq!(s.params.rank, 5, "rejected set leaves field untouched");
+    }
 
     #[test]
     fn default_run_succeeds_and_spectrum_is_populated() {

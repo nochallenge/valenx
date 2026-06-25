@@ -114,6 +114,100 @@ impl Default for FemWorkbenchState {
     }
 }
 
+impl FemWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`;
+    /// each string matches exactly the caption the form draws. The two
+    /// solver-dependent captions (`Tip load Fy (N, downward)` for the static
+    /// solve, `# modes` for the modal solve) are BOTH listed so an agent can
+    /// set either field regardless of which solver radio is active.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "Lx",
+            "Ly",
+            "Lz",
+            "nx",
+            "ny",
+            "nz",
+            "E (GPa)",
+            "Poisson ν",
+            "Density (kg/m³)",
+            "Yield σy (MPa)",
+            "Tip load Fy (N, downward)",
+            "# modes",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the
+    /// wrong type / out of range returns `Err(String)` — never a panic. Ranges
+    /// mirror the form's `DragValue` clamps + the solver's preconditions: box
+    /// dimensions `Lx`/`Ly`/`Lz` finite `> 0`; subdivisions `nx` in `1..=40`,
+    /// `ny`/`nz` in `1..=20` (the node count grows as their product, so this is
+    /// what keeps a solve from OOM-ing); `E (GPa)`, `Density`, `Yield` finite
+    /// `> 0`; `Poisson ν` in the isotropic range `(-1, 0.5)`; tip load any
+    /// finite value (a sign sets the direction); `# modes >= 1`.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        let positive = |v: f64, what: &str| -> Result<f64, String> {
+            if v.is_finite() && v > 0.0 {
+                Ok(v)
+            } else {
+                Err(format!("{what} must be > 0, got {v}"))
+            }
+        };
+        // A subdivision count in an inclusive integer range (matches the UI clamp).
+        let subdiv = |value: &crate::agent_commands::AgentValue,
+                      max: i64,
+                      what: &str|
+         -> Result<usize, String> {
+            let n = value.as_i64()?;
+            if (1..=max).contains(&n) {
+                Ok(n as usize)
+            } else {
+                Err(format!("{what} must be in 1..={max}, got {n}"))
+            }
+        };
+        match name {
+            "Lx" => self.lx = positive(value.as_f64()?, "Lx")?,
+            "Ly" => self.ly = positive(value.as_f64()?, "Ly")?,
+            "Lz" => self.lz = positive(value.as_f64()?, "Lz")?,
+            "nx" => self.nx = subdiv(value, 40, "nx")?,
+            "ny" => self.ny = subdiv(value, 20, "ny")?,
+            "nz" => self.nz = subdiv(value, 20, "nz")?,
+            "E (GPa)" => self.youngs_gpa = positive(value.as_f64()?, "E (GPa)")?,
+            "Poisson ν" => {
+                let v = value.as_f64()?;
+                if !(v.is_finite() && v > -1.0 && v < 0.5) {
+                    return Err(format!("Poisson ν must be in (-1, 0.5), got {v}"));
+                }
+                self.poisson = v;
+            }
+            "Density (kg/m³)" => self.density = positive(value.as_f64()?, "Density")?,
+            "Yield σy (MPa)" => self.yield_mpa = positive(value.as_f64()?, "Yield σy")?,
+            "Tip load Fy (N, downward)" => {
+                let v = value.as_f64()?;
+                if !v.is_finite() {
+                    return Err(format!("tip load Fy must be finite, got {v}"));
+                }
+                self.force_n = v;
+            }
+            "# modes" => {
+                let n = value.as_i64()?;
+                if n < 1 {
+                    return Err(format!("# modes must be >= 1, got {n}"));
+                }
+                self.n_modes = n as usize;
+            }
+            other => return Err(format!("unknown FEM control: {other:?}")),
+        }
+        Ok(())
+    }
+}
+
 /// Draw the FEM Workbench right-side panel. A no-op when the
 /// `show_fem_workbench` toggle is off.
 pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
@@ -1226,6 +1320,28 @@ pub(crate) fn fem_product() -> crate::WorkspaceProduct {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_commands::AgentValue;
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        let mut s = FemWorkbenchState::default();
+        // Representative float + integer sets land in state.
+        s.agent_set("E (GPa)", &AgentValue::Float(70.0)).unwrap();
+        assert_eq!(s.youngs_gpa, 70.0);
+        s.agent_set("nx", &AgentValue::Int(20)).unwrap();
+        assert_eq!(s.nx, 20);
+        // Unknown caption -> Err (no panic).
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (string into a numeric field) -> Err.
+        assert!(s
+            .agent_set("E (GPa)", &AgentValue::Str("stiff".into()))
+            .is_err());
+        // Out-of-range subdivision (> 40) -> Err, field untouched.
+        assert!(s.agent_set("nx", &AgentValue::Int(99)).is_err());
+        assert_eq!(s.nx, 20, "rejected set leaves field untouched");
+        // Poisson outside the isotropic range -> Err.
+        assert!(s.agent_set("Poisson ν", &AgentValue::Float(0.6)).is_err());
+    }
 
     #[test]
     fn linear_static_runs_on_default_box() {

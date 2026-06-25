@@ -82,6 +82,65 @@ fn mesh_to_triangle_soup(mesh: &valenx_mesh::Mesh) -> TriangleMesh {
     out
 }
 
+impl ReinforcementWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`.
+    /// The third dimension's caption is **section-dependent** — `length (m)`
+    /// for a Beam, `height (m)` for a Column — and both spellings address the
+    /// same `length` field in [`agent_set`](Self::agent_set); `length (m)` is
+    /// listed here.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "width (m)",
+            "depth (m)",
+            "length (m)",
+            "bars",
+            "hoop spacing (m)",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the
+    /// wrong type / out of range returns `Err(String)` — never a panic. Ranges
+    /// mirror the form's `DragValue` clamps (`width`/`depth` `0.05..=3`,
+    /// `length`/`height` `0.1..=20`, `hoop spacing` `0.02..=1`); `bars` has no
+    /// UI clamp and is taken as any non-negative count (the solver floors it at
+    /// 2). The case-dependent third-dimension caption accepts both `length (m)`
+    /// and `height (m)`.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        let ranged = |v: f64, lo: f64, hi: f64, what: &str| -> Result<f64, String> {
+            if v.is_finite() && (lo..=hi).contains(&v) {
+                Ok(v)
+            } else {
+                Err(format!("{what} must be in {lo}..={hi}, got {v}"))
+            }
+        };
+        match name {
+            "width (m)" => self.width = ranged(value.as_f64()?, 0.05, 3.0, "width")?,
+            "depth (m)" => self.depth = ranged(value.as_f64()?, 0.05, 3.0, "depth")?,
+            "length (m)" | "height (m)" => {
+                self.length = ranged(value.as_f64()?, 0.1, 20.0, "length / height")?
+            }
+            "bars" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("bars must be >= 0, got {n}"));
+                }
+                self.n_bars = n as usize;
+            }
+            "hoop spacing (m)" => {
+                self.hoop_spacing = ranged(value.as_f64()?, 0.02, 1.0, "hoop spacing")?
+            }
+            other => return Err(format!("unknown Reinforcement control: {other:?}")),
+        }
+        Ok(())
+    }
+}
+
 /// Draw the reinforcement workbench (a no-op unless toggled on via
 /// View → Reinforcement).
 pub fn draw_reinforcement_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
@@ -261,6 +320,28 @@ pub(crate) fn reinforcement_product() -> crate::WorkspaceProduct {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_commands::AgentValue;
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        let mut s = ReinforcementWorkbenchState::default();
+        s.agent_set("width (m)", &AgentValue::Float(0.4)).unwrap();
+        assert_eq!(s.width, 0.4);
+        s.agent_set("bars", &AgentValue::Int(6)).unwrap();
+        assert_eq!(s.n_bars, 6);
+        // The section-dependent third dimension accepts both captions.
+        s.agent_set("height (m)", &AgentValue::Float(3.5)).unwrap();
+        assert_eq!(s.length, 3.5);
+        // Unknown caption -> Err (no panic).
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (string into a numeric field) -> Err.
+        assert!(s
+            .agent_set("width (m)", &AgentValue::Str("wide".into()))
+            .is_err());
+        // Out-of-range (width > 3) -> Err, field untouched.
+        assert!(s.agent_set("width (m)", &AgentValue::Float(5.0)).is_err());
+        assert_eq!(s.width, 0.4, "rejected set leaves field untouched");
+    }
 
     #[test]
     fn beam_cage_tessellates_to_triangles() {

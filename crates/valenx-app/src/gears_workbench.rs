@@ -56,6 +56,84 @@ impl Default for GearsWorkbenchState {
     }
 }
 
+impl GearsWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`
+    /// so an agent can discover the name space; each string matches exactly the
+    /// caption the form draws (and what the widget is `labelled_by`).
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "module m (mm)",
+            "teeth z",
+            "pressure angle (°)",
+            "helix angle (°)",
+            "face width (mm)",
+            "mating teeth",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the
+    /// wrong type / out of range returns `Err(String)` (the bridge turns it into
+    /// a `warn` feed note) — never a panic, and no field is written on error.
+    /// Ranges mirror the workbench's own validity checks (module / face width
+    /// `> 0`, tooth counts `>= 1`, pressure angle in `(0, 90)`, helix angle in
+    /// `[0, 90)`), so a value that would make the design invalid is rejected
+    /// here rather than producing a downstream error.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        match name {
+            "module m (mm)" => {
+                let v = value.as_f64()?;
+                if !(v.is_finite() && v > 0.0) {
+                    return Err(format!("module m must be > 0, got {v}"));
+                }
+                self.module_mm = v;
+            }
+            "teeth z" => {
+                let z = value.as_i64()?;
+                if z < 1 {
+                    return Err(format!("teeth z must be >= 1, got {z}"));
+                }
+                self.teeth = z as u32;
+            }
+            "pressure angle (°)" => {
+                let v = value.as_f64()?;
+                if !(v.is_finite() && v > 0.0 && v < 90.0) {
+                    return Err(format!("pressure angle must be in (0, 90), got {v}"));
+                }
+                self.pressure_angle_deg = v;
+            }
+            "helix angle (°)" => {
+                let v = value.as_f64()?;
+                if !(v.is_finite() && (0.0..90.0).contains(&v)) {
+                    return Err(format!("helix angle must be in [0, 90), got {v}"));
+                }
+                self.helix_angle_deg = v;
+            }
+            "face width (mm)" => {
+                let v = value.as_f64()?;
+                if !(v.is_finite() && v > 0.0) {
+                    return Err(format!("face width must be > 0, got {v}"));
+                }
+                self.face_width_mm = v;
+            }
+            "mating teeth" => {
+                let z = value.as_i64()?;
+                if z < 1 {
+                    return Err(format!("mating teeth must be >= 1, got {z}"));
+                }
+                self.mate_teeth = z as u32;
+            }
+            other => return Err(format!("unknown Gears control: {other:?}")),
+        }
+        Ok(())
+    }
+}
+
 /// Draw the Gears Workbench right-side panel. A no-op when the
 /// `show_gears_workbench` toggle is off.
 pub fn draw_gears_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
@@ -550,6 +628,28 @@ pub(crate) fn gear_product() -> crate::WorkspaceProduct {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_commands::AgentValue;
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        let mut s = GearsWorkbenchState::default();
+        // A representative numeric set lands in state.
+        s.agent_set("module m (mm)", &AgentValue::Float(2.5))
+            .unwrap();
+        assert_eq!(s.module_mm, 2.5);
+        // An integer caption accepts a whole number.
+        s.agent_set("teeth z", &AgentValue::Int(31)).unwrap();
+        assert_eq!(s.teeth, 31);
+        // Unknown caption -> Err (no panic).
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (string into a numeric field) -> Err.
+        assert!(s
+            .agent_set("module m (mm)", &AgentValue::Str("big".into()))
+            .is_err());
+        // Out-of-range numeric -> Err, field unchanged.
+        assert!(s.agent_set("teeth z", &AgentValue::Int(0)).is_err());
+        assert_eq!(s.teeth, 31, "rejected set leaves the field untouched");
+    }
 
     #[test]
     fn preview_profile_for_default_is_a_closed_outline() {

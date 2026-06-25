@@ -152,6 +152,68 @@ impl RotorWorkbenchState {
         let rotor = self.build_rotor()?;
         rotor.solve(self.rpm, self.freestream_v, self.air_density)
     }
+
+    /// The user-visible captions of every (scalar) control the agent bridge can
+    /// set via `SetControl` (see [`crate::agent_commands`]). Returned by
+    /// `ListControls`; each string matches exactly the caption the form draws.
+    /// The per-station `radius`/`chord`/`twist` table rows are NOT covered (they
+    /// are a variable-length table, not single labelled scalars).
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "blade count n",
+            "tip radius R (m)",
+            "hub radius (m)",
+            "rotor speed (rpm)",
+            "freestream V (m/s)",
+            "air density ρ (kg/m³)",
+        ]
+    }
+
+    /// Set one labelled scalar control by its user-visible caption, for the
+    /// agent `SetControl` bridge. Fail-loud: an unknown caption or a value of
+    /// the wrong type / out of range returns `Err(String)` — never a panic.
+    /// Ranges mirror the form's `DragValue` clamps exactly: blade count
+    /// `1..=12`, tip radius `0.001..=50`, hub radius `0..=50`, rpm `0.1..=1e6`,
+    /// freestream `0..=400`, air density `0.001..=10`.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        // A finite real in an inclusive range (matches the UI clamp).
+        let ranged = |v: f64, lo: f64, hi: f64, what: &str| -> Result<f64, String> {
+            if v.is_finite() && (lo..=hi).contains(&v) {
+                Ok(v)
+            } else {
+                Err(format!("{what} must be in {lo}..={hi}, got {v}"))
+            }
+        };
+        match name {
+            "blade count n" => {
+                let n = value.as_i64()?;
+                if (1..=12).contains(&n) {
+                    self.blade_count = n as u32;
+                } else {
+                    return Err(format!("blade count n must be in 1..=12, got {n}"));
+                }
+            }
+            "tip radius R (m)" => {
+                self.tip_radius_m = ranged(value.as_f64()?, 0.001, 50.0, "tip radius R")?
+            }
+            "hub radius (m)" => {
+                self.hub_radius_m = ranged(value.as_f64()?, 0.0, 50.0, "hub radius")?
+            }
+            "rotor speed (rpm)" => self.rpm = ranged(value.as_f64()?, 0.1, 1.0e6, "rotor speed")?,
+            "freestream V (m/s)" => {
+                self.freestream_v = ranged(value.as_f64()?, 0.0, 400.0, "freestream V")?
+            }
+            "air density ρ (kg/m³)" => {
+                self.air_density = ranged(value.as_f64()?, 0.001, 10.0, "air density ρ")?
+            }
+            other => return Err(format!("unknown Rotor control: {other:?}")),
+        }
+        Ok(())
+    }
 }
 
 /// A one-line success summary for the status row (the full numbers render in
@@ -483,6 +545,26 @@ fn rotor_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_commands::AgentValue;
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        let mut s = RotorWorkbenchState::default();
+        s.agent_set("tip radius R (m)", &AgentValue::Float(0.5))
+            .unwrap();
+        assert_eq!(s.tip_radius_m, 0.5);
+        s.agent_set("blade count n", &AgentValue::Int(3)).unwrap();
+        assert_eq!(s.blade_count, 3);
+        // Unknown caption -> Err (no panic).
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (string into a numeric field) -> Err.
+        assert!(s
+            .agent_set("tip radius R (m)", &AgentValue::Str("big".into()))
+            .is_err());
+        // Out-of-range (blade count > 12) -> Err, field untouched.
+        assert!(s.agent_set("blade count n", &AgentValue::Int(99)).is_err());
+        assert_eq!(s.blade_count, 3, "rejected set leaves field untouched");
+    }
 
     #[test]
     fn default_state_solves_to_finite_positive_loads() {

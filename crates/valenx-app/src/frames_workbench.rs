@@ -72,6 +72,57 @@ impl Default for FramesWorkbenchState {
     }
 }
 
+impl FramesWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`.
+    /// Covers every dimension caption across all profile families, so an agent
+    /// can set a dimension regardless of the selected profile. `thickness t` and
+    /// `wall t` both address the single `t` field (the caption differs by
+    /// profile); `diameter d` is the round-CHS outside diameter.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "height h",
+            "width b",
+            "web t_w",
+            "flange t_f",
+            "thickness t",
+            "wall t",
+            "diameter d",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the
+    /// wrong type / non-positive value returns `Err(String)` — never a panic.
+    /// Every cross-section dimension must be a finite `> 0` (mirrors the
+    /// workbench's own `run_frames` validity check). The thickness field accepts
+    /// both its `thickness t` (L-angle / rect HSS) and `wall t` (round CHS)
+    /// captions.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        let positive = |v: f64, what: &str| -> Result<f64, String> {
+            if v.is_finite() && v > 0.0 {
+                Ok(v)
+            } else {
+                Err(format!("{what} must be > 0, got {v}"))
+            }
+        };
+        match name {
+            "height h" => self.h = positive(value.as_f64()?, "height h")?,
+            "width b" => self.b = positive(value.as_f64()?, "width b")?,
+            "web t_w" => self.tw = positive(value.as_f64()?, "web t_w")?,
+            "flange t_f" => self.tf = positive(value.as_f64()?, "flange t_f")?,
+            "thickness t" | "wall t" => self.t = positive(value.as_f64()?, "thickness t")?,
+            "diameter d" => self.d = positive(value.as_f64()?, "diameter d")?,
+            other => return Err(format!("unknown Frames control: {other:?}")),
+        }
+        Ok(())
+    }
+}
+
 /// One labelled `DragValue` row for a dimension.
 fn dim_row(ui: &mut egui::Ui, label: &str, value: &mut f64) {
     ui.horizontal(|ui| {
@@ -385,6 +436,26 @@ pub(crate) fn frames_product() -> crate::WorkspaceProduct {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_commands::AgentValue;
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        let mut s = FramesWorkbenchState::default();
+        s.agent_set("height h", &AgentValue::Float(250.0)).unwrap();
+        assert_eq!(s.h, 250.0);
+        // `thickness t` and `wall t` both address the `t` field.
+        s.agent_set("wall t", &AgentValue::Float(8.0)).unwrap();
+        assert_eq!(s.t, 8.0);
+        // Unknown caption -> Err (no panic).
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (string into a numeric field) -> Err.
+        assert!(s
+            .agent_set("height h", &AgentValue::Str("tall".into()))
+            .is_err());
+        // Non-positive -> Err, field untouched.
+        assert!(s.agent_set("height h", &AgentValue::Float(0.0)).is_err());
+        assert_eq!(s.h, 250.0, "rejected set leaves field untouched");
+    }
 
     #[test]
     fn default_state_is_idle() {
