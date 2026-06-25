@@ -295,6 +295,10 @@ pub struct BiostructPanel {
     /// atoms across coordinate frames (synthetic wobble or a loaded `valenx-md`
     /// trajectory). Empty until a trajectory is attached.
     pub(crate) trajectory: TrajectoryPlayback,
+    /// Which built-in demo structure the "Demo structure" picker last loaded
+    /// into `structure_a`. Default [`DemoStructure::Crambin`] (the real
+    /// 46-residue protein, also `structure_a`'s default text).
+    pub(crate) demo: DemoStructure,
 }
 
 impl BiostructPanel {
@@ -336,10 +340,55 @@ impl BiostructPanel {
     pub fn can_redo(&self) -> bool {
         self.history.can_redo()
     }
+
+    /// Load a built-in [`DemoStructure`] into `structure_a` (the viewer / analysis
+    /// input), recording the prior state for undo. Used by both the "Demo
+    /// structure" picker and the agent `SetControl` bridge, so selecting a demo
+    /// through the accessibility tree and selecting it by hand take the same path.
+    /// Clears any prior error and detaches a stale trajectory (the new structure
+    /// has a different atom count).
+    pub(crate) fn load_demo(&mut self, demo: DemoStructure) {
+        let snap = self.snapshot();
+        self.history.record(snap);
+        self.demo = demo;
+        self.structure_a = demo.pdb().to_string();
+        self.error = None;
+        self.trajectory.clear();
+    }
+
+    /// A one-line readout of the structure currently loaded in `structure_a`,
+    /// for the agent `agent_readout` bridge: the demo name (if it matches a
+    /// built-in) plus the parsed residue / atom counts. Fail-soft — an
+    /// unparseable buffer reports the parse error rather than panicking.
+    pub(crate) fn structure_readout(&self) -> String {
+        let src = if self.structure_a == CRAMBIN_PDB {
+            "Crambin (1CRN)"
+        } else if self.structure_a == DEMO_PDB {
+            "Triglycine peptide"
+        } else {
+            "custom / loaded structure"
+        };
+        match read_structure(&self.structure_a, "readout") {
+            Ok(s) => {
+                let (mut res, mut atoms) = (0usize, 0usize);
+                for chain in &s.first_model().chains {
+                    res += chain.residues.len();
+                    for r in &chain.residues {
+                        atoms += r.atoms.len();
+                    }
+                }
+                format!("{src}: {res} residues, {atoms} atoms")
+            }
+            Err(e) => format!("{src}: unparseable ({e})"),
+        }
+    }
 }
 
 /// A minimal 3-residue glycine peptide PDB — enough for the analysis +
-/// Ramachandran tools to produce real output without file I/O.
+/// Ramachandran tools to produce real output without file I/O. Tiny by design
+/// (12 atoms): a smoke structure, not something that looks like a protein. The
+/// default loaded structure is [`CRAMBIN_PDB`]; this stays as a second demo
+/// option so the trivial case is still one click away.
 const DEMO_PDB: &str = "\
 ATOM      1  N   GLY A   1      -1.204   1.045   0.000  1.00  0.00           N
 ATOM      2  CA  GLY A   1       0.000   0.000   0.000  1.00  0.00           C
@@ -356,12 +405,420 @@ ATOM     12  O   GLY A   3       8.380   2.090   0.000  1.00  0.00           O
 END
 ";
 
+/// **Crambin (PDB 1CRN)** — a real 46-residue, 327-atom plant-seed protein, the
+/// default loaded structure for the molecular viewer. It is a classic small
+/// fold that carries *both* an α-helix (two helices, res 7–19 and 23–30) and a
+/// β-sheet (two strands, res 1–4 and 32–35), so the ribbon / cartoon renderers
+/// and the secondary-structure (DSSP) colour scheme all have something real to
+/// show — unlike the 12-atom [`DEMO_PDB`], which looks like nothing.
+///
+/// The atom/`HELIX`/`SHEET`/`TER` records are the original experimental
+/// coordinates from Teeter & Hendrickson (1981); the existing
+/// [`read_structure`] PDB parser consumes them as-is (it already handles
+/// `HELIX`, `SHEET`, `TER`, and the `OXT` terminal-oxygen atom). PDB coordinate
+/// data is public-domain scientific data.
+const CRAMBIN_PDB: &str = "\
+HEADER    PLANT PROTEIN                           30-APR-81   1CRN
+HELIX    1  H1 ILE A    7  PRO A   19  13/10 CONFORMATION RES 17,19       13
+HELIX    2  H2 GLU A   23  THR A   30  1DISTORTED 3/10 AT RES 30           8
+SHEET    1  S1 2 THR A   1  CYS A   4  0
+SHEET    2  S1 2 CYS A  32  ILE A  35 -1
+ATOM      1  N   THR A   1      17.047  14.099   3.625  1.00 13.79           N
+ATOM      2  CA  THR A   1      16.967  12.784   4.338  1.00 10.80           C
+ATOM      3  C   THR A   1      15.685  12.755   5.133  1.00  9.19           C
+ATOM      4  O   THR A   1      15.268  13.825   5.594  1.00  9.85           O
+ATOM      5  CB  THR A   1      18.170  12.703   5.337  1.00 13.02           C
+ATOM      6  OG1 THR A   1      19.334  12.829   4.463  1.00 15.06           O
+ATOM      7  CG2 THR A   1      18.150  11.546   6.304  1.00 14.23           C
+ATOM      8  N   THR A   2      15.115  11.555   5.265  1.00  7.81           N
+ATOM      9  CA  THR A   2      13.856  11.469   6.066  1.00  8.31           C
+ATOM     10  C   THR A   2      14.164  10.785   7.379  1.00  5.80           C
+ATOM     11  O   THR A   2      14.993   9.862   7.443  1.00  6.94           O
+ATOM     12  CB  THR A   2      12.732  10.711   5.261  1.00 10.32           C
+ATOM     13  OG1 THR A   2      13.308   9.439   4.926  1.00 12.81           O
+ATOM     14  CG2 THR A   2      12.484  11.442   3.895  1.00 11.90           C
+ATOM     15  N   CYS A   3      13.488  11.241   8.417  1.00  5.24           N
+ATOM     16  CA  CYS A   3      13.660  10.707   9.787  1.00  5.39           C
+ATOM     17  C   CYS A   3      12.269  10.431  10.323  1.00  4.45           C
+ATOM     18  O   CYS A   3      11.393  11.308  10.185  1.00  6.54           O
+ATOM     19  CB  CYS A   3      14.368  11.748  10.691  1.00  5.99           C
+ATOM     20  SG  CYS A   3      15.885  12.426  10.016  1.00  7.01           S
+ATOM     21  N   CYS A   4      12.019   9.272  10.928  1.00  3.90           N
+ATOM     22  CA  CYS A   4      10.646   8.991  11.408  1.00  4.24           C
+ATOM     23  C   CYS A   4      10.654   8.793  12.919  1.00  3.72           C
+ATOM     24  O   CYS A   4      11.659   8.296  13.491  1.00  5.30           O
+ATOM     25  CB  CYS A   4      10.057   7.752  10.682  1.00  4.41           C
+ATOM     26  SG  CYS A   4       9.837   8.018   8.904  1.00  4.72           S
+ATOM     27  N   PRO A   5       9.561   9.108  13.563  1.00  3.96           N
+ATOM     28  CA  PRO A   5       9.448   9.034  15.012  1.00  4.25           C
+ATOM     29  C   PRO A   5       9.288   7.670  15.606  1.00  4.96           C
+ATOM     30  O   PRO A   5       9.490   7.519  16.819  1.00  7.44           O
+ATOM     31  CB  PRO A   5       8.230   9.957  15.345  1.00  5.11           C
+ATOM     32  CG  PRO A   5       7.338   9.786  14.114  1.00  5.24           C
+ATOM     33  CD  PRO A   5       8.366   9.804  12.958  1.00  5.20           C
+ATOM     34  N   SER A   6       8.875   6.686  14.796  1.00  4.83           N
+ATOM     35  CA  SER A   6       8.673   5.314  15.279  1.00  4.45           C
+ATOM     36  C   SER A   6       8.753   4.376  14.083  1.00  4.99           C
+ATOM     37  O   SER A   6       8.726   4.858  12.923  1.00  4.61           O
+ATOM     38  CB  SER A   6       7.340   5.121  15.996  1.00  5.05           C
+ATOM     39  OG  SER A   6       6.274   5.220  15.031  1.00  6.39           O
+ATOM     40  N   ILE A   7       8.881   3.075  14.358  1.00  4.94           N
+ATOM     41  CA  ILE A   7       8.912   2.083  13.258  1.00  6.33           C
+ATOM     42  C   ILE A   7       7.581   2.090  12.506  1.00  5.32           C
+ATOM     43  O   ILE A   7       7.670   2.031  11.245  1.00  6.85           O
+ATOM     44  CB  ILE A   7       9.207   0.677  13.924  1.00  8.43           C
+ATOM     45  CG1 ILE A   7      10.714   0.702  14.312  1.00  9.78           C
+ATOM     46  CG2 ILE A   7       8.811  -0.477  12.969  1.00 11.70           C
+ATOM     47  CD1 ILE A   7      11.185  -0.516  15.142  1.00  9.92           C
+ATOM     48  N   VAL A   8       6.458   2.162  13.159  1.00  5.02           N
+ATOM     49  CA  VAL A   8       5.145   2.209  12.453  1.00  6.93           C
+ATOM     50  C   VAL A   8       5.115   3.379  11.461  1.00  5.39           C
+ATOM     51  O   VAL A   8       4.664   3.268  10.343  1.00  6.30           O
+ATOM     52  CB  VAL A   8       3.995   2.354  13.478  1.00  9.64           C
+ATOM     53  CG1 VAL A   8       2.716   2.891  12.869  1.00 13.85           C
+ATOM     54  CG2 VAL A   8       3.758   1.032  14.208  1.00 11.97           C
+ATOM     55  N   ALA A   9       5.606   4.546  11.941  1.00  3.73           N
+ATOM     56  CA  ALA A   9       5.598   5.767  11.082  1.00  3.56           C
+ATOM     57  C   ALA A   9       6.441   5.527   9.850  1.00  4.13           C
+ATOM     58  O   ALA A   9       6.052   5.933   8.744  1.00  4.36           O
+ATOM     59  CB  ALA A   9       6.022   6.977  11.891  1.00  4.80           C
+ATOM     60  N   ARG A  10       7.647   4.909  10.005  1.00  3.73           N
+ATOM     61  CA  ARG A  10       8.496   4.609   8.837  1.00  3.38           C
+ATOM     62  C   ARG A  10       7.798   3.609   7.876  1.00  3.47           C
+ATOM     63  O   ARG A  10       7.878   3.778   6.651  1.00  4.67           O
+ATOM     64  CB  ARG A  10       9.847   4.020   9.305  1.00  3.95           C
+ATOM     65  CG  ARG A  10      10.752   3.607   8.149  1.00  4.55           C
+ATOM     66  CD  ARG A  10      11.226   4.699   7.244  1.00  5.89           C
+ATOM     67  NE  ARG A  10      12.143   5.571   8.035  1.00  6.20           N
+ATOM     68  CZ  ARG A  10      12.758   6.609   7.443  1.00  7.52           C
+ATOM     69  NH1 ARG A  10      12.539   6.932   6.158  1.00 10.68           N
+ATOM     70  NH2 ARG A  10      13.601   7.322   8.202  1.00  9.48           N
+ATOM     71  N   SER A  11       7.186   2.582   8.445  1.00  5.19           N
+ATOM     72  CA  SER A  11       6.500   1.584   7.565  1.00  4.60           C
+ATOM     73  C   SER A  11       5.382   2.313   6.773  1.00  4.84           C
+ATOM     74  O   SER A  11       5.213   2.016   5.557  1.00  5.84           O
+ATOM     75  CB  SER A  11       5.908   0.462   8.400  1.00  5.91           C
+ATOM     76  OG  SER A  11       6.990  -0.272   9.012  1.00  8.38           O
+ATOM     77  N   ASN A  12       4.648   3.182   7.446  1.00  3.54           N
+ATOM     78  CA  ASN A  12       3.545   3.935   6.751  1.00  4.57           C
+ATOM     79  C   ASN A  12       4.107   4.851   5.691  1.00  4.14           C
+ATOM     80  O   ASN A  12       3.536   5.001   4.617  1.00  5.52           O
+ATOM     81  CB  ASN A  12       2.663   4.677   7.748  1.00  6.42           C
+ATOM     82  CG  ASN A  12       1.802   3.735   8.610  1.00  8.25           C
+ATOM     83  OD1 ASN A  12       1.567   2.613   8.165  1.00 12.72           O
+ATOM     84  ND2 ASN A  12       1.394   4.252   9.767  1.00  9.92           N
+ATOM     85  N   PHE A  13       5.259   5.498   6.005  1.00  3.43           N
+ATOM     86  CA  PHE A  13       5.929   6.358   5.055  1.00  3.49           C
+ATOM     87  C   PHE A  13       6.304   5.578   3.799  1.00  3.40           C
+ATOM     88  O   PHE A  13       6.136   6.072   2.653  1.00  4.07           O
+ATOM     89  CB  PHE A  13       7.183   6.994   5.754  1.00  5.48           C
+ATOM     90  CG  PHE A  13       7.884   8.006   4.883  1.00  5.57           C
+ATOM     91  CD1 PHE A  13       8.906   7.586   4.027  1.00  6.99           C
+ATOM     92  CD2 PHE A  13       7.532   9.373   4.983  1.00  6.52           C
+ATOM     93  CE1 PHE A  13       9.560   8.539   3.194  1.00  8.20           C
+ATOM     94  CE2 PHE A  13       8.176  10.281   4.145  1.00  6.34           C
+ATOM     95  CZ  PHE A  13       9.141   9.845   3.292  1.00  6.84           C
+ATOM     96  N   ASN A  14       6.900   4.390   3.989  1.00  3.64           N
+ATOM     97  CA  ASN A  14       7.331   3.607   2.791  1.00  4.31           C
+ATOM     98  C   ASN A  14       6.116   3.210   1.915  1.00  3.98           C
+ATOM     99  O   ASN A  14       6.240   3.144   0.684  1.00  6.22           O
+ATOM    100  CB  ASN A  14       8.145   2.404   3.240  1.00  5.81           C
+ATOM    101  CG  ASN A  14       9.555   2.856   3.730  1.00  6.82           C
+ATOM    102  OD1 ASN A  14      10.013   3.895   3.323  1.00  9.43           O
+ATOM    103  ND2 ASN A  14      10.120   1.956   4.539  1.00  8.21           N
+ATOM    104  N   VAL A  15       4.993   2.927   2.571  1.00  3.76           N
+ATOM    105  CA  VAL A  15       3.782   2.599   1.742  1.00  3.98           C
+ATOM    106  C   VAL A  15       3.296   3.871   1.004  1.00  3.80           C
+ATOM    107  O   VAL A  15       2.947   3.817  -0.189  1.00  4.85           O
+ATOM    108  CB  VAL A  15       2.698   1.953   2.608  1.00  4.71           C
+ATOM    109  CG1 VAL A  15       1.384   1.826   1.806  1.00  6.67           C
+ATOM    110  CG2 VAL A  15       3.174   0.533   3.005  1.00  6.26           C
+ATOM    111  N   CYS A  16       3.321   4.987   1.720  1.00  3.79           N
+ATOM    112  CA  CYS A  16       2.890   6.285   1.126  1.00  3.54           C
+ATOM    113  C   CYS A  16       3.687   6.597  -0.111  1.00  3.48           C
+ATOM    114  O   CYS A  16       3.200   7.147  -1.103  1.00  4.63           O
+ATOM    115  CB  CYS A  16       3.039   7.369   2.240  1.00  4.58           C
+ATOM    116  SG  CYS A  16       2.559   9.014   1.649  1.00  5.66           S
+ATOM    117  N   ARG A  17       4.997   6.227  -0.100  1.00  3.99           N
+ATOM    118  CA  ARG A  17       5.895   6.489  -1.213  1.00  3.83           C
+ATOM    119  C   ARG A  17       5.738   5.560  -2.409  1.00  3.79           C
+ATOM    120  O   ARG A  17       6.228   5.901  -3.507  1.00  5.39           O
+ATOM    121  CB  ARG A  17       7.370   6.507  -0.731  1.00  4.11           C
+ATOM    122  CG  ARG A  17       7.717   7.687   0.206  1.00  4.69           C
+ATOM    123  CD  ARG A  17       7.949   8.947  -0.615  1.00  5.10           C
+ATOM    124  NE  ARG A  17       9.212   8.856  -1.337  1.00  4.71           N
+ATOM    125  CZ  ARG A  17       9.537   9.533  -2.431  1.00  5.28           C
+ATOM    126  NH1 ARG A  17       8.659  10.350  -3.032  1.00  6.67           N
+ATOM    127  NH2 ARG A  17      10.793   9.491  -2.899  1.00  6.41           N
+ATOM    128  N   LEU A  18       5.051   4.411  -2.204  1.00  4.70           N
+ATOM    129  CA  LEU A  18       4.933   3.431  -3.326  1.00  5.46           C
+ATOM    130  C   LEU A  18       4.397   4.014  -4.620  1.00  5.13           C
+ATOM    131  O   LEU A  18       4.988   3.755  -5.687  1.00  5.55           O
+ATOM    132  CB  LEU A  18       4.196   2.184  -2.863  1.00  6.47           C
+ATOM    133  CG  LEU A  18       4.960   1.178  -1.991  1.00  7.43           C
+ATOM    134  CD1 LEU A  18       3.907   0.097  -1.634  1.00  8.70           C
+ATOM    135  CD2 LEU A  18       6.129   0.606  -2.768  1.00  9.39           C
+ATOM    136  N   PRO A  19       3.329   4.795  -4.543  1.00  4.28           N
+ATOM    137  CA  PRO A  19       2.792   5.376  -5.797  1.00  5.38           C
+ATOM    138  C   PRO A  19       3.573   6.540  -6.322  1.00  6.30           C
+ATOM    139  O   PRO A  19       3.260   7.045  -7.422  1.00  9.62           O
+ATOM    140  CB  PRO A  19       1.358   5.766  -5.472  1.00  5.87           C
+ATOM    141  CG  PRO A  19       1.223   5.694  -3.993  1.00  6.47           C
+ATOM    142  CD  PRO A  19       2.421   4.941  -3.408  1.00  6.45           C
+ATOM    143  N   GLY A  20       4.565   7.047  -5.559  1.00  4.94           N
+ATOM    144  CA  GLY A  20       5.366   8.191  -6.018  1.00  5.39           C
+ATOM    145  C   GLY A  20       5.007   9.481  -5.280  1.00  5.03           C
+ATOM    146  O   GLY A  20       5.535  10.510  -5.730  1.00  7.34           O
+ATOM    147  N   THR A  21       4.181   9.438  -4.262  1.00  4.10           N
+ATOM    148  CA  THR A  21       3.767  10.609  -3.513  1.00  3.94           C
+ATOM    149  C   THR A  21       5.017  11.397  -3.042  1.00  3.96           C
+ATOM    150  O   THR A  21       5.947  10.757  -2.523  1.00  5.82           O
+ATOM    151  CB  THR A  21       2.992  10.188  -2.225  1.00  4.13           C
+ATOM    152  OG1 THR A  21       2.051   9.144  -2.623  1.00  5.45           O
+ATOM    153  CG2 THR A  21       2.260  11.349  -1.551  1.00  5.41           C
+ATOM    154  N   PRO A  22       4.971  12.703  -3.176  1.00  5.04           N
+ATOM    155  CA  PRO A  22       6.143  13.513  -2.696  1.00  4.69           C
+ATOM    156  C   PRO A  22       6.400  13.233  -1.225  1.00  4.19           C
+ATOM    157  O   PRO A  22       5.485  13.061  -0.382  1.00  4.47           O
+ATOM    158  CB  PRO A  22       5.703  14.969  -2.920  1.00  7.12           C
+ATOM    159  CG  PRO A  22       4.676  14.893  -3.996  1.00  7.03           C
+ATOM    160  CD  PRO A  22       3.964  13.567  -3.811  1.00  4.90           C
+ATOM    161  N   GLU A  23       7.728  13.297  -0.921  1.00  5.16           N
+ATOM    162  CA  GLU A  23       8.114  13.103   0.500  1.00  5.31           C
+ATOM    163  C   GLU A  23       7.427  14.073   1.410  1.00  4.11           C
+ATOM    164  O   GLU A  23       7.036  13.682   2.540  1.00  5.11           O
+ATOM    165  CB  GLU A  23       9.648  13.285   0.660  1.00  6.16           C
+ATOM    166  CG  GLU A  23      10.440  12.093   0.063  1.00  7.48           C
+ATOM    167  CD  GLU A  23      11.941  12.170   0.391  1.00  9.40           C
+ATOM    168  OE1 GLU A  23      12.416  13.225   0.681  1.00 10.40           O
+ATOM    169  OE2 GLU A  23      12.539  11.070   0.292  1.00 13.32           O
+ATOM    170  N   ALA A  24       7.212  15.334   0.966  1.00  4.56           N
+ATOM    171  CA  ALA A  24       6.614  16.317   1.913  1.00  4.49           C
+ATOM    172  C   ALA A  24       5.212  15.936   2.350  1.00  4.10           C
+ATOM    173  O   ALA A  24       4.782  16.166   3.495  1.00  5.64           O
+ATOM    174  CB  ALA A  24       6.605  17.695   1.246  1.00  5.80           C
+ATOM    175  N   ILE A  25       4.445  15.318   1.405  1.00  4.37           N
+ATOM    176  CA  ILE A  25       3.074  14.894   1.756  1.00  5.44           C
+ATOM    177  C   ILE A  25       3.085  13.643   2.645  1.00  4.32           C
+ATOM    178  O   ILE A  25       2.315  13.523   3.578  1.00  4.72           O
+ATOM    179  CB  ILE A  25       2.204  14.637   0.462  1.00  6.42           C
+ATOM    180  CG1 ILE A  25       1.815  16.048  -0.129  1.00  7.50           C
+ATOM    181  CG2 ILE A  25       0.903  13.864   0.811  1.00  7.65           C
+ATOM    182  CD1 ILE A  25       0.756  16.761   0.757  1.00  7.80           C
+ATOM    183  N   CYS A  26       4.032  12.764   2.313  1.00  3.92           N
+ATOM    184  CA  CYS A  26       4.180  11.549   3.187  1.00  4.37           C
+ATOM    185  C   CYS A  26       4.632  11.944   4.596  1.00  3.95           C
+ATOM    186  O   CYS A  26       4.227  11.252   5.547  1.00  4.74           O
+ATOM    187  CB  CYS A  26       5.038  10.518   2.539  1.00  4.63           C
+ATOM    188  SG  CYS A  26       4.349   9.794   1.022  1.00  5.61           S
+ATOM    189  N   ALA A  27       5.408  13.012   4.694  1.00  3.89           N
+ATOM    190  CA  ALA A  27       5.879  13.502   6.026  1.00  4.43           C
+ATOM    191  C   ALA A  27       4.696  13.908   6.882  1.00  4.26           C
+ATOM    192  O   ALA A  27       4.528  13.422   8.025  1.00  5.44           O
+ATOM    193  CB  ALA A  27       6.880  14.615   5.830  1.00  5.36           C
+ATOM    194  N   THR A  28       3.827  14.802   6.358  1.00  4.53           N
+ATOM    195  CA  THR A  28       2.691  15.221   7.194  1.00  5.08           C
+ATOM    196  C   THR A  28       1.672  14.132   7.434  1.00  4.62           C
+ATOM    197  O   THR A  28       0.947  14.112   8.468  1.00  7.80           O
+ATOM    198  CB  THR A  28       1.986  16.520   6.614  1.00  6.03           C
+ATOM    199  OG1 THR A  28       1.664  16.221   5.230  1.00  7.19           O
+ATOM    200  CG2 THR A  28       2.914  17.739   6.700  1.00  7.34           C
+ATOM    201  N   TYR A  29       1.621  13.190   6.511  1.00  5.01           N
+ATOM    202  CA  TYR A  29       0.715  12.045   6.657  1.00  6.60           C
+ATOM    203  C   TYR A  29       1.125  11.125   7.815  1.00  4.92           C
+ATOM    204  O   TYR A  29       0.286  10.632   8.545  1.00  7.13           O
+ATOM    205  CB  TYR A  29       0.755  11.229   5.322  1.00  9.66           C
+ATOM    206  CG  TYR A  29      -0.203  10.044   5.354  1.00 11.56           C
+ATOM    207  CD1 TYR A  29      -1.547  10.337   5.645  1.00 12.85           C
+ATOM    208  CD2 TYR A  29       0.193   8.750   5.100  1.00 14.44           C
+ATOM    209  CE1 TYR A  29      -2.496   9.329   5.673  1.00 16.61           C
+ATOM    210  CE2 TYR A  29      -0.801   7.705   5.156  1.00 17.11           C
+ATOM    211  CZ  TYR A  29      -2.079   8.031   5.430  1.00 19.99           C
+ATOM    212  OH  TYR A  29      -3.097   7.057   5.458  1.00 28.98           O
+ATOM    213  N   THR A  30       2.470  10.984   7.995  1.00  5.31           N
+ATOM    214  CA  THR A  30       2.986   9.994   8.950  1.00  5.70           C
+ATOM    215  C   THR A  30       3.609  10.505  10.230  1.00  6.28           C
+ATOM    216  O   THR A  30       3.766   9.715  11.186  1.00  8.77           O
+ATOM    217  CB  THR A  30       4.076   9.103   8.225  1.00  6.55           C
+ATOM    218  OG1 THR A  30       5.125  10.027   7.824  1.00  6.57           O
+ATOM    219  CG2 THR A  30       3.493   8.324   7.035  1.00  7.29           C
+ATOM    220  N   GLY A  31       3.984  11.764  10.241  1.00  4.99           N
+ATOM    221  CA  GLY A  31       4.769  12.336  11.360  1.00  5.50           C
+ATOM    222  C   GLY A  31       6.255  12.243  11.106  1.00  4.19           C
+ATOM    223  O   GLY A  31       7.037  12.750  11.954  1.00  6.12           O
+ATOM    224  N   CYS A  32       6.710  11.631   9.992  1.00  4.30           N
+ATOM    225  CA  CYS A  32       8.140  11.694   9.635  1.00  4.89           C
+ATOM    226  C   CYS A  32       8.500  13.141   9.206  1.00  5.50           C
+ATOM    227  O   CYS A  32       7.581  13.949   8.944  1.00  5.82           O
+ATOM    228  CB  CYS A  32       8.504  10.686   8.530  1.00  4.66           C
+ATOM    229  SG  CYS A  32       8.048   8.987   8.881  1.00  5.33           S
+ATOM    230  N   ILE A  33       9.793  13.410   9.173  1.00  6.02           N
+ATOM    231  CA  ILE A  33      10.280  14.760   8.823  1.00  5.24           C
+ATOM    232  C   ILE A  33      11.346  14.658   7.743  1.00  5.16           C
+ATOM    233  O   ILE A  33      11.971  13.583   7.552  1.00  7.19           O
+ATOM    234  CB  ILE A  33      10.790  15.535  10.085  1.00  5.49           C
+ATOM    235  CG1 ILE A  33      12.059  14.803  10.671  1.00  6.85           C
+ATOM    236  CG2 ILE A  33       9.684  15.686  11.138  1.00  6.45           C
+ATOM    237  CD1 ILE A  33      12.733  15.676  11.781  1.00  8.94           C
+ATOM    238  N   ILE A  34      11.490  15.773   7.038  1.00  5.52           N
+ATOM    239  CA  ILE A  34      12.552  15.877   6.036  1.00  6.82           C
+ATOM    240  C   ILE A  34      13.590  16.917   6.560  1.00  6.92           C
+ATOM    241  O   ILE A  34      13.168  18.006   6.945  1.00  9.22           O
+ATOM    242  CB  ILE A  34      11.987  16.360   4.681  1.00  8.11           C
+ATOM    243  CG1 ILE A  34      10.914  15.338   4.163  1.00  9.59           C
+ATOM    244  CG2 ILE A  34      13.131  16.517   3.629  1.00  9.73           C
+ATOM    245  CD1 ILE A  34      10.151  16.024   2.938  1.00 13.41           C
+ATOM    246  N   ILE A  35      14.856  16.493   6.536  1.00  7.06           N
+ATOM    247  CA  ILE A  35      15.930  17.454   6.941  1.00  7.52           C
+ATOM    248  C   ILE A  35      16.913  17.550   5.819  1.00  6.63           C
+ATOM    249  O   ILE A  35      17.097  16.660   4.970  1.00  7.90           O
+ATOM    250  CB  ILE A  35      16.622  16.995   8.285  1.00  8.07           C
+ATOM    251  CG1 ILE A  35      17.360  15.651   8.067  1.00  9.41           C
+ATOM    252  CG2 ILE A  35      15.592  16.974   9.434  1.00  9.46           C
+ATOM    253  CD1 ILE A  35      18.298  15.206   9.219  1.00  9.85           C
+ATOM    254  N   PRO A  36      17.664  18.669   5.806  1.00  8.07           N
+ATOM    255  CA  PRO A  36      18.635  18.861   4.738  1.00  8.78           C
+ATOM    256  C   PRO A  36      19.925  18.042   4.949  1.00  8.31           C
+ATOM    257  O   PRO A  36      20.593  17.742   3.945  1.00  9.09           O
+ATOM    258  CB  PRO A  36      18.945  20.364   4.783  1.00  9.67           C
+ATOM    259  CG  PRO A  36      18.238  20.937   5.908  1.00 10.15           C
+ATOM    260  CD  PRO A  36      17.371  19.900   6.596  1.00  9.53           C
+ATOM    261  N   GLY A  37      20.172  17.730   6.217  1.00  8.48           N
+ATOM    262  CA  GLY A  37      21.452  16.969   6.513  1.00  9.20           C
+ATOM    263  C   GLY A  37      21.143  15.478   6.427  1.00 10.41           C
+ATOM    264  O   GLY A  37      20.138  15.023   5.878  1.00 12.06           O
+ATOM    265  N   ALA A  38      22.055  14.701   7.032  1.00  9.24           N
+ATOM    266  CA  ALA A  38      22.019  13.242   7.020  1.00  9.24           C
+ATOM    267  C   ALA A  38      21.944  12.628   8.396  1.00  9.60           C
+ATOM    268  O   ALA A  38      21.869  11.387   8.435  1.00 13.65           O
+ATOM    269  CB  ALA A  38      23.246  12.697   6.275  1.00 10.43           C
+ATOM    270  N   THR A  39      21.894  13.435   9.436  1.00  8.70           N
+ATOM    271  CA  THR A  39      21.936  12.911  10.809  1.00  9.46           C
+ATOM    272  C   THR A  39      20.615  13.191  11.521  1.00  8.32           C
+ATOM    273  O   THR A  39      20.357  14.317  11.948  1.00  9.89           O
+ATOM    274  CB  THR A  39      23.131  13.601  11.593  1.00 10.72           C
+ATOM    275  OG1 THR A  39      24.284  13.401  10.709  1.00 11.66           O
+ATOM    276  CG2 THR A  39      23.340  12.935  12.962  1.00 11.81           C
+ATOM    277  N   CYS A  40      19.827  12.110  11.642  1.00  7.64           N
+ATOM    278  CA  CYS A  40      18.504  12.312  12.298  1.00  8.05           C
+ATOM    279  C   CYS A  40      18.684  12.451  13.784  1.00  7.63           C
+ATOM    280  O   CYS A  40      19.533  11.718  14.362  1.00  9.64           O
+ATOM    281  CB  CYS A  40      17.582  11.117  11.996  1.00  7.80           C
+ATOM    282  SG  CYS A  40      17.199  10.929  10.237  1.00  7.30           S
+ATOM    283  N   PRO A  41      17.880  13.266  14.426  1.00  8.00           N
+ATOM    284  CA  PRO A  41      17.924  13.421  15.877  1.00  8.96           C
+ATOM    285  C   PRO A  41      17.392  12.206  16.594  1.00  9.06           C
+ATOM    286  O   PRO A  41      16.652  11.368  16.033  1.00  8.82           O
+ATOM    287  CB  PRO A  41      17.076  14.658  16.145  1.00 10.39           C
+ATOM    288  CG  PRO A  41      16.098  14.689  14.997  1.00 10.99           C
+ATOM    289  CD  PRO A  41      16.859  14.150  13.779  1.00 10.49           C
+ATOM    290  N   GLY A  42      17.728  12.124  17.884  1.00  7.55           N
+ATOM    291  CA  GLY A  42      17.334  10.956  18.691  1.00  8.00           C
+ATOM    292  C   GLY A  42      15.875  10.688  18.871  1.00  7.22           C
+ATOM    293  O   GLY A  42      15.434   9.550  19.166  1.00  8.41           O
+ATOM    294  N   ASP A  43      15.036  11.747  18.715  1.00  5.54           N
+ATOM    295  CA  ASP A  43      13.564  11.573  18.836  1.00  5.85           C
+ATOM    296  C   ASP A  43      12.936  11.227  17.470  1.00  5.87           C
+ATOM    297  O   ASP A  43      11.720  11.040  17.428  1.00  7.29           O
+ATOM    298  CB  ASP A  43      12.933  12.737  19.580  1.00  6.72           C
+ATOM    299  CG  ASP A  43      13.140  14.094  18.958  1.00  8.59           C
+ATOM    300  OD1 ASP A  43      14.109  14.303  18.212  1.00  9.59           O
+ATOM    301  OD2 ASP A  43      12.267  14.963  19.265  1.00 11.45           O
+ATOM    302  N   TYR A  44      13.725  11.174  16.425  1.00  5.22           N
+ATOM    303  CA  TYR A  44      13.257  10.745  15.081  1.00  5.56           C
+ATOM    304  C   TYR A  44      14.275   9.687  14.612  1.00  4.61           C
+ATOM    305  O   TYR A  44      14.930   9.862  13.568  1.00  6.04           O
+ATOM    306  CB  TYR A  44      13.200  11.914  14.071  1.00  5.41           C
+ATOM    307  CG  TYR A  44      12.000  12.819  14.399  1.00  5.34           C
+ATOM    308  CD1 TYR A  44      12.119  13.853  15.332  1.00  6.59           C
+ATOM    309  CD2 TYR A  44      10.775  12.617  13.762  1.00  5.94           C
+ATOM    310  CE1 TYR A  44      11.045  14.675  15.610  1.00  5.97           C
+ATOM    311  CE2 TYR A  44       9.676  13.433  14.048  1.00  5.17           C
+ATOM    312  CZ  TYR A  44       9.802  14.456  14.996  1.00  5.96           C
+ATOM    313  OH  TYR A  44       8.740  15.265  15.269  1.00  8.60           O
+ATOM    314  N   ALA A  45      14.342   8.640  15.422  1.00  4.76           N
+ATOM    315  CA  ALA A  45      15.445   7.667  15.246  1.00  5.89           C
+ATOM    316  C   ALA A  45      15.171   6.533  14.280  1.00  6.67           C
+ATOM    317  O   ALA A  45      16.093   5.705  14.039  1.00  7.56           O
+ATOM    318  CB  ALA A  45      15.680   7.099  16.682  1.00  6.82           C
+ATOM    319  N   ASN A  46      13.966   6.502  13.739  1.00  5.80           N
+ATOM    320  CA  ASN A  46      13.512   5.395  12.878  1.00  6.15           C
+ATOM    321  C   ASN A  46      13.311   5.853  11.455  1.00  6.61           C
+ATOM    322  O   ASN A  46      13.733   6.929  11.026  1.00  7.18           O
+ATOM    323  CB  ASN A  46      12.266   4.769  13.501  1.00  7.27           C
+ATOM    324  CG  ASN A  46      12.538   4.304  14.922  1.00  7.98           C
+ATOM    325  OD1 ASN A  46      11.982   4.849  15.886  1.00 11.00           O
+ATOM    326  ND2 ASN A  46      13.407   3.298  15.015  1.00 10.32           N
+ATOM    327  OXT ASN A  46      12.703   4.973  10.746  1.00  7.86           O
+TER     328      ASN A  46
+END
+";
+
+/// Which built-in demo structure the molecular viewer loads — picked by the
+/// "Demo structure" combo and settable by an agent. [`Crambin`](Self::Crambin)
+/// (PDB 1CRN, a real 46-residue mixed α/β protein) is the default; the tiny
+/// glycine peptide stays as the trivial smoke case.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub(crate) enum DemoStructure {
+    /// Real 46-residue, 327-atom crambin (PDB 1CRN) — the default. Has both an
+    /// α-helix and a β-sheet, so the ribbon / cartoon + DSSP colour scheme show
+    /// real secondary structure.
+    #[default]
+    Crambin,
+    /// The 12-atom triglycine peptide ([`DEMO_PDB`]) — a minimal smoke
+    /// structure that intentionally looks like almost nothing.
+    GlyPeptide,
+}
+
+impl DemoStructure {
+    /// Every demo structure, in picker order.
+    pub(crate) const ALL: [DemoStructure; 2] = [DemoStructure::Crambin, DemoStructure::GlyPeptide];
+
+    /// The user-visible / agent-facing caption for this demo structure.
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            DemoStructure::Crambin => "Crambin (1CRN, 46 res)",
+            DemoStructure::GlyPeptide => "Triglycine peptide (3 res)",
+        }
+    }
+
+    /// The embedded PDB text for this demo structure — parses via
+    /// [`read_structure`].
+    pub(crate) fn pdb(self) -> &'static str {
+        match self {
+            DemoStructure::Crambin => CRAMBIN_PDB,
+            DemoStructure::GlyPeptide => DEMO_PDB,
+        }
+    }
+
+    /// Resolve a demo structure from its display [`label`](Self::label),
+    /// case-insensitively. Accepts a few short aliases (`"crambin"`, `"1crn"`,
+    /// `"glycine"`, `"peptide"`) so an agent need not quote the full caption.
+    /// Fail-loud: an unrecognised name returns `Err`.
+    pub(crate) fn from_label(s: &str) -> Result<DemoStructure, String> {
+        let n = s.trim().to_ascii_lowercase();
+        DemoStructure::ALL
+            .into_iter()
+            .find(|d| d.label().to_ascii_lowercase() == n)
+            .or(match n.as_str() {
+                "crambin" | "1crn" | "crn" => Some(DemoStructure::Crambin),
+                "glycine" | "triglycine" | "peptide" | "gly" => Some(DemoStructure::GlyPeptide),
+                _ => None,
+            })
+            .ok_or_else(|| format!("unknown demo structure: {s:?}"))
+    }
+}
+
 impl Default for BiostructPanel {
     fn default() -> Self {
         BiostructPanel {
             tool: Tool::Analyze,
-            structure_a: DEMO_PDB.to_string(),
-            structure_b: DEMO_PDB.to_string(),
+            // Default to the real 46-residue crambin so the viewer shows an
+            // actual protein (ribbon + secondary structure), not the 12-atom
+            // smoke peptide. `structure_b` (the superpose reference) starts as
+            // the same structure so a default RMSD run is well-defined.
+            structure_a: CRAMBIN_PDB.to_string(),
+            structure_b: CRAMBIN_PDB.to_string(),
             clash_tolerance: 0.4,
             error: None,
             result: String::new(),
@@ -370,6 +827,7 @@ impl Default for BiostructPanel {
             color_scheme: ColorScheme::default(),
             molviz_params: MolvizParams::default(),
             trajectory: TrajectoryPlayback::default(),
+            demo: DemoStructure::default(),
         }
     }
 }
@@ -1086,7 +1544,38 @@ fn structure_text_input(
     err
 }
 
+/// Draw the **"Demo structure"** picker — a labelled row of `selectable_value`
+/// chips, one per built-in [`DemoStructure`]. Selecting one loads its embedded
+/// PDB into `structure_a` (via [`BiostructPanel::load_demo`]). Each chip is
+/// `labelled_by` its caption and carries the demo's display name as its
+/// accessibility Name (the same always-visible pattern as the representation /
+/// colour-scheme pickers), so an agent can switch the loaded structure through
+/// the accessibility tree by name without first opening a popup; the same path
+/// backs the host `agent_set`.
+fn demo_structure_picker(p: &mut BiostructPanel, ui: &mut egui::Ui) {
+    ui.horizontal_wrapped(|ui| {
+        let cap = ui.label("Demo structure");
+        for d in DemoStructure::ALL {
+            let selected = p.demo == d;
+            let resp = ui
+                .selectable_label(selected, d.label())
+                .on_hover_text(match d {
+                    DemoStructure::Crambin => {
+                        "Real 46-residue protein (PDB 1CRN) with an α-helix and a \
+                         β-sheet — shows secondary structure in the ribbon view."
+                    }
+                    DemoStructure::GlyPeptide => "Tiny 12-atom triglycine smoke peptide.",
+                })
+                .labelled_by(cap.id);
+            if resp.clicked() && !selected {
+                p.load_demo(d);
+            }
+        }
+    });
+}
+
 fn draw_single(p: &mut BiostructPanel, ui: &mut egui::Ui) {
+    demo_structure_picker(p, ui);
     if let Some(e) = structure_text_input(
         ui,
         "biostruct_input_a",
@@ -1195,6 +1684,7 @@ fn run_single(p: &mut BiostructPanel) {
 }
 
 fn draw_superpose(p: &mut BiostructPanel, ui: &mut egui::Ui) {
+    demo_structure_picker(p, ui);
     if let Some(e) = structure_text_input(
         ui,
         "biostruct_input_mob",
@@ -1279,6 +1769,107 @@ mod tests {
         let ca = ca_coords(&s);
         let sup = kabsch(&ca, &ca).unwrap();
         assert!(sup.rmsd < 1.0e-6);
+    }
+
+    #[test]
+    fn crambin_pdb_parses_as_a_real_protein() {
+        // The embedded 1CRN is a real 46-residue / 327-atom protein. The
+        // existing `read_structure` PDB parser must consume it as-is (HELIX /
+        // SHEET / TER / the OXT terminal oxygen included).
+        let s = read_structure(CRAMBIN_PDB, "crambin").expect("crambin (1CRN) must parse");
+        let (mut res, mut atoms) = (0usize, 0usize);
+        for chain in &s.first_model().chains {
+            res += chain.residues.len();
+            for r in &chain.residues {
+                atoms += r.atoms.len();
+            }
+        }
+        assert_eq!(res, 46, "crambin has 46 residues");
+        assert_eq!(atoms, 327, "crambin has 327 atoms");
+        // 46 Cα atoms (one per residue) — enough for a ribbon and a meaningful
+        // RMSD, unlike the 3-Cα demo peptide.
+        assert_eq!(ca_coords(&s).len(), 46);
+    }
+
+    #[test]
+    fn crambin_backbone_has_both_helix_and_sheet() {
+        // The whole point of crambin as the default: its DSSP-tagged Cα trace
+        // shows *both* an α-helix and a β-sheet, so the ribbon / cartoon and
+        // the secondary-structure colour scheme have real structure to render.
+        use crate::molviz::SsKind;
+        let s = read_structure(CRAMBIN_PDB, "crambin").unwrap();
+        let bb = super::ca_backbone(&s);
+        assert_eq!(bb.len(), 46, "one Cα control point per residue");
+        let kinds: Vec<Option<SsKind>> = bb
+            .iter()
+            .map(|p| p.ss.map(SsKind::from_dssp_code))
+            .collect();
+        assert!(
+            kinds.iter().any(|k| *k == Some(SsKind::Helix)),
+            "crambin must contain α-helix backbone points"
+        );
+        assert!(
+            kinds.iter().any(|k| *k == Some(SsKind::Sheet)),
+            "crambin must contain β-sheet backbone points"
+        );
+    }
+
+    #[test]
+    fn default_panel_loads_crambin_not_the_tiny_peptide() {
+        // The viewer's default structure is the real protein, so opening the
+        // panel shows something — not the 12-atom smoke peptide.
+        let p = BiostructPanel::default();
+        assert_eq!(p.demo, DemoStructure::Crambin);
+        assert_eq!(p.structure_a, CRAMBIN_PDB);
+        let s = read_structure(&p.structure_a, "default").unwrap();
+        assert_eq!(ca_coords(&s).len(), 46);
+    }
+
+    #[test]
+    fn demo_structure_from_label_round_trips_and_rejects_garbage() {
+        for d in DemoStructure::ALL {
+            assert_eq!(DemoStructure::from_label(d.label()), Ok(d));
+            assert_eq!(DemoStructure::from_label(&d.label().to_uppercase()), Ok(d));
+        }
+        // Short aliases resolve too.
+        assert_eq!(
+            DemoStructure::from_label("crambin"),
+            Ok(DemoStructure::Crambin)
+        );
+        assert_eq!(
+            DemoStructure::from_label("1CRN"),
+            Ok(DemoStructure::Crambin)
+        );
+        assert_eq!(
+            DemoStructure::from_label("triglycine"),
+            Ok(DemoStructure::GlyPeptide)
+        );
+        assert!(DemoStructure::from_label("hemoglobin").is_err());
+    }
+
+    #[test]
+    fn load_demo_swaps_the_structure_and_is_undoable() {
+        let mut p = BiostructPanel::default(); // crambin
+        p.load_demo(DemoStructure::GlyPeptide);
+        assert_eq!(p.demo, DemoStructure::GlyPeptide);
+        assert_eq!(p.structure_a, DEMO_PDB);
+        assert!(p.can_undo(), "loading a demo records an undo step");
+        // Undo restores the prior (crambin) structure text.
+        assert!(p.undo_edit());
+        assert_eq!(p.structure_a, CRAMBIN_PDB);
+    }
+
+    #[test]
+    fn structure_readout_names_the_loaded_structure_with_counts() {
+        let mut p = BiostructPanel::default();
+        let r = p.structure_readout();
+        assert!(r.contains("Crambin"), "readout names crambin: {r}");
+        assert!(r.contains("46 residues"), "readout has residue count: {r}");
+        assert!(r.contains("327 atoms"), "readout has atom count: {r}");
+        p.load_demo(DemoStructure::GlyPeptide);
+        let r = p.structure_readout();
+        assert!(r.contains("Triglycine"), "readout names the peptide: {r}");
+        assert!(r.contains("3 residues"), "readout has residue count: {r}");
     }
 
     /// Round-21 H1 RED→GREEN: the genetics-workbench file loaders
@@ -1708,6 +2299,43 @@ END
                 }
             }
         }
+    }
+
+    #[test]
+    fn demo_structure_picker_is_labelled_for_ai_driving() {
+        // The "Demo structure" picker must be AI-drivable: each demo option
+        // carries its label as an accessibility Name, and the combo is
+        // `labelled_by` its "Demo structure" caption — so an agent can switch
+        // the loaded structure (e.g. to crambin) through the accessibility tree.
+        use egui::accesskit::Node;
+        let mut app = app_with_panel();
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        // The caption itself appears as a named node.
+        assert!(
+            nodes
+                .iter()
+                .any(|(_, n)| n.name() == Some("Demo structure")),
+            "the 'Demo structure' caption must be a named accesskit node"
+        );
+        // Every demo option appears as a named node, and at least one carries a
+        // `labelled_by` association (the combo body links to its caption).
+        for d in DemoStructure::ALL {
+            let label = d.label();
+            let matching: Vec<&Node> = nodes
+                .iter()
+                .map(|(_, n)| n)
+                .filter(|n| n.name() == Some(label))
+                .collect();
+            assert!(
+                !matching.is_empty(),
+                "demo structure '{label}' must appear as a named node in the accesskit tree"
+            );
+        }
+        assert!(
+            nodes.iter().any(|(_, n)| !n.labelled_by().is_empty()),
+            "the demo-structure combo must expose a labelled_by association (AI-drivable)"
+        );
     }
 
     #[test]

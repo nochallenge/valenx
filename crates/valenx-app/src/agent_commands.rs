@@ -1995,6 +1995,7 @@ fn read_readout(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
         TabKind::MissionPlanner => Some(app.mission_planner.agent_readout()),
         TabKind::Morphogenesis => Some(app.morphogenesis.agent_readout()),
         TabKind::Survivability => Some(app.survivability.agent_readout()),
+        TabKind::Genetics => Some(app.genetics.agent_readout()),
         _ => None,
     };
 

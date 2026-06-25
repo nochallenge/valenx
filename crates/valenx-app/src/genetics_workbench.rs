@@ -182,7 +182,7 @@ impl GeneticsWorkbenchState {
     /// and are not surfaced through this host `agent_set` (a per-panel bridge
     /// would be a separate, larger pass). The selector alone is exposed here.
     pub fn agent_control_names() -> &'static [&'static str] {
-        &["Bio tool panel"]
+        &["Bio tool panel", "Demo structure"]
     }
 
     /// Set one labelled control by its user-visible caption, for the agent
@@ -199,9 +199,32 @@ impl GeneticsWorkbenchState {
             "Bio tool panel" => {
                 self.active = GeneticsPanel::from_label(value.as_str()?)?;
             }
+            // The Macromolecular Structure panel's demo-structure picker is
+            // surfaced here so an agent can load a real protein (or the tiny
+            // peptide) into the molecular viewer by name. Set by the demo's
+            // display name / alias (e.g. `"Crambin (1CRN, 46 res)"`, `"crambin"`,
+            // `"1CRN"`, `"triglycine"`). Loading it also switches the active panel
+            // to Macromolecular Structure so the change is visible.
+            "Demo structure" => {
+                let demo = genetics::biostruct::DemoStructure::from_label(value.as_str()?)?;
+                self.biostruct.load_demo(demo);
+                self.active = GeneticsPanel::MacromolecularStructure;
+            }
             other => return Err(format!("unknown genetics control: {other:?}")),
         }
         Ok(())
+    }
+
+    /// Read-only readout for the agent `ReadReadout` bridge. When the active
+    /// panel is **Macromolecular Structure**, reports the loaded structure (demo
+    /// name + parsed residue / atom count) so an agent can confirm which protein
+    /// the molecular viewer is showing. Other panels have no host readout yet
+    /// (`None`).
+    pub fn agent_readout(&self) -> Option<String> {
+        match self.active {
+            GeneticsPanel::MacromolecularStructure => Some(self.biostruct.structure_readout()),
+            _ => None,
+        }
     }
 }
 
@@ -397,6 +420,46 @@ mod tests {
             .is_err());
         // Wrong type (panel name needs a string) -> Err.
         assert!(s.agent_set("Bio tool panel", &AgentValue::Int(3)).is_err());
+    }
+
+    #[test]
+    fn agent_set_loads_demo_structure_into_the_viewer() {
+        use genetics::biostruct::DemoStructure;
+        let mut s = GeneticsWorkbenchState::default();
+        // The viewer defaults to crambin; load the tiny peptide by alias, which
+        // also switches the active panel to Macromolecular Structure.
+        s.agent_set("Demo structure", &AgentValue::Str("triglycine".into()))
+            .expect("load demo by alias");
+        assert_eq!(s.active, GeneticsPanel::MacromolecularStructure);
+        assert_eq!(s.biostruct.demo, DemoStructure::GlyPeptide);
+        // Load the real protein back by its display name.
+        s.agent_set(
+            "Demo structure",
+            &AgentValue::Str("Crambin (1CRN, 46 res)".into()),
+        )
+        .expect("load crambin by name");
+        assert_eq!(s.biostruct.demo, DemoStructure::Crambin);
+
+        // Unknown structure name -> Err (state unchanged: still crambin).
+        assert!(s
+            .agent_set("Demo structure", &AgentValue::Str("myoglobin".into()))
+            .is_err());
+        assert_eq!(s.biostruct.demo, DemoStructure::Crambin);
+        // Wrong type -> Err.
+        assert!(s.agent_set("Demo structure", &AgentValue::Int(1)).is_err());
+    }
+
+    #[test]
+    fn agent_readout_reports_the_loaded_structure() {
+        let mut s = GeneticsWorkbenchState::default();
+        // No readout unless the Macromolecular Structure panel is active.
+        s.active = GeneticsPanel::Sequence;
+        assert!(s.agent_readout().is_none());
+        // On that panel it reports the loaded structure with residue/atom counts.
+        s.active = GeneticsPanel::MacromolecularStructure;
+        let r = s.agent_readout().expect("readout on the structure panel");
+        assert!(r.contains("Crambin"), "names crambin: {r}");
+        assert!(r.contains("46 residues") && r.contains("327 atoms"), "{r}");
     }
 }
 
