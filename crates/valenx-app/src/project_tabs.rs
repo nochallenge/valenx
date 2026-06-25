@@ -230,6 +230,7 @@ pub enum TabKind {
     Genetics,
     Neuro,
     VariantEffect,
+    Ppi,
     // -- Sensors --
     Sensors,
     // -- Fluids --
@@ -251,7 +252,7 @@ pub enum TabKind {
 impl TabKind {
     /// Every *template* kind (i.e. excluding [`TabKind::Blank`]), in
     /// `＋ from template`-menu order (grouped via [`Self::group`]).
-    pub const TEMPLATES: [TabKind; 39] = [
+    pub const TEMPLATES: [TabKind; 40] = [
         TabKind::Rocket,
         TabKind::Engine,
         TabKind::Astro,
@@ -283,6 +284,7 @@ impl TabKind {
         TabKind::Genetics,
         TabKind::Neuro,
         TabKind::VariantEffect,
+        TabKind::Ppi,
         TabKind::Sensors,
         TabKind::Fluids,
         TabKind::Ocean,
@@ -324,7 +326,9 @@ impl TabKind {
             | TabKind::Reinforcement
             | TabKind::Interior
             | TabKind::Geomatics => "Civil & AEC",
-            TabKind::Genetics | TabKind::Neuro | TabKind::VariantEffect => "Life sciences",
+            TabKind::Genetics | TabKind::Neuro | TabKind::VariantEffect | TabKind::Ppi => {
+                "Life sciences"
+            }
             TabKind::Sensors => "Sensors",
             TabKind::Autonomy => "Sensors",
             TabKind::Fluids => "Simulation",
@@ -370,6 +374,7 @@ impl TabKind {
             TabKind::Genetics => "Genetics",
             TabKind::Neuro => "Neural interface",
             TabKind::VariantEffect => "Variant effect",
+            TabKind::Ppi => "Protein interaction (PPI)",
             TabKind::Sensors => "Sensors (LiDAR / Radar)",
             TabKind::Autonomy => "Autonomy V&V",
             TabKind::Fluids => "Fluids (SPH particle sim)",
@@ -418,6 +423,7 @@ impl TabKind {
             TabKind::Genetics => app.show_genetics_workbench = true,
             TabKind::Neuro => app.show_neuro_workbench = true,
             TabKind::VariantEffect => app.show_variant_effect_workbench = true,
+            TabKind::Ppi => app.show_ppi_workbench = true,
             TabKind::Sensors => app.show_sensors_workbench = true,
             TabKind::Autonomy => app.show_autonomy_workbench = true,
             TabKind::Fluids => app.show_fluids_workbench = true,
@@ -472,6 +478,7 @@ impl TabKind {
             "genetics" => Some(TabKind::Genetics),
             "neuro" => Some(TabKind::Neuro),
             "variant" | "varianteffect" => Some(TabKind::VariantEffect),
+            "ppi" | "interactome" | "network" => Some(TabKind::Ppi),
             "sensors" => Some(TabKind::Sensors),
             "autonomy" | "vnv" => Some(TabKind::Autonomy),
             "fluids" | "sph" => Some(TabKind::Fluids),
@@ -1235,6 +1242,10 @@ pub const ALL_WORKBENCH_KINDS: &[&str] = &[
     "photogrammetry",
     // In-house FMI / HELICS co-simulation coupling — surfaced by the Co-Simulation workbench.
     "cosim",
+    // In-house sequence-first protein-protein interaction / interactome
+    // (coevolution MI -> fused PPI score -> ranked screen) — surfaced by the
+    // PPI / interactome workbench.
+    "ppi",
     // The Mesh Toolbox is gated on `show_mesh_toolbox` (a `_toolbox`, not a
     // `_workbench`, field) but behaves like a per-tab workbench, so it is
     // mappable here under the same id the agent registry / `TabKind::from_id`
@@ -1400,6 +1411,7 @@ pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
         "uq" | "uncertainty" => app.show_uq_workbench = on,
         "photogrammetry" | "sfm" | "scan" => app.show_photogrammetry_workbench = on,
         "cosim" | "co-simulation" | "cosimulation" | "fmi" => app.show_cosim_workbench = on,
+        "ppi" | "interactome" | "network" => app.show_ppi_workbench = on,
         // Mesh Toolbox (a `_toolbox` flag, mapped here for parity).
         "mesh" | "meshtoolbox" => app.show_mesh_toolbox = on,
         // Unknown kind: no-op — a stale/hostile registry string is ignored.
@@ -1460,6 +1472,7 @@ fn clear_all_workbenches(app: &mut ValenxApp) {
     app.show_uq_workbench = false;
     app.show_photogrammetry_workbench = false;
     app.show_cosim_workbench = false;
+    app.show_ppi_workbench = false;
 }
 
 /// Reconcile the visible workbench + central viewport with the active
@@ -2948,6 +2961,7 @@ mod tests {
             ("genetics", TabKind::Genetics),
             ("neuro", TabKind::Neuro),
             ("varianteffect", TabKind::VariantEffect),
+            ("ppi", TabKind::Ppi),
             ("sensors", TabKind::Sensors),
             ("autonomy", TabKind::Autonomy),
             ("fluids", TabKind::Fluids),
@@ -2972,6 +2986,8 @@ mod tests {
         assert_eq!(TabKind::from_id("scan"), Some(TabKind::Photogrammetry));
         assert_eq!(TabKind::from_id("co-simulation"), Some(TabKind::Cosim));
         assert_eq!(TabKind::from_id("fmi"), Some(TabKind::Cosim));
+        assert_eq!(TabKind::from_id("interactome"), Some(TabKind::Ppi));
+        assert_eq!(TabKind::from_id("network"), Some(TabKind::Ppi));
         // Unknown ids (and Blank, which has no id) map to None.
         assert_eq!(TabKind::from_id("blank"), None);
         assert_eq!(TabKind::from_id("nope"), None);
@@ -4377,6 +4393,7 @@ mod tests {
             app.show_uq_workbench,
             app.show_photogrammetry_workbench,
             app.show_cosim_workbench,
+            app.show_ppi_workbench,
         ]
         .into_iter()
         .filter(|&b| b)
@@ -4436,6 +4453,7 @@ mod tests {
                 crate::photogrammetry_workbench::draw_photogrammetry_workbench(app, ctx)
             }
             TabKind::Cosim => crate::cosim_workbench::draw_cosim_workbench(app, ctx),
+            TabKind::Ppi => crate::ppi_workbench::draw_ppi_workbench(app, ctx),
         });
     }
 
@@ -4719,7 +4737,7 @@ mod headless_ui_tests {
 
     #[test]
     fn all_workbench_kinds_is_unique_and_covers_134_plus_mesh() {
-        // The registry list has no duplicate ids, and is the 140
+        // The registry list has no duplicate ids, and is the 142
         // `show_*_workbench` fields plus the one `meshtoolbox` alias.
         let mut seen = std::collections::HashSet::new();
         for k in ALL_WORKBENCH_KINDS {
@@ -4730,8 +4748,8 @@ mod headless_ui_tests {
         }
         assert_eq!(
             ALL_WORKBENCH_KINDS.len(),
-            142,
-            "141 `show_*_workbench` fields + the meshtoolbox alias"
+            143,
+            "142 `show_*_workbench` fields + the meshtoolbox alias"
         );
         assert!(ALL_WORKBENCH_KINDS.contains(&"meshtoolbox"));
         // A couple of representative kinds are present.
