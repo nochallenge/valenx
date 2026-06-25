@@ -102,6 +102,7 @@
 pub mod engagement;
 pub mod entity;
 pub mod error;
+pub mod monte_carlo;
 pub mod scenario;
 pub mod scheduler;
 pub mod sensor;
@@ -115,6 +116,7 @@ pub use engagement::{
 };
 pub use entity::{Entity, Mover, Side};
 pub use error::MissionError;
+pub use monte_carlo::{monte_carlo, OutcomeStats, Prevailed, SummaryStat};
 pub use rng::SplitMix64;
 pub use scenario::{survivors_on, Event, Scenario, ScenarioResult, TimelineEntry};
 pub use scenario_metrics::OutcomeMetrics;

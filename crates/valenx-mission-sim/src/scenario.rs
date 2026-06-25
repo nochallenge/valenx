@@ -138,6 +138,30 @@ impl Scenario {
         &self.entities
     }
 
+    /// The engagement-PRNG seed this scenario runs with (read-only).
+    ///
+    /// Used by [`crate::monte_carlo`] to deterministically derive the per-run
+    /// seeds of a reproducible Monte-Carlo ensemble.
+    #[must_use]
+    pub fn base_seed(&self) -> u64 {
+        self.seed
+    }
+
+    /// A copy of this scenario with a different engagement-PRNG `seed`.
+    ///
+    /// Everything else (entities, stop time, tick) is identical, so the run is
+    /// the **same** abstract scenario with a fresh stochastic stream — exactly
+    /// what [`crate::monte_carlo`] needs to sample the engagement model.
+    #[must_use]
+    pub fn with_seed(&self, seed: u64) -> Self {
+        Self {
+            entities: self.entities.clone(),
+            stop_time_s: self.stop_time_s,
+            tick_dt_s: self.tick_dt_s,
+            seed,
+        }
+    }
+
     /// Run the scenario to its stop time, returning the timeline + final state +
     /// metrics.
     ///
