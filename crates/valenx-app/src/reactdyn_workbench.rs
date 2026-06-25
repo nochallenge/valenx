@@ -518,13 +518,16 @@ pub fn draw_reactdyn_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                             .small(),
                         );
                     } else {
+                        let preset_lbl = ui.label("geometry preset");
                         egui::ComboBox::from_id_source("reactdyn_preset")
                             .selected_text(s.preset.label())
                             .show_ui(ui, |ui| {
                                 for p in Preset::ALL {
                                     ui.selectable_value(&mut s.preset, p, p.label());
                                 }
-                            });
+                            })
+                            .response
+                            .labelled_by(preset_lbl.id);
                         if s.preset == Preset::Custom {
                             ui.add(
                                 egui::TextEdit::multiline(&mut s.xyz)
@@ -545,14 +548,16 @@ pub fn draw_reactdyn_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.radio_value(&mut s.method, Method::Dft, "DFT (B3LYP)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("basis");
+                        let basis_lbl = ui.label("basis");
                         egui::ComboBox::from_id_source("reactdyn_basis")
                             .selected_text(&s.basis)
                             .show_ui(ui, |ui| {
                                 for b in ["STO-3G", "3-21G", "6-31G"] {
                                     ui.selectable_value(&mut s.basis, b.to_string(), b);
                                 }
-                            });
+                            })
+                            .response
+                            .labelled_by(basis_lbl.id);
                     });
 
                     ui.add_space(4.0);

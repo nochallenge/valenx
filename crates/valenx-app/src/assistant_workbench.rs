@@ -307,11 +307,17 @@ pub(crate) fn assistant_chat_ui(app: &mut ValenxApp, ui: &mut egui::Ui, channel:
                 None => &mut app.assistant.input,
                 Some(n) => app.unit_chat_inputs.entry(n).or_default(),
             };
-            let resp = ui.add(
-                egui::TextEdit::singleline(input)
-                    .hint_text("Message Claude…")
-                    .desired_width(f32::INFINITY),
-            );
+            // A caption associated via `labelled_by` so the chat input carries an
+            // accessible name (a bare TextEdit has none; its hint text is not a
+            // name) — addressable by a screen reader / AI driver.
+            let msg_cap = ui.label(egui::RichText::new("Message").weak().small());
+            let resp = ui
+                .add(
+                    egui::TextEdit::singleline(input)
+                        .hint_text("Message Claude…")
+                        .desired_width(f32::INFINITY),
+                )
+                .labelled_by(msg_cap.id);
             let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             if enter || ui.button("Send").clicked() {
                 let msg = input.trim().to_string();

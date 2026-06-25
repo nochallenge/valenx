@@ -108,6 +108,8 @@ pub mod fixedwing_workbench;
 pub mod fluidstatics_workbench;
 pub mod flywheel_workbench;
 pub mod fourbar_workbench;
+#[cfg(test)]
+mod widget_naming_tests;
 // Mechanical + civil batch — surface valenx-shaftdesign, -screwthread,
 // -pulley, -spring-design, -springcombination, -vibration, -rivet,
 // -soilbearing as reactive right-side workbenches.

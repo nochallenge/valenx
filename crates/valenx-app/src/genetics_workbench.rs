@@ -202,6 +202,7 @@ pub(crate) fn genetics_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
     // crate::panel_help so the user can see what a panel does
     // before switching to it. F1 once inside a panel opens
     // the full help popup.
+    let panel_lbl = ui.label("Bio tool panel");
     egui::ComboBox::from_id_source("genetics_panel_combo")
         .selected_text(app.genetics.active.label())
         .width(ui.available_width())
@@ -210,7 +211,9 @@ pub(crate) fn genetics_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 ui.selectable_value(&mut app.genetics.active, panel, panel.label())
                     .on_hover_text(crate::panel_help::short_summary(panel.label()));
             }
-        });
+        })
+        .response
+        .labelled_by(panel_lbl.id);
     ui.add_space(2.0);
     ui.horizontal_wrapped(|ui| {
         for panel in GeneticsPanel::ALL {

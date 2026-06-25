@@ -2161,9 +2161,15 @@ fn kind_label(kind: FeatureKind) -> &'static str {
     }
 }
 
-/// A narrow single-line editor for a dimension / placement expression.
-fn dim_edit(ui: &mut egui::Ui, v: &mut String) {
-    ui.add(egui::TextEdit::singleline(v).desired_width(52.0));
+/// A narrow single-line editor for a dimension / placement expression, with a
+/// compact leading `caption` rendered as its label and associated via
+/// `labelled_by` so each field carries a unique accessible name (a bare
+/// `TextEdit` has no own-name, leaving it unaddressable by a screen reader / AI
+/// driver — closing AI-drivability gap 2).
+fn dim_edit(ui: &mut egui::Ui, caption: &str, v: &mut String) {
+    let cap = ui.label(egui::RichText::new(caption).weak().small());
+    ui.add(egui::TextEdit::singleline(v).desired_width(52.0))
+        .labelled_by(cap.id);
 }
 
 /// Format a float as a compact expression string for a feature field — up to 4
@@ -2615,17 +2621,27 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     let mut remove: Option<usize> = None;
                     for (i, (name, expr)) in s.params.iter_mut().enumerate() {
                         ui.horizontal(|ui| {
+                            // Per-row captions so the name / expr editors carry
+                            // unique accessible names (a bare TextEdit has no
+                            // own-name) — AI-drivable / screen-reader addressable.
+                            let name_cap = ui.label(
+                                egui::RichText::new(format!("param {} name", i + 1))
+                                    .weak()
+                                    .small(),
+                            );
                             ui.add(
                                 egui::TextEdit::singleline(name)
                                     .desired_width(80.0)
                                     .hint_text("name"),
-                            );
-                            ui.label("=");
+                            )
+                            .labelled_by(name_cap.id);
+                            let expr_cap = ui.label("=");
                             ui.add(
                                 egui::TextEdit::singleline(expr)
                                     .desired_width(130.0)
                                     .hint_text("expr"),
-                            );
+                            )
+                            .labelled_by(expr_cap.id);
                             if ui.small_button("✕").clicked() {
                                 remove = Some(i);
                             }
@@ -2661,12 +2677,13 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.add_space(6.0);
                     ui.label(egui::RichText::new("Sketch").strong());
                     ui.horizontal(|ui| {
-                        ui.label("circle radius =");
+                        let radius_cap = ui.label("circle radius =");
                         ui.add(
                             egui::TextEdit::singleline(&mut s.radius_param)
                                 .desired_width(100.0)
                                 .hint_text("parameter"),
-                        );
+                        )
+                        .labelled_by(radius_cap.id);
                     });
                     if ui.button("▶ Solve").clicked() {
                         let res = run_cad(s);
@@ -2721,7 +2738,10 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     for (i, st) in s.steps.iter_mut().enumerate() {
                         ui.group(|ui| {
                             ui.horizontal(|ui| {
-                                ui.label(format!("{}.", i + 1));
+                                // Step-number label doubles as the boolean-op
+                                // combo's accessible caption; the kind combo gets
+                                // its own so both are addressable by name.
+                                let step_cap = ui.label(format!("step {} op", i + 1));
                                 egui::ComboBox::from_id_source(("cad_op", i))
                                     .selected_text(op_label(st.op))
                                     .width(92.0)
@@ -2729,7 +2749,11 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                         for op in [Op::New, Op::Join, Op::Cut, Op::Intersect] {
                                             ui.selectable_value(&mut st.op, op, op_label(op));
                                         }
-                                    });
+                                    })
+                                    .response
+                                    .labelled_by(step_cap.id);
+                                let kind_cap =
+                                    ui.label(egui::RichText::new("shape").weak().small());
                                 egui::ComboBox::from_id_source(("cad_kind", i))
                                     .selected_text(kind_label(st.kind))
                                     .width(92.0)
@@ -2765,7 +2789,9 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                             FeatureKind::Revolve,
                                             "Revolve",
                                         );
-                                    });
+                                    })
+                                    .response
+                                    .labelled_by(kind_cap.id);
                                 if ui.small_button("✕").clicked() {
                                     remove_step = Some(i);
                                 }
@@ -2773,44 +2799,38 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                             match st.kind {
                                 FeatureKind::Box => {
                                     ui.horizontal(|ui| {
-                                        ui.label("dx,dy,dz");
-                                        dim_edit(ui, &mut st.dx);
-                                        dim_edit(ui, &mut st.dy);
-                                        dim_edit(ui, &mut st.dz);
+                                        dim_edit(ui, "dx", &mut st.dx);
+                                        dim_edit(ui, "dy", &mut st.dy);
+                                        dim_edit(ui, "dz", &mut st.dz);
                                     });
                                 }
                                 FeatureKind::Cylinder => {
                                     ui.horizontal(|ui| {
-                                        ui.label("r, h");
-                                        dim_edit(ui, &mut st.radius);
-                                        dim_edit(ui, &mut st.height);
+                                        dim_edit(ui, "r", &mut st.radius);
+                                        dim_edit(ui, "h", &mut st.height);
                                     });
                                 }
                                 FeatureKind::Sphere => {
                                     ui.horizontal(|ui| {
-                                        ui.label("r");
-                                        dim_edit(ui, &mut st.radius);
+                                        dim_edit(ui, "r", &mut st.radius);
                                     });
                                 }
                                 FeatureKind::Cone => {
                                     ui.horizontal(|ui| {
-                                        ui.label("base r, top r, h");
-                                        dim_edit(ui, &mut st.radius);
-                                        dim_edit(ui, &mut st.top_radius);
-                                        dim_edit(ui, &mut st.height);
+                                        dim_edit(ui, "base r", &mut st.radius);
+                                        dim_edit(ui, "top r", &mut st.top_radius);
+                                        dim_edit(ui, "h", &mut st.height);
                                     });
                                 }
                                 FeatureKind::Torus => {
                                     ui.horizontal(|ui| {
-                                        ui.label("major, minor");
-                                        dim_edit(ui, &mut st.major);
-                                        dim_edit(ui, &mut st.minor);
+                                        dim_edit(ui, "major", &mut st.major);
+                                        dim_edit(ui, "minor", &mut st.minor);
                                     });
                                 }
                                 FeatureKind::Extrude => {
                                     ui.horizontal(|ui| {
-                                        ui.label("height");
-                                        dim_edit(ui, &mut st.height);
+                                        dim_edit(ui, "height", &mut st.height);
                                     });
                                     ui.label(
                                         egui::RichText::new("profile (x, y) — ≥3 points")
@@ -2855,8 +2875,7 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                 }
                                 FeatureKind::Revolve => {
                                     ui.horizontal(|ui| {
-                                        ui.label("angle°");
-                                        dim_edit(ui, &mut st.angle);
+                                        dim_edit(ui, "angle°", &mut st.angle);
                                     });
                                     ui.label(
                                         egui::RichText::new(
@@ -2904,16 +2923,16 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                 }
                             }
                             ui.horizontal(|ui| {
-                                ui.label("at x,y,z");
-                                dim_edit(ui, &mut st.x);
-                                dim_edit(ui, &mut st.y);
-                                dim_edit(ui, &mut st.z);
+                                ui.label("at");
+                                dim_edit(ui, "x", &mut st.x);
+                                dim_edit(ui, "y", &mut st.y);
+                                dim_edit(ui, "z", &mut st.z);
                             });
                             ui.horizontal(|ui| {
-                                ui.label("rot x,y,z°");
-                                dim_edit(ui, &mut st.rx);
-                                dim_edit(ui, &mut st.ry);
-                                dim_edit(ui, &mut st.rz);
+                                ui.label("rot");
+                                dim_edit(ui, "rx°", &mut st.rx);
+                                dim_edit(ui, "ry°", &mut st.ry);
+                                dim_edit(ui, "rz°", &mut st.rz);
                             });
                         });
                     }

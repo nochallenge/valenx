@@ -69,7 +69,8 @@ pub fn draw_fasteners_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
-                    ui.label(egui::RichText::new("Bolt size (ISO 4017 hex)").strong());
+                    let bolt_lbl =
+                        ui.label(egui::RichText::new("Bolt size (ISO 4017 hex)").strong());
                     let table = iso4017_hex_table();
                     egui::ComboBox::from_id_source("valenx_fasteners_nominal")
                         .selected_text(s.nominal.clone())
@@ -81,7 +82,9 @@ pub fn draw_fasteners_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                     spec.nominal.as_str(),
                                 );
                             }
-                        });
+                        })
+                        .response
+                        .labelled_by(bolt_lbl.id);
 
                     ui.add_space(6.0);
                     if ui
