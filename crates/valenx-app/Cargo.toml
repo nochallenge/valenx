@@ -40,6 +40,15 @@ eframe     = { workspace = true }
 egui       = { workspace = true }
 egui_plot  = { workspace = true }
 egui_tiles = { workspace = true }
+# `walkers` 0.24 is the slippy-map widget for **egui 0.28** (its hard
+# requirement `egui ^0.28` matches the workspace pin exactly; 0.25+ jump
+# to egui 0.29). It backs the Mission Planner's real OpenStreetMap tile
+# basemap. `HttpTiles` runs its own self-contained current-thread Tokio
+# runtime on a dedicated std::thread for tile downloads — it needs no
+# `#[tokio::main]` and does not touch eframe's wgpu/winit stack. Tiles are
+# decoded internally via `image` 0.25 (already in the tree), so no
+# egui_extras image-loader install is required.
+walkers    = "0.24"
 rfd        = { workspace = true }
 bytemuck   = { workspace = true }
 # `opener` opens a URL or filesystem path in the user's default
