@@ -14,6 +14,14 @@
 //!   `export_design`, `reset_design` — so an external LLM can compose,
 //!   measure, and iterate a parametric CAD part. Valenx ships no ML
 //!   model; the LLM driving these tools is the generative part.
+//! - the **drive-a-running-valenx** tool set ([`bridge_tools`]) —
+//!   `valenx_new_unit`, `valenx_open_workbench`, `valenx_list_workbenches`,
+//!   `valenx_list_controls`, `valenx_set_control`, `valenx_run_command`,
+//!   `valenx_read_readout`, `valenx_note` — which let any MCP client steer a
+//!   *live* valenx GUI through its file-bridge ([`bridge`]): each tool appends a
+//!   tagged-JSONL command valenx polls and runs through its own vetted reducers,
+//!   then returns the ack/result valenx posts back. **Local only** — files in a
+//!   user dir, no socket, no port, no network (see [`bridge`]).
 //!
 //! This is a deliberately small surface — adapters land tool-by-tool
 //! as their native crates ship (oxDNA, RNA folding, FoldSeek, etc.).
@@ -32,6 +40,8 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod bridge;
+pub mod bridge_tools;
 pub mod design;
 pub mod sandbox;
 pub mod server;
@@ -39,3 +49,18 @@ pub mod tools;
 
 pub use sandbox::{sandbox_check, sandbox_root, SANDBOX_ENV};
 pub use server::serve_stdio;
+
+/// Test-only support shared across the crate's unit tests. Gated on
+/// `#[cfg(test)]` so it adds nothing to a release build.
+#[cfg(test)]
+pub(crate) mod test_support {
+    /// A process-wide lock that serialises tests mutating the
+    /// `$VALENX_ASSISTANT_*` environment variables. The bridge resolves its
+    /// paths from those vars, so two tests that set them concurrently would
+    /// race the shared process env; every such test takes this guard first.
+    pub(crate) fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        use std::sync::{Mutex, OnceLock};
+        static M: OnceLock<Mutex<()>> = OnceLock::new();
+        M.get_or_init(|| Mutex::new(())).lock().unwrap()
+    }
+}
