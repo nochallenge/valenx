@@ -1593,6 +1593,26 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Photogrammetry / SfM workbench
+                    // (valenx-photogrammetry).
+                    if ui
+                        .checkbox(
+                            &mut self.show_photogrammetry_workbench,
+                            "Photogrammetry / SfM scan",
+                        )
+                        .on_hover_text(
+                            "Show / hide the Photogrammetry Workbench — native structure-from-\
+                             motion (a synthetic demo scene fed through the in-house \
+                             valenx-photogrammetry COLMAP-style pipeline: features, matching, \
+                             two-view geometry, incremental mapper + bundle adjustment, \
+                             recovering a sparse point cloud + camera poses). Research / \
+                             educational — textbook SfM; the reconstruction is up to a global \
+                             similarity.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Autonomy V&V workbench (valenx-autonomy-vnv).
                     if ui
                         .checkbox(&mut self.show_autonomy_workbench, "Autonomy V&V")
@@ -3356,6 +3376,12 @@ impl eframe::App for ValenxApp {
             // propagation + Sobol sensitivity + FORM reliability) on valenx-uq. A
             // no-op unless toggled on via View → UQ.
             crate::uq_workbench::draw_uq_workbench(self, ctx);
+
+            // Photogrammetry Workbench (right) — native structure-from-motion
+            // (synthetic-scene SfM: features/matching/two-view geometry/incremental
+            // mapper + bundle adjustment) on valenx-photogrammetry. A no-op unless
+            // toggled on via View → Photogrammetry.
+            crate::photogrammetry_workbench::draw_photogrammetry_workbench(self, ctx);
 
             // Autonomy V&V Workbench (right) — native scenario-based verification of
             // an autonomous vehicle + simulated sensors on valenx-autonomy-vnv. A

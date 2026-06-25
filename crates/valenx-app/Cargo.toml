@@ -228,6 +228,11 @@ valenx-rom           = { path = "../valenx-rom" }
 # FORM reliability) — surfaced by the UQ workbench (src/uq_workbench.rs).
 # Pure-Rust, dependency-light (nalgebra + a seeded in-crate PRNG, no `rand`).
 valenx-uq            = { path = "../valenx-uq" }
+# Native structure-from-motion / photogrammetry (COLMAP-style SfM: FAST/ORB
+# features, descriptor matching, two-view geometry, the incremental mapper +
+# bundle adjustment) — surfaced by the Photogrammetry workbench
+# (src/photogrammetry_workbench.rs). Pure-Rust (nalgebra); no new external deps.
+valenx-photogrammetry = { path = "../valenx-photogrammetry" }
 # Native propeller / rotor blade-element-momentum (BEMT) performance —
 # surfaced by the Rotor / Drone (BEMT) workbench (src/rotor_workbench.rs).
 # Pure-Rust solver; the workbench calls its real API directly (no subprocess).
