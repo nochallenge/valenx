@@ -564,6 +564,15 @@ members = [
     # mouse input. Default build is std-only (CI-green on headless Linux);
     # real capture/input is behind the off-by-default `live-capture` feature.
     "crates/valenx-remote",
+
+    # M7 track of the defense M&S roadmap (docs/design/2026-06-23-valenx-defense-
+    # ms-roadmap.md): survivability & protection — DEFENSIVE structural response
+    # to blast & impact. Free-field blast loading (overpressure/impulse vs scaled
+    # distance), SDOF protective-element response + pressure-impulse diagram,
+    # armor ballistic-limit sizing, and an occupant-injury screen. Reuses the
+    # valenx-fem Friedlander/Newmark SDOF transient core. Protective framing only
+    # ("minimum protection to survive threat X"); no lethality/penetration models.
+    "crates/valenx-survivability",
 ]
 
 # ---------------------------------------------------------------------------
