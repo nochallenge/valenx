@@ -233,6 +233,13 @@ valenx-uq            = { path = "../valenx-uq" }
 # the UAS workbench (src/uas_workbench.rs). Composes the in-house valenx-drone /
 # valenx-rotor / valenx-fixedwing aero crates; pure-Rust, no new external deps.
 valenx-uas           = { path = "../valenx-uas" }
+# General discrete-event / agent constructive-simulation framework (M2 of the
+# defense M&S roadmap; equally logistics / epidemiology / traffic / wargaming) —
+# surfaced by the Mission-Sim workbench (src/missionsim_workbench.rs). Abstract,
+# probabilistic engagement only (Pk INPUT + Lanchester square-law ODE); NO
+# lethality / targeting / kill-chain. Composes valenx-uas detection geometry;
+# pure-Rust (nalgebra + a seeded in-crate PRNG), no new external deps.
+valenx-mission-sim   = { path = "../valenx-mission-sim" }
 # Native structure-from-motion / photogrammetry (COLMAP-style SfM: FAST/ORB
 # features, descriptor matching, two-view geometry, the incremental mapper +
 # bundle adjustment) — surfaced by the Photogrammetry workbench

@@ -147,6 +147,7 @@ pub mod materials;
 pub mod mbd_workbench;
 pub mod mesh_prims;
 pub mod mesh_toolbox;
+pub mod missionsim_workbench;
 pub mod mohr_workbench;
 /// Richer molecular-viewer representations (sticks / cartoon / marching-cubes
 /// surface) extending [`genetics::molecule_view`]; pure mesh generators wired
@@ -2035,6 +2036,20 @@ pub struct ValenxApp {
     /// Pareto scatter + counter-UAS intercept plan view over the in-process
     /// `valenx-uas` engine).
     pub uas: crate::uas_workbench::UasWorkbenchState,
+
+    /// Whether the right-side Mission-Simulation (general discrete-event /
+    /// agent constructive simulation) workbench panel is visible. Defaults to
+    /// `false`; toggled from the View menu or opened by the agent bridge under
+    /// the id `"missionsim"` (aliases `"mission"` / `"wargame"`). Wraps
+    /// `valenx-mission-sim`: a discrete-event scheduler, analytic movers, and
+    /// range-based detection, with ABSTRACT probabilistic engagement (a Pk input
+    /// plus the Lanchester square-law ODE; no lethality, targeting, or
+    /// kill-chain). See [`crate::missionsim_workbench`].
+    pub show_missionsim_workbench: bool,
+    /// Form + result state for the Mission-Simulation workbench (plan-view entity
+    /// tracks + Lanchester force-vs-time plot + outcome metrics over the
+    /// in-process `valenx-mission-sim` engine).
+    pub missionsim: crate::missionsim_workbench::MissionSimWorkbenchState,
 
     /// Whether the right-side Photogrammetry / SfM scan workbench panel is
     /// visible. Defaults to `false`; toggled from the View menu or opened by the
