@@ -39,6 +39,68 @@
 /// `cos(latitude)` toward the poles.
 pub const M_PER_DEG_LAT: f64 = 111_320.0;
 
+/// Standard **APP-6 / MIL-STD-2525 affiliation** of a map entity — the four
+/// canonical "standard identities" whose frame shape and colour distinguish the
+/// sides on a tactical display. This is map iconography only (a label drawn on
+/// the symbol); it carries **no** engagement, targeting, or weapon semantics and
+/// does not affect movement.
+///
+/// The canonical frame shape / colour for each affiliation (the rendering side
+/// in `valenx-app` follows these):
+///
+/// - [`Friendly`](Affiliation::Friendly) — blue (cyan) **rounded rectangle**;
+/// - [`Hostile`](Affiliation::Hostile)  — red **diamond** (rotated square);
+/// - [`Neutral`](Affiliation::Neutral)  — green **square**;
+/// - [`Unknown`](Affiliation::Unknown)  — yellow **quatrefoil** (drawn as a
+///   rounded square at small icon sizes).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
+pub enum Affiliation {
+    /// Friendly / assumed-friend — blue rounded rectangle (the default).
+    #[default]
+    Friendly,
+    /// Hostile — red diamond.
+    Hostile,
+    /// Neutral — green square.
+    Neutral,
+    /// Unknown / pending — yellow quatrefoil.
+    Unknown,
+}
+
+impl Affiliation {
+    /// The four affiliations in canonical APP-6 order, for menus / iteration.
+    pub const ALL: [Affiliation; 4] = [
+        Affiliation::Friendly,
+        Affiliation::Hostile,
+        Affiliation::Neutral,
+        Affiliation::Unknown,
+    ];
+
+    /// The short, stable lowercase name for this affiliation, used by the agent
+    /// bridge (an enum-by-name `Str` control) and round-tripped by [`from_name`].
+    ///
+    /// [`from_name`]: Affiliation::from_name
+    pub fn name(self) -> &'static str {
+        match self {
+            Affiliation::Friendly => "friendly",
+            Affiliation::Hostile => "hostile",
+            Affiliation::Neutral => "neutral",
+            Affiliation::Unknown => "unknown",
+        }
+    }
+
+    /// Parse an affiliation from its [`name`](Affiliation::name) (case-insensitive,
+    /// surrounding whitespace ignored). `None` for an unrecognised string.
+    pub fn from_name(s: &str) -> Option<Affiliation> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "friendly" | "friend" => Some(Affiliation::Friendly),
+            "hostile" | "hos" | "enemy" => Some(Affiliation::Hostile),
+            "neutral" => Some(Affiliation::Neutral),
+            "unknown" | "pending" => Some(Affiliation::Unknown),
+            _ => None,
+        }
+    }
+}
+
 /// A single geographic waypoint in latitude / longitude **degrees**.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Waypoint {
@@ -78,6 +140,9 @@ pub struct Entity {
     /// Index of the waypoint currently being moved toward (the current leg). At
     /// or beyond `route.len()` the entity is holding at the final waypoint.
     pub leg: usize,
+    /// APP-6 / MIL-STD-2525 [`Affiliation`] — drives the symbol frame shape and
+    /// colour on the map. Pure display metadata; never affects movement.
+    pub affiliation: Affiliation,
 }
 
 impl Entity {
@@ -191,6 +256,9 @@ impl PlannerScenario {
             // Vary speed a little per entity so they don't move in lockstep
             // (140–200 m/s — small-aircraft scale).
             let speed_mps = 140.0 + (i % 4) as f64 * 20.0;
+            // Assign a mix of APP-6 affiliations so the map shows both sides:
+            // cycle friendly / hostile / neutral / unknown across the entities.
+            let affiliation = Affiliation::ALL[i % Affiliation::ALL.len()];
             entities.push(Entity {
                 id: i as u32,
                 name: format!("E{}", i + 1),
@@ -199,6 +267,7 @@ impl PlannerScenario {
                 speed_mps,
                 route,
                 leg: 0, // heading toward route[0]; the first step snaps + advances.
+                affiliation,
             });
         }
         Self {
@@ -245,6 +314,7 @@ mod tests {
             speed_mps,
             route: vec![wp1, wp2],
             leg: 1, // already sitting on wp1 -> head straight to wp2.
+            affiliation: Affiliation::Friendly,
         }
     }
 
@@ -393,5 +463,60 @@ mod tests {
         // Higher longitude -> larger screen x (right).
         let (x_east, _) = project(0.0, 10.0, origin, scale);
         assert!(x_east > x0, "east should map rightward (larger x)");
+    }
+
+    #[test]
+    fn affiliation_default_is_friendly() {
+        assert_eq!(Affiliation::default(), Affiliation::Friendly);
+        // An entity built via the demo helper defaults sensibly too.
+        assert_eq!(two_wp_entity(100.0).affiliation, Affiliation::Friendly);
+    }
+
+    #[test]
+    fn affiliation_name_round_trips() {
+        for a in Affiliation::ALL {
+            assert_eq!(
+                Affiliation::from_name(a.name()),
+                Some(a),
+                "{a:?} must round-trip through its name '{}'",
+                a.name()
+            );
+        }
+        // Case / whitespace insensitive, plus a couple of accepted aliases.
+        assert_eq!(
+            Affiliation::from_name("  HOSTILE "),
+            Some(Affiliation::Hostile)
+        );
+        assert_eq!(
+            Affiliation::from_name("Friend"),
+            Some(Affiliation::Friendly)
+        );
+        assert_eq!(Affiliation::from_name("enemy"), Some(Affiliation::Hostile));
+        // An unrecognised string is rejected (not silently mapped to a default).
+        assert_eq!(Affiliation::from_name("banana"), None);
+    }
+
+    #[test]
+    fn demo_assigns_a_mix_of_affiliations() {
+        // With >= 4 entities the demo must show more than one side so the map is
+        // not all-friendly (the whole point of the symbology).
+        let sc = PlannerScenario::demo(8);
+        let distinct: std::collections::HashSet<_> =
+            sc.entities.iter().map(|e| e.affiliation).collect();
+        assert!(
+            distinct.len() >= 2,
+            "demo(8) should mix affiliations, saw only {distinct:?}"
+        );
+        // All four canonical affiliations appear once we have >= 4 entities.
+        assert!(distinct.contains(&Affiliation::Friendly));
+        assert!(distinct.contains(&Affiliation::Hostile));
+        assert!(distinct.contains(&Affiliation::Neutral));
+        assert!(distinct.contains(&Affiliation::Unknown));
+        // Affiliation is pure metadata: it never changes under stepping.
+        let mut sc2 = sc.clone();
+        let before: Vec<_> = sc2.entities.iter().map(|e| e.affiliation).collect();
+        sc2.step(60.0);
+        let after: Vec<_> = sc2.entities.iter().map(|e| e.affiliation).collect();
+        assert_eq!(before, after, "stepping must not change affiliations");
     }
 }
