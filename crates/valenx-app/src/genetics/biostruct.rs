@@ -493,6 +493,10 @@ fn draw_representation_picker(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     ColorScheme::Chain => "A distinct hue per chain.",
                     ColorScheme::Residue => "Rainbow ramp by residue index (N→C terminus).",
                     ColorScheme::BFactor => "Blue→white→red ramp by B-factor (low→high).",
+                    ColorScheme::SecondaryStructure => {
+                        "By DSSP secondary structure: helix magenta-red, sheet \
+                         yellow, coil/loop grey."
+                    }
                 });
         }
     });
@@ -942,29 +946,45 @@ fn render_trajectory_frame(app: &mut ValenxApp) {
     }
 }
 
-/// Build the per-atom [`AtomAttr`] (chain id, residue index, B-factor) for a
-/// structure's first model, **in the exact atom order**
-/// [`ViewMolecule::from_biostruct`] walks (chain-major, then residue, then atom)
-/// so the returned vec is in lockstep with `ViewMolecule::atoms` and the colour
-/// schemes line up atom-for-atom.
+/// Build the per-atom [`AtomAttr`] (chain id, residue index, B-factor,
+/// secondary structure) for a structure's first model, **in the exact atom
+/// order** [`ViewMolecule::from_biostruct`] walks (chain-major, then residue,
+/// then atom) so the returned vec is in lockstep with `ViewMolecule::atoms` and
+/// the colour schemes line up atom-for-atom.
 ///
-/// All three fields come straight from the `valenx-biostruct` model, which
-/// carries them on every atom (`Atom::b_factor`, `Chain::id`, `Residue::seq_num`):
-/// no field needs a fallback. The residue index is a **monotone counter across
-/// the whole model** (incremented per residue in iteration order) rather than the
-/// raw `seq_num`, so the residue rainbow runs cleanly N→C even when `seq_num`
-/// has gaps, insertion codes, or resets between chains.
+/// Chain id, residue index and B-factor come straight from the
+/// `valenx-biostruct` model, which carries them on every atom (`Atom::b_factor`,
+/// `Chain::id`, `Residue::seq_num`): no field needs a fallback. The residue
+/// index is a **monotone counter across the whole model** (incremented per
+/// residue in iteration order) rather than the raw `seq_num`, so the residue
+/// rainbow runs cleanly N→C even when `seq_num` has gaps, insertion codes, or
+/// resets between chains.
+///
+/// The **secondary structure** is the same per-chain DSSP assignment the
+/// cartoon backbone uses ([`valenx_biostruct::dssp::assign_chain`]), keyed by
+/// residue position: every atom of residue `i` in a chain inherits that chain's
+/// `states[i]`, collapsed to the three-state [`SsKind`]. A residue past the end
+/// of the DSSP track (defensive — `assign_chain` covers every residue) gets
+/// `ss = None`, which the SS colour scheme renders as coil grey (fail-loud, no
+/// panic).
 fn structure_atom_attrs(s: &Structure) -> Vec<AtomAttr> {
+    use crate::molviz::SsKind;
+    use valenx_biostruct::dssp;
+
     let mut out = Vec::new();
     let mut residue_index: i32 = 0;
     for chain in &s.first_model().chains {
-        for res in &chain.residues {
+        // Per-chain DSSP state, one entry per residue in chain order — the same
+        // assignment `ca_backbone` tags the cartoon Cα trace with, so the
+        // per-atom SS colour and the cartoon's tube modulation agree.
+        let states = dssp::assign_chain(chain).states;
+        for (i, res) in chain.residues.iter().enumerate() {
+            let ss = states.get(i).map(|st| SsKind::from_dssp_code(st.code()));
             for atom in &res.atoms {
-                out.push(AtomAttr::new(
-                    chain.id.clone(),
-                    residue_index,
-                    atom.b_factor as f32,
-                ));
+                out.push(
+                    AtomAttr::new(chain.id.clone(), residue_index, atom.b_factor as f32)
+                        .with_ss(ss),
+                );
             }
             residue_index += 1;
         }
@@ -1484,6 +1504,125 @@ END
         // residues → indices 0, 1, 2 present.
         let max_res = attrs.iter().map(|a| a.residue_index).max().unwrap();
         assert_eq!(max_res, 2, "three residues → max residue index 2");
+    }
+
+    #[test]
+    fn structure_atom_attrs_carry_secondary_structure_in_lockstep() {
+        // Each atom's per-atom SS must equal its residue's DSSP state — the
+        // same per-chain assignment `ca_backbone` tags the Cα trace with —
+        // keyed by residue position, in the exact `ViewMolecule` atom order.
+        use crate::molviz::SsKind;
+        let s = read_structure(DEMO_PDB, "demo").unwrap();
+        let view = ViewMolecule::from_biostruct(&s);
+        let attrs = super::structure_atom_attrs(&s);
+        assert_eq!(attrs.len(), view.atoms.len(), "one attr per atom, in order");
+        // Every atom of the single-chain demo carries an SS state (the demo is
+        // all amino acids, so DSSP assigns every residue — none is `None`).
+        assert!(
+            attrs.iter().all(|a| a.ss.is_some()),
+            "every demo atom inherits its residue's DSSP state"
+        );
+
+        // Cross-check against the independent `ca_backbone` assignment: the SS
+        // of each residue's Cα (in backbone order) must match the SS the atom
+        // attrs carry for that residue's atoms. Build the per-residue expected
+        // SS from `ca_backbone` and confirm the atom attrs agree residue-for-
+        // residue.
+        let backbone = super::ca_backbone(&s);
+        let expected_per_res: Vec<Option<SsKind>> = backbone
+            .iter()
+            .map(|bp| bp.ss.map(SsKind::from_dssp_code))
+            .collect();
+        // Walk the structure in the same chain→residue→atom order and compare.
+        // `residue_index` is the monotone all-residue counter (the attrs' key);
+        // `ca_pos` is the backbone (Cα-only) position used to index the expected
+        // SS — kept separate so the comparison is correct even if some residue
+        // lacks a Cα. For the demo every residue has a Cα, so they coincide.
+        let mut residue_index = 0usize;
+        let mut ca_pos = 0usize;
+        for chain in &s.first_model().chains {
+            for res in &chain.residues {
+                if res.ca().is_some() {
+                    let want = expected_per_res[ca_pos];
+                    for atom_attr in attrs
+                        .iter()
+                        .filter(|a| a.residue_index == residue_index as i32)
+                    {
+                        assert_eq!(
+                            atom_attr.ss, want,
+                            "atom SS must match its residue's backbone DSSP state"
+                        );
+                    }
+                    ca_pos += 1;
+                }
+                residue_index += 1;
+            }
+        }
+    }
+
+    #[test]
+    fn ss_color_scheme_reads_the_plumbed_per_atom_ss() {
+        // End-to-end: the SS colour scheme paints each atom by the per-atom SS
+        // that `structure_atom_attrs` plumbed in — helix atoms helix-red, sheet
+        // atoms sheet-yellow, coil atoms grey, a missing SS grey (no panic).
+        // We assert the scheme's colour for every atom equals the canonical SS
+        // colour for that atom's plumbed state (so the chain of evidence —
+        // residue DSSP → per-atom ss → rendered colour — is unbroken).
+        use crate::molviz::{atom_color, ColorContext, ColorScheme, SsKind};
+        let s = read_structure(DEMO_PDB, "demo").unwrap();
+        let attrs = super::structure_atom_attrs(&s);
+        let ctx = ColorContext::build(&attrs);
+        // The standard convention colours (mirrors molviz::ss_color).
+        let conv = |ss: Option<SsKind>| -> [f32; 3] {
+            match ss {
+                Some(SsKind::Helix) => [0.90, 0.18, 0.55],
+                Some(SsKind::Sheet) => [0.95, 0.85, 0.18],
+                Some(SsKind::Coil) | None => [0.80, 0.80, 0.80],
+            }
+        };
+        for a in &attrs {
+            let got = atom_color(ColorScheme::SecondaryStructure, "C", a, &ctx);
+            assert_eq!(
+                got,
+                conv(a.ss),
+                "SS scheme must colour the atom by its plumbed SS state"
+            );
+            assert!(got
+                .iter()
+                .all(|&x| x.is_finite() && (0.0..=1.0).contains(&x)));
+        }
+        // An atom whose SS is None colours as coil grey, never a panic.
+        let none = crate::molviz::AtomAttr::new("A", 0, 0.0);
+        assert_eq!(
+            atom_color(ColorScheme::SecondaryStructure, "C", &none, &ctx),
+            [0.80, 0.80, 0.80],
+            "a missing SS must render as coil grey"
+        );
+    }
+
+    #[test]
+    fn ss_color_scheme_is_named_in_the_picker_for_ai_driving() {
+        // The "Secondary structure" colour-scheme option must be an AI-drivable
+        // node: it appears by its label as an accesskit Name and is labelled_by
+        // its "Colour scheme" caption (so an agent / screen reader can select
+        // it by name through the accessibility tree).
+        use egui::accesskit::Node;
+        let mut app = app_with_panel();
+        let nodes = draw_and_collect_nodes(&mut app);
+        let label = ColorScheme::SecondaryStructure.label(); // "Secondary structure"
+        let matching: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.name() == Some(label))
+            .collect();
+        assert!(
+            !matching.is_empty(),
+            "the '{label}' option must appear as a named accesskit node"
+        );
+        assert!(
+            matching.iter().any(|n| !n.labelled_by().is_empty()),
+            "the '{label}' option must be labelled_by its caption (AI-drivable)"
+        );
     }
 
     #[test]
