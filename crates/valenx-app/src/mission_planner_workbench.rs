@@ -26,7 +26,7 @@
 //! `missionplanner.play` / `missionplanner.pause`.
 
 use eframe::egui;
-use valenx_mission_sim::planner::PlannerScenario;
+use valenx_mission_sim::planner::{Affiliation, PlannerScenario};
 use walkers::sources::{OpenStreetMap, TileSource};
 use walkers::{HttpTiles, Map, MapMemory, Position, Projector};
 
@@ -61,6 +61,10 @@ pub struct MissionPlannerWorkbenchState {
     /// dragged the map, the camera follows the scenario centroid each frame; a
     /// drag detaches it (standard slippy-map behaviour).
     pub map_memory: MapMemory,
+    /// The affiliation currently selected in the "Set all to" combo. Applying it
+    /// (the combo `changed`, or the `Affiliation (all)` agent control) overrides
+    /// every entity's [`Affiliation`]; purely a display/iconography choice.
+    pub set_all_affiliation: Affiliation,
 }
 
 impl Default for MissionPlannerWorkbenchState {
@@ -72,6 +76,7 @@ impl Default for MissionPlannerWorkbenchState {
             playing: false,
             tiles: None,
             map_memory: MapMemory::default(),
+            set_all_affiliation: Affiliation::Friendly,
         }
     }
 }
@@ -86,7 +91,29 @@ impl MissionPlannerWorkbenchState {
     /// The user-visible captions of every control the agent bridge can set via
     /// `SetControl` (returned by `ListControls`). Order follows the form.
     pub fn agent_control_names() -> &'static [&'static str] {
-        &["Entity count", "Playback speed x"]
+        &["Entity count", "Playback speed x", "Affiliation (all)"]
+    }
+
+    /// Set every entity's APP-6 affiliation at once (the per-side override). Used
+    /// by both the GUI combo and the `Affiliation (all)` agent control.
+    fn set_all_affiliations(&mut self, a: Affiliation) {
+        for e in &mut self.scenario.entities {
+            e.affiliation = a;
+        }
+    }
+
+    /// Count of entities per APP-6 affiliation, in canonical
+    /// [`Affiliation::ALL`] order (friendly, hostile, neutral, unknown).
+    fn affiliation_counts(&self) -> [usize; 4] {
+        let mut counts = [0usize; 4];
+        for e in &self.scenario.entities {
+            for (i, a) in Affiliation::ALL.iter().enumerate() {
+                if e.affiliation == *a {
+                    counts[i] += 1;
+                }
+            }
+        }
+        counts
     }
 
     /// Set one labelled control by its caption, for the agent `SetControl`
@@ -115,6 +142,16 @@ impl MissionPlannerWorkbenchState {
                 }
                 self.playback_speed = v;
             }
+            "Affiliation (all)" => {
+                // Enum-by-name: set every entity to one APP-6 affiliation.
+                let s = value.as_str()?;
+                let a = Affiliation::from_name(s).ok_or_else(|| {
+                    format!(
+                        "Affiliation (all) must be one of friendly/hostile/neutral/unknown, got {s:?}"
+                    )
+                })?;
+                self.set_all_affiliations(a);
+            }
             other => return Err(format!("unknown mission-planner control: {other:?}")),
         }
         Ok(())
@@ -130,11 +167,17 @@ impl MissionPlannerWorkbenchState {
             .iter()
             .filter(|e| e.is_done())
             .count();
+        let [fr, ho, ne, un] = self.affiliation_counts();
         Some(format!(
-            "Sim time {:.1}s \u{00B7} {} entities ({} arrived) \u{00B7} playback {}x \u{00B7} {}",
+            "Sim time {:.1}s \u{00B7} {} entities ({} arrived) \u{00B7} \
+             affiliation F{} H{} N{} U{} \u{00B7} playback {}x \u{00B7} {}",
             self.scenario.sim_time_s,
             self.scenario.entities.len(),
             done,
+            fr,
+            ho,
+            ne,
+            un,
             self.playback_speed,
             if self.playing { "playing" } else { "paused" },
         ))
@@ -237,6 +280,29 @@ fn mission_planner_workbench_body_inner(app: &mut ValenxApp, ui: &mut egui::Ui) 
                 "Real-time multiplier: each frame advances the sim by frame_dt x this value. \
                  1 = wall-clock; higher = fast-forward.",
             );
+            ui.end_row();
+
+            // APP-6 affiliation: set ALL entities' symbol frame at once.
+            let lbl = ui.label("Affiliation (all)");
+            let mut chosen = s.set_all_affiliation;
+            egui::ComboBox::from_id_source("mission_planner_affiliation")
+                .selected_text(affiliation_label(chosen))
+                .show_ui(ui, |ui| {
+                    for a in Affiliation::ALL {
+                        ui.selectable_value(&mut chosen, a, affiliation_label(a));
+                    }
+                })
+                .response
+                .labelled_by(lbl.id)
+                .on_hover_text(
+                    "MIL-STD-2525 / APP-6 standard identity for every entity's map symbol: \
+                     Friendly = blue rounded rectangle, Hostile = red diamond, \
+                     Neutral = green square, Unknown = yellow quatrefoil. Map iconography only.",
+                );
+            if chosen != s.set_all_affiliation {
+                s.set_all_affiliation = chosen;
+                s.set_all_affiliations(chosen);
+            }
             ui.end_row();
         });
 
@@ -463,7 +529,84 @@ struct OverlayEntity {
     lat: f64,
     lon: f64,
     done: bool,
+    affiliation: Affiliation,
     route: Vec<(f64, f64)>,
+}
+
+/// Human-readable label for an APP-6 affiliation, used in the combo box and the
+/// selected-text (the frame shape is named so the choice is unambiguous).
+fn affiliation_label(a: Affiliation) -> &'static str {
+    match a {
+        Affiliation::Friendly => "Friendly (blue rounded rect)",
+        Affiliation::Hostile => "Hostile (red diamond)",
+        Affiliation::Neutral => "Neutral (green square)",
+        Affiliation::Unknown => "Unknown (yellow quatrefoil)",
+    }
+}
+
+/// The canonical APP-6 / MIL-STD-2525 **frame colour** for an affiliation
+/// (friendly blue/cyan, hostile red, neutral green, unknown yellow).
+fn affiliation_color(a: Affiliation) -> egui::Color32 {
+    match a {
+        Affiliation::Friendly => egui::Color32::from_rgb(80, 200, 255), // cyan/blue
+        Affiliation::Hostile => egui::Color32::from_rgb(240, 80, 80),   // red
+        Affiliation::Neutral => egui::Color32::from_rgb(110, 210, 130), // green
+        Affiliation::Unknown => egui::Color32::from_rgb(245, 215, 70),  // yellow
+    }
+}
+
+/// Paint the standard **APP-6 affiliation frame** for one entity at projected
+/// screen position `c`, sized by `r` (half-extent in pixels): Friendly = blue
+/// **rounded rectangle**, Hostile = red **diamond**, Neutral = green **square**,
+/// Unknown = yellow **quatrefoil** (a rounded square at icon size). The frame is
+/// stroked in the affiliation colour over a translucent dark fill (so it reads
+/// over busy tiles), with a thin black halo for contrast — the canonical 2525
+/// frame shape + colour. Map iconography only; no engagement semantics.
+fn draw_app6_frame(painter: &egui::Painter, c: egui::Pos2, r: f32, a: Affiliation) {
+    let col = affiliation_color(a);
+    let fill = egui::Color32::from_black_alpha(150);
+    let halo = egui::Stroke::new(2.6, egui::Color32::from_black_alpha(180));
+    let edge = egui::Stroke::new(1.8, col);
+    match a {
+        // Friendly: rounded rectangle (wider than tall, per 2525 framing).
+        Affiliation::Friendly => {
+            let rect = egui::Rect::from_center_size(c, egui::vec2(r * 2.4, r * 1.8));
+            let rounding = egui::Rounding::same(r * 0.6);
+            painter.rect_filled(rect, rounding, fill);
+            painter.rect_stroke(rect, rounding, halo);
+            painter.rect_stroke(rect, rounding, edge);
+        }
+        // Hostile: diamond (square rotated 45°).
+        Affiliation::Hostile => {
+            let d = r * 1.45;
+            let pts = vec![
+                c + egui::vec2(0.0, -d),
+                c + egui::vec2(d, 0.0),
+                c + egui::vec2(0.0, d),
+                c + egui::vec2(-d, 0.0),
+            ];
+            painter.add(egui::Shape::convex_polygon(pts.clone(), fill, halo));
+            painter.add(egui::Shape::closed_line(pts, edge));
+        }
+        // Neutral: upright square.
+        Affiliation::Neutral => {
+            let rect = egui::Rect::from_center_size(c, egui::vec2(r * 2.0, r * 2.0));
+            let sq = egui::Rounding::ZERO;
+            painter.rect_filled(rect, sq, fill);
+            painter.rect_stroke(rect, sq, halo);
+            painter.rect_stroke(rect, sq, edge);
+        }
+        // Unknown: quatrefoil — approximated at icon size by a heavily rounded
+        // square (the 2525 cloverleaf reads as a "blob"); good enough as a frame
+        // and cheap to paint with the same stroke style as the others.
+        Affiliation::Unknown => {
+            let rect = egui::Rect::from_center_size(c, egui::vec2(r * 2.0, r * 2.0));
+            let rounding = egui::Rounding::same(r * 1.0);
+            painter.rect_filled(rect, rounding, fill);
+            painter.rect_stroke(rect, rounding, halo);
+            painter.rect_stroke(rect, rounding, edge);
+        }
+    }
 }
 
 /// A [`walkers::Plugin`] that paints the mission scenario — every entity's route
@@ -484,6 +627,7 @@ impl MissionOverlay {
                 lat: e.lat,
                 lon: e.lon,
                 done: e.is_done(),
+                affiliation: e.affiliation,
                 route: e.route.iter().map(|wp| (wp.lat, wp.lon)).collect(),
             })
             .collect();
@@ -502,7 +646,6 @@ impl walkers::Plugin for MissionOverlay {
 
         let route_col = egui::Color32::from_rgb(70, 150, 240);
         let wp_col = egui::Color32::from_rgb(170, 200, 240);
-        let entity_col = egui::Color32::from_rgb(240, 180, 70);
         let done_col = egui::Color32::from_rgb(120, 200, 140);
 
         // Routes (polylines) + waypoint dots.
@@ -516,22 +659,30 @@ impl walkers::Plugin for MissionOverlay {
             }
         }
 
-        // Entity markers (filled circle + black halo + name label).
+        // Entity markers: the standard APP-6 / MIL-STD-2525 affiliation FRAME
+        // (shape + colour from the entity's affiliation) instead of a plain dot,
+        // plus a small centre dot that turns green when the route is complete,
+        // plus the entity name label with a halo for legibility over tiles.
         for e in &self.entities {
             let c = to_px(e.lat, e.lon);
-            let col = if e.done { done_col } else { entity_col };
-            painter.circle_filled(c, 5.0, col);
-            painter.circle_stroke(c, 5.0, egui::Stroke::new(1.5, egui::Color32::BLACK));
+            draw_app6_frame(&painter, c, 6.0, e.affiliation);
+            // Centre status pip: green once arrived, else the frame colour.
+            let pip = if e.done {
+                done_col
+            } else {
+                affiliation_color(e.affiliation)
+            };
+            painter.circle_filled(c, 1.8, pip);
             // Halo behind the label for legibility over busy tiles.
             painter.text(
-                c + egui::vec2(8.0, -8.0) + egui::vec2(1.0, 1.0),
+                c + egui::vec2(10.0, -10.0) + egui::vec2(1.0, 1.0),
                 egui::Align2::LEFT_BOTTOM,
                 &e.name,
                 egui::FontId::monospace(11.0),
                 egui::Color32::from_black_alpha(200),
             );
             painter.text(
-                c + egui::vec2(8.0, -8.0),
+                c + egui::vec2(10.0, -10.0),
                 egui::Align2::LEFT_BOTTOM,
                 &e.name,
                 egui::FontId::monospace(11.0),
@@ -594,6 +745,47 @@ mod tests {
             r.contains("Sim time"),
             "readout should mention sim time: {r}"
         );
+        // The readout also surfaces the APP-6 affiliation counts.
+        assert!(
+            r.contains("affiliation F"),
+            "readout should mention affiliation counts: {r}"
+        );
+    }
+
+    #[test]
+    fn agent_set_affiliation_all_sets_every_entity() {
+        use crate::agent_commands::AgentValue;
+        let mut s = MissionPlannerWorkbenchState::default();
+        // The demo seeds a mix; force all to hostile via the bridge.
+        s.agent_set("Affiliation (all)", &AgentValue::Str("hostile".into()))
+            .expect("valid affiliation");
+        assert!(
+            s.scenario
+                .entities
+                .iter()
+                .all(|e| e.affiliation == Affiliation::Hostile),
+            "every entity should now be hostile"
+        );
+        let [fr, ho, ne, un] = s.affiliation_counts();
+        assert_eq!((fr, ne, un), (0, 0, 0));
+        assert_eq!(ho, s.scenario.entities.len());
+    }
+
+    #[test]
+    fn agent_set_affiliation_rejects_bad_name_and_type() {
+        use crate::agent_commands::AgentValue;
+        let mut s = MissionPlannerWorkbenchState::default();
+        // Unknown affiliation name is rejected (fail-loud, nothing written).
+        let before: Vec<_> = s.scenario.entities.iter().map(|e| e.affiliation).collect();
+        assert!(s
+            .agent_set("Affiliation (all)", &AgentValue::Str("banana".into()))
+            .is_err());
+        // A non-string value is a type error.
+        assert!(s
+            .agent_set("Affiliation (all)", &AgentValue::Int(1))
+            .is_err());
+        let after: Vec<_> = s.scenario.entities.iter().map(|e| e.affiliation).collect();
+        assert_eq!(before, after, "a rejected set must not mutate state");
     }
 
     #[test]
@@ -611,6 +803,21 @@ mod tests {
         let names = MissionPlannerWorkbenchState::agent_control_names();
         assert!(names.contains(&"Entity count"));
         assert!(names.contains(&"Playback speed x"));
+        assert!(names.contains(&"Affiliation (all)"));
+    }
+
+    #[test]
+    fn affiliation_color_is_distinct_per_side() {
+        // Each APP-6 affiliation must map to a distinct frame colour.
+        let cols: Vec<_> = Affiliation::ALL
+            .iter()
+            .map(|a| affiliation_color(*a))
+            .collect();
+        for i in 0..cols.len() {
+            for j in (i + 1)..cols.len() {
+                assert_ne!(cols[i], cols[j], "affiliation colours must be distinct");
+            }
+        }
     }
 
     #[test]
@@ -702,6 +909,26 @@ mod headless_ui_tests {
         app.show_mission_planner_workbench = true;
         let nodes = draw_and_collect_nodes(&mut app);
         assert!(!nodes.is_empty(), "a shown workbench produces a11y nodes");
+    }
+
+    #[test]
+    fn overlay_draws_without_panic_for_each_affiliation() {
+        // Drawing the workbench paints the MissionOverlay (the APP-6 frames) for
+        // whatever affiliation the entities carry. Force every entity to each of
+        // the four affiliations in turn and confirm a full frame renders without
+        // panicking (the headless run drives the map widget + overlay plugin).
+        for a in Affiliation::ALL {
+            let mut app = ValenxApp::default();
+            app.show_mission_planner_workbench = true;
+            for e in &mut app.mission_planner.scenario.entities {
+                e.affiliation = a;
+            }
+            let nodes = draw_and_collect_nodes(&mut app);
+            assert!(
+                !nodes.is_empty(),
+                "workbench with all-{a:?} entities must still render"
+            );
+        }
     }
 
     #[test]
