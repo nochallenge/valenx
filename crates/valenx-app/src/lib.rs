@@ -233,6 +233,7 @@ pub mod transformer_workbench;
 pub mod transmissionline_workbench;
 pub mod truss_workbench;
 pub mod types;
+pub mod uas_workbench;
 pub mod undo;
 pub mod uq_workbench;
 pub mod vibration_workbench;
@@ -2022,6 +2023,18 @@ pub struct ValenxApp {
     /// Form + result state for the UQ workbench (output histogram + Sobol bar
     /// chart + FORM Pf over the in-process `valenx-uq` engine).
     pub uq: crate::uq_workbench::UqWorkbenchState,
+
+    /// Whether the right-side UAS (small-UAS design + defensive counter-UAS)
+    /// workbench panel is visible. Defaults to `false`; toggled from the View
+    /// menu or opened by the agent bridge under the id `"uas"` (aliases
+    /// `"drone"` / `"counteruas"`). Wraps `valenx-uas` (multirotor / fixed-wing
+    /// performance + trade study + defensive intercept GEOMETRY — no weapon
+    /// employment). See [`crate::uas_workbench`].
+    pub show_uas_workbench: bool,
+    /// Form + result state for the UAS workbench (performance readout + trade
+    /// Pareto scatter + counter-UAS intercept plan view over the in-process
+    /// `valenx-uas` engine).
+    pub uas: crate::uas_workbench::UasWorkbenchState,
 
     /// Whether the right-side Photogrammetry / SfM scan workbench panel is
     /// visible. Defaults to `false`; toggled from the View menu or opened by the

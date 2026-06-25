@@ -1593,6 +1593,26 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side UAS workbench (valenx-uas) — small-
+                    // UAS design + DEFENSIVE counter-UAS intercept geometry.
+                    if ui
+                        .checkbox(
+                            &mut self.show_uas_workbench,
+                            "UAS design & counter-UAS (UAS)",
+                        )
+                        .on_hover_text(
+                            "Show / hide the UAS Workbench — native small-UAS design \
+                             (multirotor / fixed-wing performance: hover power, endurance, range, \
+                             payload), a one-parameter trade study (endurance vs payload Pareto \
+                             front), and a DEFENSIVE counter-UAS layer that is pure detect / track \
+                             / intercept GEOMETRY + a detection timeline (no weapon employment, no \
+                             targeting, no lethality) — computed in-process by valenx-uas. \
+                             Research / educational — momentum-theory hover; parabolic-polar cruise.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Photogrammetry / SfM workbench
                     // (valenx-photogrammetry).
                     if ui
@@ -3438,6 +3458,11 @@ impl eframe::App for ValenxApp {
             // propagation + Sobol sensitivity + FORM reliability) on valenx-uq. A
             // no-op unless toggled on via View → UQ.
             crate::uq_workbench::draw_uq_workbench(self, ctx);
+
+            // UAS Workbench (right) — native small-UAS design + performance +
+            // trade study + DEFENSIVE counter-UAS intercept geometry on
+            // valenx-uas. A no-op unless toggled on via View → UAS.
+            crate::uas_workbench::draw_uas_workbench(self, ctx);
 
             // Photogrammetry Workbench (right) — native structure-from-motion
             // (synthetic-scene SfM: features/matching/two-view geometry/incremental

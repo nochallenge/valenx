@@ -241,6 +241,8 @@ pub enum TabKind {
     Rom,
     // -- Uncertainty quantification --
     Uq,
+    // -- Small-UAS design + defensive counter-UAS geometry --
+    Uas,
     // -- Photogrammetry / structure-from-motion --
     Photogrammetry,
     // -- Co-simulation (FMI / HELICS coupling) --
@@ -254,7 +256,7 @@ pub enum TabKind {
 impl TabKind {
     /// Every *template* kind (i.e. excluding [`TabKind::Blank`]), in
     /// `＋ from template`-menu order (grouped via [`Self::group`]).
-    pub const TEMPLATES: [TabKind; 41] = [
+    pub const TEMPLATES: [TabKind; 42] = [
         TabKind::Rocket,
         TabKind::Engine,
         TabKind::Astro,
@@ -292,6 +294,7 @@ impl TabKind {
         TabKind::Ocean,
         TabKind::Rom,
         TabKind::Uq,
+        TabKind::Uas,
         TabKind::Photogrammetry,
         TabKind::Cosim,
         TabKind::Autonomy,
@@ -338,6 +341,7 @@ impl TabKind {
             TabKind::Ocean => "Simulation",
             TabKind::Rom => "Simulation",
             TabKind::Uq => "Simulation",
+            TabKind::Uas => "Aerospace",
             TabKind::Cosim => "Simulation",
             TabKind::Mbd => "Simulation",
         }
@@ -385,6 +389,7 @@ impl TabKind {
             TabKind::Ocean => "Ocean (waves + buoyancy)",
             TabKind::Rom => "Reduced-order model (POD)",
             TabKind::Uq => "Uncertainty quantification",
+            TabKind::Uas => "UAS design & counter-UAS",
             TabKind::Photogrammetry => "Photogrammetry / SfM scan",
             TabKind::Cosim => "Co-Simulation (FMI / HELICS)",
             TabKind::Mbd => "Multibody dynamics (robot / contact)",
@@ -435,6 +440,7 @@ impl TabKind {
             TabKind::Ocean => app.show_ocean_workbench = true,
             TabKind::Rom => app.show_rom_workbench = true,
             TabKind::Uq => app.show_uq_workbench = true,
+            TabKind::Uas => app.show_uas_workbench = true,
             TabKind::Photogrammetry => app.show_photogrammetry_workbench = true,
             TabKind::Cosim => app.show_cosim_workbench = true,
             TabKind::Mbd => app.show_mbd_workbench = true,
@@ -491,6 +497,7 @@ impl TabKind {
             "ocean" | "waves" => Some(TabKind::Ocean),
             "rom" | "pod" => Some(TabKind::Rom),
             "uq" | "uncertainty" => Some(TabKind::Uq),
+            "uas" | "drone" | "counteruas" => Some(TabKind::Uas),
             "photogrammetry" | "sfm" | "scan" => Some(TabKind::Photogrammetry),
             "cosim" | "co-simulation" | "cosimulation" | "fmi" => Some(TabKind::Cosim),
             "mbd" | "multibody" | "robot" => Some(TabKind::Mbd),
@@ -1245,6 +1252,9 @@ pub const ALL_WORKBENCH_KINDS: &[&str] = &[
     "rom",
     // Native uncertainty quantification (MC propagation / Sobol / FORM) — surfaced by the UQ workbench.
     "uq",
+    // Native small-UAS design + defensive counter-UAS intercept geometry (no weapon
+    // employment) — surfaced by the UAS workbench.
+    "uas",
     // Native structure-from-motion / photogrammetry (COLMAP-style SfM) — surfaced by the Photogrammetry workbench.
     "photogrammetry",
     // In-house FMI / HELICS co-simulation coupling — surfaced by the Co-Simulation workbench.
@@ -1420,6 +1430,9 @@ pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
         "ocean" | "waves" => app.show_ocean_workbench = on,
         "rom" | "pod" => app.show_rom_workbench = on,
         "uq" | "uncertainty" => app.show_uq_workbench = on,
+        // Note: "drone" stays mapped to the valenx-drone Drone workbench above;
+        // here only the UAS-specific ids route to the UAS workbench flag.
+        "uas" | "counteruas" => app.show_uas_workbench = on,
         "photogrammetry" | "sfm" | "scan" => app.show_photogrammetry_workbench = on,
         "cosim" | "co-simulation" | "cosimulation" | "fmi" => app.show_cosim_workbench = on,
         "ppi" | "interactome" | "network" => app.show_ppi_workbench = on,
@@ -1482,6 +1495,7 @@ fn clear_all_workbenches(app: &mut ValenxApp) {
     app.show_ocean_workbench = false;
     app.show_rom_workbench = false;
     app.show_uq_workbench = false;
+    app.show_uas_workbench = false;
     app.show_photogrammetry_workbench = false;
     app.show_cosim_workbench = false;
     app.show_ppi_workbench = false;
@@ -2981,6 +2995,7 @@ mod tests {
             ("ocean", TabKind::Ocean),
             ("rom", TabKind::Rom),
             ("uq", TabKind::Uq),
+            ("uas", TabKind::Uas),
             ("photogrammetry", TabKind::Photogrammetry),
             ("cosim", TabKind::Cosim),
             ("mbd", TabKind::Mbd),
@@ -3004,6 +3019,8 @@ mod tests {
         assert_eq!(TabKind::from_id("network"), Some(TabKind::Ppi));
         assert_eq!(TabKind::from_id("multibody"), Some(TabKind::Mbd));
         assert_eq!(TabKind::from_id("robot"), Some(TabKind::Mbd));
+        assert_eq!(TabKind::from_id("drone"), Some(TabKind::Uas));
+        assert_eq!(TabKind::from_id("counteruas"), Some(TabKind::Uas));
         // Unknown ids (and Blank, which has no id) map to None.
         assert_eq!(TabKind::from_id("blank"), None);
         assert_eq!(TabKind::from_id("nope"), None);
@@ -4407,6 +4424,7 @@ mod tests {
             app.show_ocean_workbench,
             app.show_rom_workbench,
             app.show_uq_workbench,
+            app.show_uas_workbench,
             app.show_photogrammetry_workbench,
             app.show_cosim_workbench,
             app.show_ppi_workbench,
@@ -4466,6 +4484,7 @@ mod tests {
             TabKind::Ocean => crate::ocean_workbench::draw_ocean_workbench(app, ctx),
             TabKind::Rom => crate::rom_workbench::draw_rom_workbench(app, ctx),
             TabKind::Uq => crate::uq_workbench::draw_uq_workbench(app, ctx),
+            TabKind::Uas => crate::uas_workbench::draw_uas_workbench(app, ctx),
             TabKind::Photogrammetry => {
                 crate::photogrammetry_workbench::draw_photogrammetry_workbench(app, ctx)
             }
@@ -4755,7 +4774,7 @@ mod headless_ui_tests {
 
     #[test]
     fn all_workbench_kinds_is_unique_and_covers_134_plus_mesh() {
-        // The registry list has no duplicate ids, and is the 142
+        // The registry list has no duplicate ids, and is the 143
         // `show_*_workbench` fields plus the one `meshtoolbox` alias.
         let mut seen = std::collections::HashSet::new();
         for k in ALL_WORKBENCH_KINDS {
@@ -4766,8 +4785,8 @@ mod headless_ui_tests {
         }
         assert_eq!(
             ALL_WORKBENCH_KINDS.len(),
-            144,
-            "143 `show_*_workbench` fields + the meshtoolbox alias"
+            145,
+            "144 `show_*_workbench` fields + the meshtoolbox alias"
         );
         assert!(ALL_WORKBENCH_KINDS.contains(&"meshtoolbox"));
         // A couple of representative kinds are present.
