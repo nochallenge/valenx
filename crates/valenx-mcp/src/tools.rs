@@ -49,6 +49,8 @@ pub fn list() -> Value {
     ];
     // Append the generative-design (parametric CAD) tools.
     tools.extend(crate::design::tool_list());
+    // Append the drive-a-running-valenx file-bridge tools.
+    tools.extend(crate::bridge_tools::tool_list());
     Value::Array(tools)
 }
 
@@ -63,6 +65,12 @@ pub async fn call(params: &Value) -> Result<Value> {
     // operations; route them first. `dispatch` returns `None` when the
     // name is not a design tool, so the docking tools below still match.
     if let Some(result) = crate::design::dispatch(name, &args) {
+        return result;
+    }
+    // The drive-a-running-valenx file-bridge tools (also synchronous file I/O).
+    // `dispatch` returns `None` when the name is not a bridge tool, so the
+    // docking tools below still match.
+    if let Some(result) = crate::bridge_tools::dispatch(name, &args) {
         return result;
     }
     match name {
