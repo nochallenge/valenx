@@ -79,6 +79,7 @@ use eframe::egui;
 use valenx_adapter_fmi::cosim::{CoSimMaster, Coupling, CouplingGraph, Scheme, Subsystem};
 use valenx_adapter_fmi::implicit::{coupled_step, ImplicitScheme, Relaxation};
 
+use crate::agent_commands::AgentValue;
 use crate::ValenxApp;
 
 // ---------------------------------------------------------------------------
@@ -137,6 +138,22 @@ impl CouplingScheme {
         match self {
             CouplingScheme::GaussSeidel => "Gauss-Seidel (sequential)",
             CouplingScheme::Jacobi => "Jacobi (parallel)",
+        }
+    }
+
+    /// Parse a coupling-scheme name (for the agent `SetControl` bridge) into a
+    /// [`CouplingScheme`]. Case-insensitive; accepts the short menu words.
+    /// Fail-loud on an unrecognised name so a typo is a `warn` note, not a
+    /// silent no-op.
+    fn from_name(s: &str) -> Result<CouplingScheme, String> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "gauss-seidel" | "gauss seidel" | "gaussseidel" | "gs" => {
+                Ok(CouplingScheme::GaussSeidel)
+            }
+            "jacobi" => Ok(CouplingScheme::Jacobi),
+            other => Err(format!(
+                "unknown coupling scheme '{other}' (expected 'gauss-seidel' or 'jacobi')"
+            )),
         }
     }
 
@@ -617,6 +634,55 @@ impl CosimWorkbenchState {
         (last.x1 - reference[0])
             .abs()
             .max((last.x2 - reference[2]).abs())
+    }
+
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`
+    /// so an agent can discover the name space. The captions match exactly what
+    /// the workbench form draws (and what each control is `labelled_by`).
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "macro-step H (s)",
+            "macro-steps",
+            "coupling scheme",
+            "implicit coupling",
+            "tolerance",
+            "max iters / step",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the wrong
+    /// type returns `Err(String)` (the bridge turns it into a `warn` feed note) —
+    /// never a panic, and no field is written on error. The float captions read
+    /// [`AgentValue::as_f64`], the integer captions read [`AgentValue::as_i64`],
+    /// the `coupling scheme` enum reads [`AgentValue::as_str`], and the
+    /// `implicit coupling` toggle reads [`AgentValue::as_bool`]. Range/finiteness
+    /// validation stays in [`run`](Self::run).
+    pub fn agent_set(&mut self, name: &str, value: &AgentValue) -> Result<(), String> {
+        let p = &mut self.params;
+        match name {
+            "macro-step H (s)" => p.macro_step = value.as_f64()?,
+            "macro-steps" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("macro-steps must be >= 0, got {n}"));
+                }
+                p.num_steps = n as usize;
+            }
+            "coupling scheme" => p.scheme = CouplingScheme::from_name(value.as_str()?)?,
+            "implicit coupling" => p.implicit = value.as_bool()?,
+            "tolerance" => p.tol = value.as_f64()?,
+            "max iters / step" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("max iters / step must be >= 0, got {n}"));
+                }
+                p.max_iters = n as usize;
+            }
+            other => return Err(format!("unknown co-sim control: {other:?}")),
+        }
+        Ok(())
     }
 }
 
@@ -1236,6 +1302,59 @@ mod tests {
         s.params.implicit = true;
         s.params.max_iters = 0;
         assert!(s.run().is_err(), "implicit max_iters = 0 must return Err");
+    }
+
+    // ---- agent_set / agent_control_names (the SetControl bridge) ----
+
+    #[test]
+    fn agent_set_sets_params_and_rejects_unknown_and_typemismatch() {
+        let mut s = CosimWorkbenchState::default();
+
+        // Representative float param, verified via state.
+        s.agent_set("macro-step H (s)", &AgentValue::Float(1.0e-3))
+            .expect("set macro-step");
+        assert!((s.params.macro_step - 1.0e-3).abs() < 1e-15);
+        // Integer count.
+        s.agent_set("macro-steps", &AgentValue::Int(250))
+            .expect("set macro-steps");
+        assert_eq!(s.params.num_steps, 250);
+        // Enum-by-name combo.
+        s.agent_set("coupling scheme", &AgentValue::Str("jacobi".into()))
+            .expect("set scheme");
+        assert_eq!(s.params.scheme, CouplingScheme::Jacobi);
+        // Boolean toggle.
+        s.agent_set("implicit coupling", &AgentValue::Bool(true))
+            .expect("set implicit");
+        assert!(s.params.implicit);
+
+        // Unknown caption -> Err (not a panic).
+        assert!(s.agent_set("nope", &AgentValue::Int(1)).is_err());
+        // Type mismatch: a float caption fed a string -> Err.
+        assert!(s
+            .agent_set("macro-step H (s)", &AgentValue::Str("tiny".into()))
+            .is_err());
+        // Type mismatch: the bool caption fed a number -> Err (no stray 1 flips it).
+        assert!(s
+            .agent_set("implicit coupling", &AgentValue::Int(1))
+            .is_err());
+        // An unknown scheme name -> Err.
+        assert!(s
+            .agent_set("coupling scheme", &AgentValue::Str("bogus".into()))
+            .is_err());
+
+        // Every advertised control name is settable with a value of its type.
+        for name in CosimWorkbenchState::agent_control_names() {
+            let v = match *name {
+                "coupling scheme" => AgentValue::Str("gauss-seidel".into()),
+                "implicit coupling" => AgentValue::Bool(false),
+                "macro-steps" | "max iters / step" => AgentValue::Int(10),
+                _ => AgentValue::Float(1.0e-3),
+            };
+            assert!(
+                s.agent_set(name, &v).is_ok(),
+                "advertised control '{name}' must be settable"
+            );
+        }
     }
 }
 

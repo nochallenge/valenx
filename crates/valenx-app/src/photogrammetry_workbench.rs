@@ -70,6 +70,7 @@ use valenx_photogrammetry::{
     MapperParams, Match, PairMatches, QualityParams,
 };
 
+use crate::agent_commands::AgentValue;
 use crate::ValenxApp;
 
 /// Fixed seed for the deterministic synthetic-noise PRNG so a run is
@@ -337,6 +338,45 @@ impl PhotogrammetryWorkbenchState {
             recovery_rms,
             alignment_scale: s,
         })
+    }
+
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`
+    /// so an agent can discover the name space. The captions match exactly what
+    /// the workbench form draws (and what each control is `labelled_by`). The
+    /// `realised points` readout is a read-only echo, not a control, so it is
+    /// intentionally absent.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &["camera views", "scene points", "image noise (px)"]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the wrong
+    /// type returns `Err(String)` (the bridge turns it into a `warn` feed note) —
+    /// never a panic, and no field is written on error. The two count captions
+    /// read [`AgentValue::as_i64`]; the noise caption reads [`AgentValue::as_f64`].
+    /// Range validation (e.g. `< 2` cameras) stays in [`run`](Self::run).
+    pub fn agent_set(&mut self, name: &str, value: &AgentValue) -> Result<(), String> {
+        let p = &mut self.params;
+        match name {
+            "camera views" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("camera views must be >= 0, got {n}"));
+                }
+                p.num_cameras = n as usize;
+            }
+            "scene points" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("scene points must be >= 0, got {n}"));
+                }
+                p.num_points = n as usize;
+            }
+            "image noise (px)" => p.noise_px = value.as_f64()?,
+            other => return Err(format!("unknown photogrammetry control: {other:?}")),
+        }
+        Ok(())
     }
 }
 
@@ -1083,6 +1123,44 @@ mod tests {
             res.mean_reprojection_error.is_finite(),
             "reproj error must stay finite under noise"
         );
+    }
+
+    // ---- agent_set / agent_control_names (the SetControl bridge) ----
+
+    #[test]
+    fn agent_set_sets_params_and_rejects_unknown_and_typemismatch() {
+        let mut s = PhotogrammetryWorkbenchState::default();
+
+        // Representative count param, verified via state.
+        s.agent_set("camera views", &AgentValue::Int(6))
+            .expect("set camera views");
+        assert_eq!(s.params.num_cameras, 6);
+        // Float noise param.
+        s.agent_set("image noise (px)", &AgentValue::Float(0.75))
+            .expect("set image noise");
+        assert!((s.params.noise_px - 0.75).abs() < 1e-12);
+
+        // Unknown caption -> Err (not a panic).
+        assert!(s.agent_set("nope", &AgentValue::Int(1)).is_err());
+        // Type mismatch: a count caption fed a string -> Err.
+        assert!(s
+            .agent_set("camera views", &AgentValue::Str("six".into()))
+            .is_err());
+        // Negative count -> Err.
+        assert!(s.agent_set("scene points", &AgentValue::Int(-3)).is_err());
+
+        // Every advertised control name is settable with a value of its type.
+        for name in PhotogrammetryWorkbenchState::agent_control_names() {
+            let v = if *name == "image noise (px)" {
+                AgentValue::Float(0.1)
+            } else {
+                AgentValue::Int(4)
+            };
+            assert!(
+                s.agent_set(name, &v).is_ok(),
+                "advertised control '{name}' must be settable"
+            );
+        }
     }
 }
 

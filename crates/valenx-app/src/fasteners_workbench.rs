@@ -14,6 +14,7 @@ use nalgebra::Vector3;
 use valenx_fasteners::bolt::{iso4017_hex_table, BoltSpec};
 use valenx_viz::{project_point, OrbitCamera, ViewDirection};
 
+use crate::agent_commands::AgentValue;
 use crate::mesh_prims::MeshBuilder;
 use crate::ValenxApp;
 
@@ -42,6 +43,41 @@ impl Default for FastenersWorkbenchState {
             result: String::new(),
             error: None,
         }
+    }
+}
+
+impl FastenersWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &["Bolt size (ISO 4017 hex)"]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. The single control is the bolt-size combo, whose
+    /// caption is `"Bolt size (ISO 4017 hex)"`; it is set by the ISO nominal
+    /// designation **name** (e.g. `"M6"`, matching the combo entries).
+    ///
+    /// Fail-loud: an unknown caption, a value of the wrong type, or a
+    /// designation absent from the ISO 4017 table returns `Err(String)` — never
+    /// a panic, and no field is written on error. The size reads
+    /// [`AgentValue::as_str`] and is validated against the table (the lookup is
+    /// trimmed + case-insensitive so `"m6"` / `" M6 "` resolve), then stored in
+    /// the table's canonical spelling.
+    pub fn agent_set(&mut self, name: &str, value: &AgentValue) -> Result<(), String> {
+        match name {
+            "Bolt size (ISO 4017 hex)" => {
+                let want = value.as_str()?.trim();
+                let canonical = iso4017_hex_table()
+                    .into_iter()
+                    .map(|b| b.nominal)
+                    .find(|n| n.eq_ignore_ascii_case(want))
+                    .ok_or_else(|| format!("unknown bolt size '{want}' (not in ISO 4017 table)"))?;
+                self.nominal = canonical;
+            }
+            other => return Err(format!("unknown fasteners control: {other:?}")),
+        }
+        Ok(())
     }
 }
 
@@ -388,6 +424,39 @@ mod tests {
         run_fasteners(&mut s);
         assert!(s.error.is_some());
         assert!(s.result.is_empty());
+    }
+
+    #[test]
+    fn agent_set_picks_a_table_size_and_rejects_bad_input() {
+        let mut s = FastenersWorkbenchState::default();
+
+        // Pick a real, non-default ISO size from the table (the combo lists it).
+        let other = iso4017_hex_table()
+            .into_iter()
+            .map(|b| b.nominal)
+            .find(|n| n != "M6")
+            .expect("ISO 4017 table has more than one size");
+        s.agent_set("Bolt size (ISO 4017 hex)", &AgentValue::Str(other.clone()))
+            .expect("set a real ISO size by name");
+        assert_eq!(s.nominal, other);
+
+        // Lookup is case-insensitive and stores the canonical spelling.
+        s.agent_set("Bolt size (ISO 4017 hex)", &AgentValue::Str("m6".into()))
+            .expect("case-insensitive size");
+        assert_eq!(s.nominal, "M6");
+
+        // A size absent from the table -> Err (no field written).
+        assert!(s
+            .agent_set("Bolt size (ISO 4017 hex)", &AgentValue::Str("M999".into()))
+            .is_err());
+        assert_eq!(s.nominal, "M6", "rejected size leaves the field unchanged");
+
+        // Unknown caption -> Err.
+        assert!(s.agent_set("nope", &AgentValue::Str("M6".into())).is_err());
+        // Wrong type (size needs a string) -> Err.
+        assert!(s
+            .agent_set("Bolt size (ISO 4017 hex)", &AgentValue::Int(6))
+            .is_err());
     }
 
     #[test]

@@ -50,6 +50,62 @@ impl Default for RenderWorkbenchState {
     }
 }
 
+impl RenderWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]): the four numeric render
+    /// parameters plus the stainless-finish toggle.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "resolution",
+            "samples / px",
+            "max bounces",
+            "exposure",
+            "polished stainless finish (rocket)",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. The three count fields read [`AgentValue::as_i64`]
+    /// (the render clamps the value at solve time, so any non-negative integer
+    /// is accepted here); `exposure` reads [`AgentValue::as_f64`] (narrowed to
+    /// `f32`); the finish toggle reads [`AgentValue::as_bool`]. Fail-loud: an
+    /// unknown caption, wrong type, or negative count returns `Err` — never a
+    /// panic, no field written on error.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        match name {
+            "resolution" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("resolution must be >= 0, got {n}"));
+                }
+                self.resolution = n as u32;
+            }
+            "samples / px" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("samples / px must be >= 0, got {n}"));
+                }
+                self.spp = n as u32;
+            }
+            "max bounces" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("max bounces must be >= 0, got {n}"));
+                }
+                self.max_depth = n as u32;
+            }
+            "exposure" => self.exposure = value.as_f64()? as f32,
+            "polished stainless finish (rocket)" => self.stainless = value.as_bool()?,
+            other => return Err(format!("unknown Render control: {other:?}")),
+        }
+        Ok(())
+    }
+}
+
 /// Render a Cornell-box scene and return `(width, height, RGB8 pixels)`.
 ///
 /// Returns the `valenx-pathtrace` framebuffer error as a display string
@@ -516,6 +572,32 @@ pub(crate) fn render_product() -> crate::WorkspaceProduct {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        use crate::agent_commands::AgentValue;
+        let mut s = RenderWorkbenchState::default();
+        // A representative integer set lands in state.
+        s.agent_set("resolution", &AgentValue::Int(256)).unwrap();
+        assert_eq!(s.resolution, 256);
+        // A float param narrows to f32.
+        s.agent_set("exposure", &AgentValue::Float(1.5)).unwrap();
+        assert_eq!(s.exposure, 1.5);
+        // The checkbox is a bool toggle.
+        s.agent_set(
+            "polished stainless finish (rocket)",
+            &AgentValue::Bool(true),
+        )
+        .unwrap();
+        assert!(s.stainless);
+        // Unknown caption -> Err.
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (string into the integer resolution) -> Err, untouched.
+        assert!(s
+            .agent_set("resolution", &AgentValue::Str("big".into()))
+            .is_err());
+        assert_eq!(s.resolution, 256, "rejected set leaves field untouched");
+    }
 
     #[test]
     fn renders_a_lit_image() {

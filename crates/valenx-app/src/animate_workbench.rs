@@ -11,6 +11,7 @@ use std::f64::consts::PI;
 
 use valenx_animate::{Animation, Keyframe, TweenMode};
 
+use crate::agent_commands::AgentValue;
 use crate::ValenxApp;
 
 /// Persistent state for the animation workbench.
@@ -28,6 +29,62 @@ impl Default for AnimateWorkbenchState {
             tween,
             playhead: 0.0,
         }
+    }
+}
+
+/// Parse an easing-curve name (for the agent `SetControl` bridge) into a
+/// [`TweenMode`]. Case-insensitive; accepts the menu words shown in the combo
+/// (`Linear` / `EaseIn` / `EaseOut` / `EaseInOut` / `Cubic`). Fail-loud on an
+/// unrecognised name so a typo is a `warn` note, not a silent no-op. (The
+/// `Hermite` variant carries tangents and is not offered in the combo, so it is
+/// intentionally not settable by name here.)
+fn parse_tween_mode(s: &str) -> Result<TweenMode, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "linear" => Ok(TweenMode::Linear),
+        "easein" | "ease-in" | "ease in" => Ok(TweenMode::EaseIn),
+        "easeout" | "ease-out" | "ease out" => Ok(TweenMode::EaseOut),
+        "easeinout" | "ease-in-out" | "ease in out" => Ok(TweenMode::EaseInOut),
+        "cubic" => Ok(TweenMode::Cubic),
+        other => Err(format!(
+            "unknown easing '{other}' (expected 'Linear', 'EaseIn', 'EaseOut', \
+             'EaseInOut', or 'Cubic')"
+        )),
+    }
+}
+
+impl AnimateWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &["easing", "time (s)"]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. The caption strings match what the workbench draws
+    /// (the easing combo `from_label("easing")` and the playhead slider's
+    /// `.text("time (s)")`).
+    ///
+    /// Fail-loud: an unknown caption or a value of the wrong type returns
+    /// `Err(String)` — never a panic, and no field is written on error. The
+    /// `easing` enum reads [`AgentValue::as_str`]; `time (s)` reads
+    /// [`AgentValue::as_f64`] and is clamped into the animation's `[0, dur]`
+    /// span. Changing the easing rebuilds the demo animation (mirroring the
+    /// combo's side-effect in the draw code).
+    pub fn agent_set(&mut self, name: &str, value: &AgentValue) -> Result<(), String> {
+        match name {
+            "easing" => {
+                let tw = parse_tween_mode(value.as_str()?)?;
+                self.tween = tw;
+                self.anim = demo_animation(tw);
+            }
+            "time (s)" => {
+                let t = value.as_f64()?;
+                let dur = self.anim.duration().max(0.0);
+                self.playhead = t.clamp(0.0, dur);
+            }
+            other => return Err(format!("unknown animate control: {other:?}")),
+        }
+        Ok(())
     }
 }
 
@@ -169,5 +226,38 @@ mod tests {
         let a = demo_animation(TweenMode::Linear);
         let mid = joint0(&a, 1.0);
         assert!(mid > 0.0 && mid < PI, "midpoint between endpoints: {mid}");
+    }
+
+    #[test]
+    fn agent_set_sets_easing_and_playhead_and_rejects_bad_input() {
+        let mut s = AnimateWorkbenchState::default();
+
+        // The easing enum is set by option NAME (combo), and rebuilds the anim.
+        s.agent_set("easing", &AgentValue::Str("Linear".into()))
+            .expect("set easing by name");
+        assert_eq!(s.tween, TweenMode::Linear);
+        // Linear easing makes the midpoint exactly π/2.
+        assert!((joint0(&s.anim, 1.0) - PI / 2.0).abs() < 1e-9);
+
+        // The playhead is a clamped f64.
+        s.agent_set("time (s)", &AgentValue::Float(1.0))
+            .expect("set time");
+        assert!((s.playhead - 1.0).abs() < 1e-12);
+        // Out-of-range is clamped to [0, dur], not rejected.
+        s.agent_set("time (s)", &AgentValue::Float(999.0))
+            .expect("set time (clamped)");
+        assert!((s.playhead - s.anim.duration()).abs() < 1e-9);
+
+        // Unknown caption -> Err.
+        assert!(s.agent_set("nope", &AgentValue::Float(1.0)).is_err());
+        // Wrong type: easing needs a string, time needs a number.
+        assert!(s.agent_set("easing", &AgentValue::Float(1.0)).is_err());
+        assert!(s
+            .agent_set("time (s)", &AgentValue::Str("x".into()))
+            .is_err());
+        // Unknown easing name -> Err.
+        assert!(s
+            .agent_set("easing", &AgentValue::Str("Bogus".into()))
+            .is_err());
     }
 }

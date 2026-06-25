@@ -17,6 +17,7 @@ use valenx_geomatics::{
     rhumb_distance, LatLon,
 };
 
+use crate::agent_commands::AgentValue;
 use crate::ValenxApp;
 
 /// Persistent form + result state for the Geomatics Workbench.
@@ -54,6 +55,45 @@ impl Default for GeomaticsWorkbenchState {
             result: String::new(),
             error: None,
         }
+    }
+}
+
+impl GeomaticsWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`.
+    ///
+    /// The form draws the same `lat` / `lon` caption for each of the three
+    /// points, disambiguated visually by the point header (`Point A` /
+    /// `Point B` / `Query point P`). The agent name space mirrors that:
+    /// `"A lat"`, `"A lon"`, `"B lat"`, `"B lon"`, `"P lat"`, `"P lon"`.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &["A lat", "A lon", "B lat", "B lon", "P lat", "P lon"]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Each point's latitude / longitude is addressed by
+    /// `"<A|B|P> <lat|lon>"` (the point header + the `lat`/`lon` caption the UI
+    /// shows); every component reads [`AgentValue::as_f64`].
+    ///
+    /// Fail-loud: an unknown caption or a value of the wrong type returns
+    /// `Err(String)` — never a panic, and no field is written on error. Values
+    /// are stored verbatim; `run_geomatics` is what validates the lat/lon ranges
+    /// at Compute time (matching the manual drag flow, where an intermediate
+    /// out-of-range value is allowed until Compute).
+    pub fn agent_set(&mut self, name: &str, value: &AgentValue) -> Result<(), String> {
+        let field: &mut f64 = match name {
+            "A lat" => &mut self.lat_a,
+            "A lon" => &mut self.lon_a,
+            "B lat" => &mut self.lat_b,
+            "B lon" => &mut self.lon_b,
+            "P lat" => &mut self.lat_p,
+            "P lon" => &mut self.lon_p,
+            other => return Err(format!("unknown geomatics control: {other:?}")),
+        };
+        // Read first so a type error leaves the field untouched.
+        let v = value.as_f64()?;
+        *field = v;
+        Ok(())
     }
 }
 
@@ -302,6 +342,35 @@ mod tests {
             assert!(s.error.is_some());
             assert!(s.result.is_empty());
         }
+    }
+
+    #[test]
+    fn agent_set_addresses_each_point_component_and_rejects_bad_input() {
+        let mut s = GeomaticsWorkbenchState::default();
+
+        // The repeated lat/lon captions are disambiguated by point (A/B/P).
+        s.agent_set("A lat", &AgentValue::Float(51.5))
+            .expect("set A lat");
+        s.agent_set("A lon", &AgentValue::Float(-0.12))
+            .expect("set A lon");
+        s.agent_set("B lat", &AgentValue::Int(48)) // Int widens to f64
+            .expect("set B lat");
+        s.agent_set("P lon", &AgentValue::Float(1.0))
+            .expect("set P lon");
+        assert_eq!(s.lat_a, 51.5);
+        assert_eq!(s.lon_a, -0.12);
+        assert_eq!(s.lat_b, 48.0);
+        assert_eq!(s.lon_p, 1.0);
+
+        // Unknown caption -> Err.
+        assert!(s.agent_set("Q lat", &AgentValue::Float(0.0)).is_err());
+        // A bare "lat" is ambiguous → not a valid name.
+        assert!(s.agent_set("lat", &AgentValue::Float(0.0)).is_err());
+        // Wrong type (a coordinate needs a number) -> Err, field intact.
+        assert!(s
+            .agent_set("A lat", &AgentValue::Str("north".into()))
+            .is_err());
+        assert_eq!(s.lat_a, 51.5, "rejected set leaves the field unchanged");
     }
 }
 

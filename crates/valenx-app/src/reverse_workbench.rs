@@ -17,7 +17,7 @@ use valenx_viz::stl::{StlTriangle, TriangleMesh};
 use crate::types::LoadedStl;
 use crate::ValenxApp;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Shape {
     Sphere,
     Torus,
@@ -39,6 +39,58 @@ impl Default for ReverseWorkbenchState {
             k: 8,
             status: String::new(),
         }
+    }
+}
+
+/// Parse a demo-shape name (for the agent `SetControl` bridge) into a [`Shape`].
+/// Case-insensitive; matches the two picker words. Fail-loud on an unknown name.
+fn parse_shape(s: &str) -> Result<Shape, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "sphere" => Ok(Shape::Sphere),
+        "torus" => Ok(Shape::Torus),
+        other => Err(format!(
+            "unknown shape '{other}' (expected 'sphere' or 'torus')"
+        )),
+    }
+}
+
+impl ReverseWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). `shape` is the
+    /// Sphere/Torus selection (set by option name).
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &["shape", "cloud density", "k neighbours"]
+    }
+
+    /// Set one labelled control by caption, for the agent `SetControl` bridge.
+    /// Numeric fields read [`AgentValue::as_i64`] (the two demo counts); `shape`
+    /// reads [`AgentValue::as_str`] and matches the picker names. Fail-loud: an
+    /// unknown caption, wrong type, or negative count returns `Err` — never a
+    /// panic, no field written on error.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        match name {
+            "shape" => self.shape = parse_shape(value.as_str()?)?,
+            "cloud density" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("cloud density must be >= 0, got {n}"));
+                }
+                self.density = n as usize;
+            }
+            "k neighbours" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("k neighbours must be >= 0, got {n}"));
+                }
+                self.k = n as usize;
+            }
+            other => return Err(format!("unknown Reverse Engineering control: {other:?}")),
+        }
+        Ok(())
     }
 }
 
@@ -255,6 +307,26 @@ pub(crate) fn reverse_product() -> crate::WorkspaceProduct {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        use crate::agent_commands::AgentValue;
+        let mut s = ReverseWorkbenchState::default();
+        // A representative integer set lands in state.
+        s.agent_set("cloud density", &AgentValue::Int(32)).unwrap();
+        assert_eq!(s.density, 32);
+        // The shape enum is set by option name.
+        s.agent_set("shape", &AgentValue::Str("torus".into()))
+            .unwrap();
+        assert_eq!(s.shape, Shape::Torus);
+        // Unknown caption -> Err.
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (string into the integer count) -> Err, field untouched.
+        assert!(s
+            .agent_set("cloud density", &AgentValue::Str("many".into()))
+            .is_err());
+        assert_eq!(s.density, 32, "rejected set leaves field untouched");
+    }
 
     #[test]
     fn sphere_cloud_reconstructs_to_a_mesh() {

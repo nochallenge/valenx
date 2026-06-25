@@ -10,6 +10,7 @@ use eframe::egui;
 
 use valenx_variant_effect::{parse, Variant};
 
+use crate::agent_commands::AgentValue;
 use crate::ValenxApp;
 
 /// Persistent state for the variant-effect workbench.
@@ -26,6 +27,37 @@ impl Default for VariantEffectWorkbenchState {
             input: "p.R273H\np.Arg249Ser\nc.817C>T".to_string(),
             results: None,
         }
+    }
+}
+
+impl VariantEffectWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`
+    /// so an agent can discover the name space. This panel has a single settable
+    /// control — the multi-line variant batch — addressed by the heading the
+    /// panel draws above it. The `Parse` button is an action, not a settable
+    /// control, so it is not listed.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &["Variants (one per line)"]
+    }
+
+    /// Set the variant-batch text field by its caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a non-string value
+    /// returns `Err(String)` (the bridge turns it into a `warn` feed note) —
+    /// never a panic, and no field is written on error. The batch is free text
+    /// ([`AgentValue::as_str`]); the agent then triggers `Parse` to evaluate it
+    /// (so setting this clears the stale `results` until the next parse).
+    pub fn agent_set(&mut self, name: &str, value: &AgentValue) -> Result<(), String> {
+        match name {
+            "Variants (one per line)" => {
+                self.input = value.as_str()?.to_string();
+                // The displayed results no longer correspond to the new input;
+                // drop them so the panel does not show stale parses.
+                self.results = None;
+            }
+            other => return Err(format!("unknown variant-effect control: {other:?}")),
+        }
+        Ok(())
     }
 }
 
@@ -217,6 +249,42 @@ mod tests {
         let out = parse_batch(&VariantEffectWorkbenchState::default().input);
         assert_eq!(out.len(), 3);
         assert!(out.iter().all(|(_, r)| r.is_ok()));
+    }
+
+    // ---- agent_set / agent_control_names (the SetControl bridge) ----
+
+    #[test]
+    #[allow(clippy::field_reassign_with_default)]
+    fn agent_set_sets_batch_and_rejects_unknown_and_typemismatch() {
+        let mut s = VariantEffectWorkbenchState::default();
+        // Seed a stale results table to confirm agent_set clears it.
+        s.results = Some(parse_batch("p.R273H"));
+
+        // The settable text control, verified via state.
+        s.agent_set(
+            "Variants (one per line)",
+            &AgentValue::Str("p.G12D\nc.35G>A".into()),
+        )
+        .expect("set the variant batch");
+        assert_eq!(s.input, "p.G12D\nc.35G>A");
+        assert!(s.results.is_none(), "stale results must be cleared on set");
+        // The new text parses through the same pipeline the panel uses.
+        let out = parse_batch(&s.input);
+        assert_eq!(out.len(), 2);
+        assert!(out.iter().all(|(_, r)| r.is_ok()));
+
+        // Unknown caption -> Err (not a panic).
+        assert!(s.agent_set("nope", &AgentValue::Str("x".into())).is_err());
+        // Type mismatch: the text caption fed a number -> Err.
+        assert!(s
+            .agent_set("Variants (one per line)", &AgentValue::Int(7))
+            .is_err());
+
+        // The single advertised control name is settable.
+        assert_eq!(
+            VariantEffectWorkbenchState::agent_control_names(),
+            &["Variants (one per line)"]
+        );
     }
 }
 

@@ -42,6 +42,32 @@ impl Default for FieldsWorkbenchState {
     }
 }
 
+impl FieldsWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). The only editable control is
+    /// the numbers text box (the rest of the panel is computed output).
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &["numbers"]
+    }
+
+    /// Set one labelled control by caption, for the agent `SetControl` bridge.
+    /// The single settable field is the `numbers` text box (whitespace/comma-
+    /// separated list); it reads [`AgentValue::as_str`]. Fail-loud on an unknown
+    /// caption or a value of the wrong type — never a panic, no field written on
+    /// error.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        match name {
+            "numbers" => self.text = value.as_str()?.to_string(),
+            other => return Err(format!("unknown Field Statistics control: {other:?}")),
+        }
+        Ok(())
+    }
+}
+
 /// Wrap a `Vec<f64>` in the canonical dimensionless scalar [`Field`] (the
 /// same shape the crate's own tests use). `valenx-fields` exposes no
 /// dedicated constructor, but every field is public, so this is a plain
@@ -245,6 +271,26 @@ mod tests {
         assert!(s.result.contains("samples        : 3"));
         // mean of 10,20,30 = 20.
         assert!(s.result.contains("20.000000"));
+    }
+
+    #[test]
+    fn agent_set_sets_numbers_unknown_and_type_mismatch_err() {
+        use crate::agent_commands::AgentValue;
+        let mut s = FieldsWorkbenchState::default();
+        // The numbers text box accepts a string and is then computable.
+        s.agent_set("numbers", &AgentValue::Str("10 20 30".into()))
+            .unwrap();
+        assert_eq!(s.text, "10 20 30");
+        run_fields(&mut s);
+        assert!(s.error.is_none());
+        assert!(s.result.contains("samples        : 3"));
+        // Unknown caption -> Err.
+        assert!(s
+            .agent_set("no such control", &AgentValue::Str("x".into()))
+            .is_err());
+        // Type mismatch (number into the string field) -> Err, field untouched.
+        assert!(s.agent_set("numbers", &AgentValue::Int(7)).is_err());
+        assert_eq!(s.text, "10 20 30", "rejected set leaves field untouched");
     }
 
     #[test]

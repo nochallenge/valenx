@@ -23,7 +23,7 @@
 
 use eframe::egui;
 
-use crate::astro::model::{AscentForm, AstroTab, PlannerForm};
+use crate::astro::model::{AscentForm, AstroTab, GuidanceChoice, PlannerForm};
 use crate::astro::panels;
 use crate::ValenxApp;
 use valenx_astro::AscentResult;
@@ -59,7 +59,149 @@ pub struct AstroWorkbenchState {
     pub history: crate::undo::History<AscentForm>,
 }
 
+/// Parse a steering-law name (agent `SetControl` bridge) into a
+/// [`GuidanceChoice`]. Case-insensitive; accepts the combo words + short forms.
+/// Fail-loud on an unknown name.
+fn parse_guidance(s: &str) -> Result<GuidanceChoice, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "open-loop gravity turn" | "open-loop" | "open" | "gravity turn" => {
+            Ok(GuidanceChoice::OpenLoopGravityTurn)
+        }
+        "closed-loop insertion" | "closed-loop" | "closed" | "insertion" => {
+            Ok(GuidanceChoice::ClosedLoopInsertion)
+        }
+        other => Err(format!(
+            "unknown steering law '{other}' (expected 'open-loop gravity turn' or \
+             'closed-loop insertion')"
+        )),
+    }
+}
+
 impl AstroWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]).
+    ///
+    /// The **Ascent** tab's controls are listed at their exact panel captions
+    /// (they are unique). The mission **planner** captions repeat across the
+    /// independent sub-forms (e.g. "From altitude" appears in both Hohmann and
+    /// bi-elliptic; "Perigee altitude" in three planners), so they are exposed
+    /// here under **section-qualified** names ("Hohmann from", "Ellipse perigee",
+    /// …) to keep the bridge name space unambiguous. Per-stage fields ("Dry
+    /// mass" etc.) are repeated per stage and are deferred (set the whole stage
+    /// stack elsewhere).
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            // -- Ascent tab (exact captions) --
+            "Steering law",
+            "Payload mass",
+            "Reference area",
+            "Launch altitude",
+            "Target altitude",
+            "Vertical rise time",
+            "Pitch kick",
+            "Kick duration",
+            "Steady wind",
+            // -- Mission planners (section-qualified) --
+            "Hohmann from",
+            "Hohmann to",
+            "Bi-elliptic from",
+            "Bi-elliptic to",
+            "Bi-elliptic via",
+            "Hoverslam descent speed",
+            "Hoverslam net deceleration",
+            "Rendezvous orbit altitude",
+            "Rendezvous radial offset",
+            "Rendezvous along-track offset",
+            "Rendezvous transfer fraction",
+            "Azimuth launch latitude",
+            "Azimuth target inclination",
+            "Plane-change orbit altitude",
+            "Plane-change inclination change",
+            "Basics orbit altitude",
+            "Ellipse perigee",
+            "Ellipse apogee",
+            "Synodic orbit A",
+            "Synodic orbit B",
+            "Target orbital period",
+            "Injection parking altitude",
+            "Injection hyperbolic excess",
+            "FPA eccentricity",
+            "FPA true anomaly",
+            "Speed perigee",
+            "Speed apogee",
+            "Speed query altitude",
+            "Time-of-flight perigee",
+            "Time-of-flight apogee",
+            "Time-of-flight true anomaly",
+            "Horizon satellite altitude",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption (Ascent tab) or its
+    /// section-qualified name (mission planners), for the agent `SetControl`
+    /// bridge. `Steering law` reads [`AgentValue::as_str`] and matches the
+    /// guidance names; every other control is numeric ([`AgentValue::as_f64`]).
+    ///
+    /// Fail-loud: an unknown name or a value of the wrong type returns `Err`
+    /// (the bridge turns it into a `warn` note) — never a panic, no field
+    /// written on error. Out-of-range numbers are caught at simulate / planner
+    /// time, which surface an in-panel error rather than a panic.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        let a = &mut self.ascent;
+        let p = &mut self.planner;
+        match name {
+            // -- Ascent tab --
+            "Steering law" => a.guidance = parse_guidance(value.as_str()?)?,
+            "Payload mass" => a.payload_mass = value.as_f64()?,
+            "Reference area" => a.reference_area = value.as_f64()?,
+            "Launch altitude" => a.launch_altitude_m = value.as_f64()?,
+            "Target altitude" => a.target_altitude_km = value.as_f64()?,
+            "Vertical rise time" => a.vertical_rise_time = value.as_f64()?,
+            "Pitch kick" => a.pitch_kick_deg = value.as_f64()?,
+            "Kick duration" => a.kick_duration = value.as_f64()?,
+            "Steady wind" => a.wind_speed_ms = value.as_f64()?,
+            // -- Mission planners (section-qualified) --
+            "Hohmann from" => p.hohmann_from_km = value.as_f64()?,
+            "Hohmann to" => p.hohmann_to_km = value.as_f64()?,
+            "Bi-elliptic from" => p.bielliptic_from_km = value.as_f64()?,
+            "Bi-elliptic to" => p.bielliptic_to_km = value.as_f64()?,
+            "Bi-elliptic via" => p.bielliptic_via_km = value.as_f64()?,
+            "Hoverslam descent speed" => p.hoverslam_descent_speed = value.as_f64()?,
+            "Hoverslam net deceleration" => p.hoverslam_net_decel = value.as_f64()?,
+            "Rendezvous orbit altitude" => p.rdv_orbit_altitude_km = value.as_f64()?,
+            "Rendezvous radial offset" => p.rdv_offset_radial = value.as_f64()?,
+            "Rendezvous along-track offset" => p.rdv_offset_along = value.as_f64()?,
+            "Rendezvous transfer fraction" => p.rdv_transfer_fraction = value.as_f64()?,
+            "Azimuth launch latitude" => p.azimuth_latitude_deg = value.as_f64()?,
+            "Azimuth target inclination" => p.azimuth_inclination_deg = value.as_f64()?,
+            "Plane-change orbit altitude" => p.plane_change_altitude_km = value.as_f64()?,
+            "Plane-change inclination change" => p.plane_change_delta_inc_deg = value.as_f64()?,
+            "Basics orbit altitude" => p.basics_altitude_km = value.as_f64()?,
+            "Ellipse perigee" => p.ellipse_perigee_km = value.as_f64()?,
+            "Ellipse apogee" => p.ellipse_apogee_km = value.as_f64()?,
+            "Synodic orbit A" => p.synodic_a_km = value.as_f64()?,
+            "Synodic orbit B" => p.synodic_b_km = value.as_f64()?,
+            "Target orbital period" => p.target_period_h = value.as_f64()?,
+            "Injection parking altitude" => p.injection_altitude_km = value.as_f64()?,
+            "Injection hyperbolic excess" => p.injection_v_inf_kms = value.as_f64()?,
+            "FPA eccentricity" => p.fpa_eccentricity = value.as_f64()?,
+            "FPA true anomaly" => p.fpa_true_anomaly_deg = value.as_f64()?,
+            "Speed perigee" => p.speed_perigee_km = value.as_f64()?,
+            "Speed apogee" => p.speed_apogee_km = value.as_f64()?,
+            "Speed query altitude" => p.speed_query_km = value.as_f64()?,
+            "Time-of-flight perigee" => p.tof_perigee_km = value.as_f64()?,
+            "Time-of-flight apogee" => p.tof_apogee_km = value.as_f64()?,
+            "Time-of-flight true anomaly" => p.tof_true_anomaly_deg = value.as_f64()?,
+            "Horizon satellite altitude" => p.horizon_altitude_km = value.as_f64()?,
+            other => return Err(format!("unknown Astro control: {other:?}")),
+        }
+        Ok(())
+    }
+
     /// Record the current ascent form on the undo stack. The Run action
     /// calls this when the user runs a sim so a later `Ctrl+Z` rewinds
     /// them back to the prior settings.
@@ -264,6 +406,41 @@ mod tests {
         // until the user turns it on from the View menu.
         let app = ValenxApp::default();
         assert!(!app.show_astro_workbench);
+    }
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        use crate::agent_commands::AgentValue;
+        let mut s = AstroWorkbenchState::default();
+        // An Ascent-tab float lands in the ascent form.
+        s.agent_set("Payload mass", &AgentValue::Float(12_000.0))
+            .unwrap();
+        assert_eq!(s.ascent.payload_mass, 12_000.0);
+        // The Steering-law enum is set by option name.
+        s.agent_set(
+            "Steering law",
+            &AgentValue::Str("closed-loop insertion".into()),
+        )
+        .unwrap();
+        assert_eq!(s.ascent.guidance, GuidanceChoice::ClosedLoopInsertion);
+        // A section-qualified planner control lands in the planner form.
+        s.agent_set("Hohmann to", &AgentValue::Float(20_200.0))
+            .unwrap();
+        assert_eq!(s.planner.hohmann_to_km, 20_200.0);
+        // Unknown name -> Err.
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Unknown enum name -> Err.
+        assert!(s
+            .agent_set("Steering law", &AgentValue::Str("ppn".into()))
+            .is_err());
+        // Type mismatch (string into the float payload) -> Err, field untouched.
+        assert!(s
+            .agent_set("Payload mass", &AgentValue::Str("heavy".into()))
+            .is_err());
+        assert_eq!(
+            s.ascent.payload_mass, 12_000.0,
+            "rejected set leaves field untouched"
+        );
     }
 
     #[test]
