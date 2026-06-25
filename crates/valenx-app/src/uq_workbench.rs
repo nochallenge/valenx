@@ -190,6 +190,32 @@ impl UqParams {
     }
 }
 
+/// Parse a distribution-family name (for the agent `SetControl` bridge) into a
+/// [`DistKind`]. Case-insensitive; accepts the menu words. Fail-loud on an
+/// unrecognised name so a typo is a `warn` note, not a silent no-op.
+fn parse_dist_kind(s: &str) -> Result<DistKind, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "normal" | "gaussian" => Ok(DistKind::Normal),
+        "uniform" => Ok(DistKind::Uniform),
+        other => Err(format!(
+            "unknown distribution '{other}' (expected 'normal' or 'uniform')"
+        )),
+    }
+}
+
+/// Parse a response-model name (for the agent `SetControl` bridge) into a
+/// [`ModelPreset`]. Case-insensitive; accepts the short menu words. Fail-loud.
+fn parse_model_preset(s: &str) -> Result<ModelPreset, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "sum" => Ok(ModelPreset::Sum),
+        "product" => Ok(ModelPreset::Product),
+        "linear" => Ok(ModelPreset::Linear),
+        other => Err(format!(
+            "unknown model '{other}' (expected 'sum', 'product', or 'linear')"
+        )),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Simulation result
 // ---------------------------------------------------------------------------
@@ -237,6 +263,76 @@ pub struct UqWorkbenchState {
 }
 
 impl UqWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by
+    /// `ListControls` so an agent can discover the name space. The `x1`/`x2`
+    /// parameter captions are listed in their **Normal** spelling (`mean`/`std`);
+    /// [`agent_set`](Self::agent_set) also accepts the **Uniform** spelling
+    /// (`lo`/`hi`) for the same fields.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "x1 distribution",
+            "x1 mean",
+            "x1 std",
+            "x2 distribution",
+            "x2 mean",
+            "x2 std",
+            "response model g",
+            "a0 (intercept)",
+            "a1 (coeff on x1)",
+            "a2 (coeff on x2)",
+            "Monte-Carlo samples N",
+            "failure threshold t",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. The caption strings match exactly what the workbench
+    /// form draws (and what each control is `labelled_by`), so an agent can set a
+    /// parameter by the same name a user reads.
+    ///
+    /// Fail-loud: an unknown caption or a value of the wrong type returns
+    /// `Err(String)` (the bridge turns it into a `warn` feed note) — never a
+    /// panic, and no field is written on error. Numeric fields read
+    /// [`AgentValue::as_f64`] / [`AgentValue::as_i64`]; the two enum captions
+    /// (`x1 distribution` / `x2 distribution`, `response model g`) read
+    /// [`AgentValue::as_str`] and match a small set of names. The `x1`/`x2`
+    /// parameter captions accept both the Normal (`mean`/`std`) and Uniform
+    /// (`lo`/`hi`) spellings since they address the same two fields (`p0`/`p1`).
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        let p = &mut self.params;
+        match name {
+            // -- Distribution-family enums --
+            "x1 distribution" => p.x1.kind = parse_dist_kind(value.as_str()?)?,
+            "x2 distribution" => p.x2.kind = parse_dist_kind(value.as_str()?)?,
+            // -- x1 / x2 parameters (Normal mean/std == Uniform lo/hi == p0/p1) --
+            "x1 mean" | "x1 lo" => p.x1.p0 = value.as_f64()?,
+            "x1 std" | "x1 hi" => p.x1.p1 = value.as_f64()?,
+            "x2 mean" | "x2 lo" => p.x2.p0 = value.as_f64()?,
+            "x2 std" | "x2 hi" => p.x2.p1 = value.as_f64()?,
+            // -- Model enum + linear coefficients --
+            "response model g" => p.model = parse_model_preset(value.as_str()?)?,
+            "a0 (intercept)" => p.a0 = value.as_f64()?,
+            "a1 (coeff on x1)" => p.a1 = value.as_f64()?,
+            "a2 (coeff on x2)" => p.a2 = value.as_f64()?,
+            // -- Sampling & limit-state --
+            "Monte-Carlo samples N" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("Monte-Carlo samples N must be >= 0, got {n}"));
+                }
+                p.n_samples = n as usize;
+            }
+            "failure threshold t" => p.threshold = value.as_f64()?,
+            other => return Err(format!("unknown UQ control: {other:?}")),
+        }
+        Ok(())
+    }
+
     /// Run the full UQ pipeline: validate + build the input distributions,
     /// Monte-Carlo sample them, evaluate `g` to an output sample set, summarise
     /// it (mean / std / quantiles), estimate first-order Sobol indices

@@ -197,6 +197,66 @@ pub struct SurvivabilityWorkbenchState {
 }
 
 impl SurvivabilityWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`
+    /// so an agent can discover the name space. Every control is an `f64` drag
+    /// value; order follows the form. The two non-ASCII captions carry the same
+    /// `·` / superscript characters the UI draws, so the agent must match them
+    /// exactly (or read them from this list).
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "charge mass W (kg)",
+            "stand-off R (m)",
+            "element mass (kg)",
+            "element stiffness (N/m)",
+            "element damping (N\u{00B7}s/m)",
+            "yield deflection (m)",
+            "loaded area (m\u{00B2})",
+            "projectile mass (kg)",
+            "projectile velocity (m/s)",
+            "projectile diameter (m)",
+            "plate shear strength (Pa)",
+            "plate density (kg/m\u{00B3})",
+            "occupant tolerance (g)",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Captions match exactly what the form draws (incl. the
+    /// two non-ASCII captions). Fail-loud on an unknown caption / wrong type (the
+    /// bridge posts a `warn` note); no field is written on error and nothing
+    /// panics. Every control is an `f64` drag value ([`AgentValue::as_f64`]); the
+    /// downstream `valenx-survivability` constructors re-validate the physical
+    /// ranges on the next `run`, so this setter only type-checks.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        let p = &mut self.params;
+        match name {
+            // -- Blast threat --
+            "charge mass W (kg)" => p.charge_kg = value.as_f64()?,
+            "stand-off R (m)" => p.standoff_m = value.as_f64()?,
+            // -- Protective element (SDOF) --
+            "element mass (kg)" => p.element_mass_kg = value.as_f64()?,
+            "element stiffness (N/m)" => p.element_stiffness_n_m = value.as_f64()?,
+            "element damping (N\u{00B7}s/m)" => p.element_damping_n_s_m = value.as_f64()?,
+            "yield deflection (m)" => p.yield_deflection_m = value.as_f64()?,
+            "loaded area (m\u{00B2})" => p.loaded_area_m2 = value.as_f64()?,
+            // -- Armor / impact threat --
+            "projectile mass (kg)" => p.projectile_mass_kg = value.as_f64()?,
+            "projectile velocity (m/s)" => p.projectile_velocity_m_s = value.as_f64()?,
+            "projectile diameter (m)" => p.projectile_diameter_m = value.as_f64()?,
+            "plate shear strength (Pa)" => p.plate_shear_strength_pa = value.as_f64()?,
+            "plate density (kg/m\u{00B3})" => p.plate_density_kg_m3 = value.as_f64()?,
+            // -- Occupant tolerance --
+            "occupant tolerance (g)" => p.occupant_tolerance_g = value.as_f64()?,
+            other => return Err(format!("unknown survivability control: {other:?}")),
+        }
+        Ok(())
+    }
+
     /// Run the full survivability pipeline: assemble the free-field blast load
     /// (`Pso`, `i_s`, Friedlander pulse), march the SDOF protective element under
     /// the pulse (peak deflection / ductility / DAF), build the P–I iso-damage

@@ -98,6 +98,31 @@ impl SweepVar {
     }
 }
 
+/// Parse an airframe-configuration name (for the agent `SetControl` bridge)
+/// into a [`UasConfig`]. Case-insensitive; accepts the short menu words.
+/// Fail-loud on an unrecognised name.
+fn parse_uas_config(s: &str) -> Result<UasConfig, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "multirotor" | "multi" | "rotor" => Ok(UasConfig::Multirotor),
+        "fixedwing" | "fixed-wing" | "fixed_wing" | "wing" => Ok(UasConfig::FixedWing),
+        other => Err(format!(
+            "unknown configuration '{other}' (expected 'multirotor' or 'fixed-wing')"
+        )),
+    }
+}
+
+/// Parse a trade-sweep-variable name (for the agent `SetControl` bridge) into a
+/// [`SweepVar`]. Case-insensitive; accepts the short menu words. Fail-loud.
+fn parse_sweep_var(s: &str) -> Result<SweepVar, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "payload" => Ok(SweepVar::Payload),
+        "battery" | "batterywh" | "battery_wh" => Ok(SweepVar::BatteryWh),
+        other => Err(format!(
+            "unknown sweep variable '{other}' (expected 'payload' or 'battery')"
+        )),
+    }
+}
+
 /// Editable counter-UAS (defensive intercept GEOMETRY) inputs. All planar
 /// (the painter draws a top-down plan view; the `z` component is held at 0).
 #[derive(Clone, Copy, Debug)]
@@ -385,6 +410,110 @@ pub struct UasWorkbenchState {
 }
 
 impl UasWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`
+    /// so an agent can discover the name space. Order follows the form.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "configuration",
+            "all-up mass (kg)",
+            "rotor count",
+            "disk area (m^2)",
+            "figure of merit",
+            "cruise power factor",
+            "max thrust/weight",
+            "wing area (m^2)",
+            "aspect ratio",
+            "CL max",
+            "CD0",
+            "Oswald e",
+            "battery (Wh)",
+            "usable fraction",
+            "payload (kg)",
+            "drivetrain eff.",
+            "air density (kg/m^3)",
+            "cruise speed (m/s)",
+            "sweep variable",
+            "sweep lower bound",
+            "sweep upper bound",
+            "sweep points",
+            "threat pos x (m)",
+            "threat pos y (m)",
+            "threat vel x (m/s)",
+            "threat vel y (m/s)",
+            "interceptor pos x (m)",
+            "interceptor pos y (m)",
+            "interceptor max speed (m/s)",
+            "sensor range (m)",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Captions match exactly what the form draws. Fail-loud
+    /// on an unknown caption / wrong type (the bridge posts a `warn` note); no
+    /// field is written on error and nothing panics. The two enum captions
+    /// (`configuration`, `sweep variable`) read [`AgentValue::as_str`]; the
+    /// `rotor count` / `sweep points` integer fields read [`AgentValue::as_i64`];
+    /// every other caption is an `f64` drag value.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        let p = &mut self.params;
+        let c = &mut p.counter;
+        match name {
+            // -- Airframe enum + geometry --
+            "configuration" => p.config = parse_uas_config(value.as_str()?)?,
+            "all-up mass (kg)" => p.all_up_mass_kg = value.as_f64()?,
+            "rotor count" => {
+                let n = value.as_i64()?;
+                if !(1..=32).contains(&n) {
+                    return Err(format!("rotor count must be in 1..=32, got {n}"));
+                }
+                p.rotor_count = n as u32;
+            }
+            "disk area (m^2)" => p.disk_area_m2 = value.as_f64()?,
+            "figure of merit" => p.figure_of_merit = value.as_f64()?,
+            "cruise power factor" => p.cruise_power_factor = value.as_f64()?,
+            "max thrust/weight" => p.max_thrust_to_weight = value.as_f64()?,
+            "wing area (m^2)" => p.wing_area_m2 = value.as_f64()?,
+            "aspect ratio" => p.aspect_ratio = value.as_f64()?,
+            "CL max" => p.cl_max = value.as_f64()?,
+            "CD0" => p.cd0 = value.as_f64()?,
+            "Oswald e" => p.oswald_efficiency = value.as_f64()?,
+            // -- Battery / payload / drivetrain --
+            "battery (Wh)" => p.battery_wh = value.as_f64()?,
+            "usable fraction" => p.usable_fraction = value.as_f64()?,
+            "payload (kg)" => p.payload_kg = value.as_f64()?,
+            "drivetrain eff." => p.drivetrain_efficiency = value.as_f64()?,
+            "air density (kg/m^3)" => p.air_density = value.as_f64()?,
+            "cruise speed (m/s)" => p.cruise_speed_m_s = value.as_f64()?,
+            // -- Trade sweep --
+            "sweep variable" => p.sweep_var = parse_sweep_var(value.as_str()?)?,
+            "sweep lower bound" => p.sweep_lo = value.as_f64()?,
+            "sweep upper bound" => p.sweep_hi = value.as_f64()?,
+            "sweep points" => {
+                let n = value.as_i64()?;
+                if !(2..=200).contains(&n) {
+                    return Err(format!("sweep points must be in 2..=200, got {n}"));
+                }
+                p.sweep_points = n as usize;
+            }
+            // -- Counter-UAS (defensive intercept geometry) --
+            "threat pos x (m)" => c.threat_pos_xy[0] = value.as_f64()?,
+            "threat pos y (m)" => c.threat_pos_xy[1] = value.as_f64()?,
+            "threat vel x (m/s)" => c.threat_vel_xy[0] = value.as_f64()?,
+            "threat vel y (m/s)" => c.threat_vel_xy[1] = value.as_f64()?,
+            "interceptor pos x (m)" => c.interceptor_pos_xy[0] = value.as_f64()?,
+            "interceptor pos y (m)" => c.interceptor_pos_xy[1] = value.as_f64()?,
+            "interceptor max speed (m/s)" => c.interceptor_max_speed = value.as_f64()?,
+            "sensor range (m)" => c.sensor_range_m = value.as_f64()?,
+            other => return Err(format!("unknown UAS control: {other:?}")),
+        }
+        Ok(())
+    }
+
     /// Run the full UAS pipeline: build + validate the vehicle, compute its
     /// integrated performance, run the one-parameter trade sweep to a Pareto
     /// front, and solve the defensive counter-UAS intercept geometry +

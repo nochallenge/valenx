@@ -308,6 +308,87 @@ pub struct MissionSimWorkbenchState {
 }
 
 impl MissionSimWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`
+    /// so an agent can discover the name space. Order follows the form.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "blue count",
+            "blue x (m)",
+            "blue spacing (m)",
+            "blue speed (m/s)",
+            "blue heading (deg)",
+            "red count",
+            "red standoff (m)",
+            "red spacing (m)",
+            "red speed (m/s)",
+            "red heading (deg)",
+            "sensor range (m)",
+            "engagement range (m)",
+            "Pk (0..1)",
+            "stop time (s)",
+            "tick dt (s)",
+            "seed",
+            "force A0",
+            "force B0",
+            "rate a",
+            "rate b",
+            "Lanchester steps",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Captions match exactly what the form draws. Fail-loud
+    /// on an unknown caption / wrong type (the bridge posts a `warn` note); no
+    /// field is written on error and nothing panics. The count fields
+    /// (`blue count` / `red count`, `Lanchester steps`) and `seed` read
+    /// [`AgentValue::as_i64`]; every other caption is an `f64` drag value.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        let p = &mut self.params;
+        match name {
+            // -- Blue force --
+            "blue count" => p.blue_count = parse_count(value, "blue count", 0, 64)? as u32,
+            "blue x (m)" => p.blue_x_m = value.as_f64()?,
+            "blue spacing (m)" => p.blue_spacing_m = value.as_f64()?,
+            "blue speed (m/s)" => p.blue_speed_m_s = value.as_f64()?,
+            "blue heading (deg)" => p.blue_heading_deg = value.as_f64()?,
+            // -- Red force --
+            "red count" => p.red_count = parse_count(value, "red count", 0, 64)? as u32,
+            "red standoff (m)" => p.red_standoff_m = value.as_f64()?,
+            "red spacing (m)" => p.red_spacing_m = value.as_f64()?,
+            "red speed (m/s)" => p.red_speed_m_s = value.as_f64()?,
+            "red heading (deg)" => p.red_heading_deg = value.as_f64()?,
+            // -- Sensing & engagement --
+            "sensor range (m)" => p.sensor_range_m = value.as_f64()?,
+            "engagement range (m)" => p.engagement_range_m = value.as_f64()?,
+            "Pk (0..1)" => p.pk = value.as_f64()?,
+            // -- Run parameters --
+            "stop time (s)" => p.stop_time_s = value.as_f64()?,
+            "tick dt (s)" => p.tick_dt_s = value.as_f64()?,
+            "seed" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("seed must be >= 0, got {n}"));
+                }
+                p.seed = n as u64;
+            }
+            // -- Lanchester aggregate --
+            "force A0" => p.lanchester_a0 = value.as_f64()?,
+            "force B0" => p.lanchester_b0 = value.as_f64()?,
+            "rate a" => p.lanchester_a_rate = value.as_f64()?,
+            "rate b" => p.lanchester_b_rate = value.as_f64()?,
+            "Lanchester steps" => {
+                p.lanchester_steps = parse_count(value, "Lanchester steps", 1, 5000)? as usize;
+            }
+            other => return Err(format!("unknown mission-sim control: {other:?}")),
+        }
+        Ok(())
+    }
+
     /// Run the full mission-sim pipeline: build + validate the demo entities, run
     /// the [`Scenario`] to the stop time (timeline + final state + metrics),
     /// sample the entity tracks for the plan view, and integrate the Lanchester
@@ -719,6 +800,24 @@ fn count_row(ui: &mut egui::Ui, caption: &str, value: &mut u32, hint: &str) {
         .labelled_by(lbl.id)
         .on_hover_text(hint);
     ui.end_row();
+}
+
+/// Read an [`crate::agent_commands::AgentValue`] as an integer count for a named
+/// control and validate it against `[lo, hi]` (inclusive), the same bounds the
+/// matching `DragValue` enforces in the UI. Fail-loud so an out-of-range count
+/// becomes a `warn` note rather than silently clamping. Shared by the count /
+/// step captions in [`MissionSimWorkbenchState::agent_set`].
+fn parse_count(
+    value: &crate::agent_commands::AgentValue,
+    caption: &str,
+    lo: i64,
+    hi: i64,
+) -> Result<i64, String> {
+    let n = value.as_i64()?;
+    if !(lo..=hi).contains(&n) {
+        return Err(format!("{caption} must be in {lo}..={hi}, got {n}"));
+    }
+    Ok(n)
 }
 
 /// Run the pipeline and fold the result (or error) into the workbench status.
