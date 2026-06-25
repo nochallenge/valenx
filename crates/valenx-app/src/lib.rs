@@ -86,6 +86,7 @@ pub mod columnsteel_workbench;
 pub mod combustion_workbench;
 pub mod commands;
 pub mod conveyor_workbench;
+pub mod cosim_workbench;
 #[cfg(test)]
 mod coverage_ui_tests;
 pub mod creep_workbench;
@@ -2031,6 +2032,19 @@ pub struct ValenxApp {
     /// recovery: recovered sparse cloud + camera poses + reprojection error over
     /// the in-process `valenx-photogrammetry` mapper).
     pub photogrammetry: crate::photogrammetry_workbench::PhotogrammetryWorkbenchState,
+
+    /// Whether the right-side Co-Simulation (FMI / HELICS) workbench panel is
+    /// visible. Defaults to `false`; toggled from the View menu or opened by
+    /// the agent bridge under the id `"cosim"` (aliases `"co-simulation"` /
+    /// `"fmi"`). Wraps `valenx-adapter-fmi` (the in-house native co-sim master
+    /// — Jacobi / Gauss-Seidel over a Subsystem graph — plus a strongly-coupled
+    /// fixed-point implicit coupler). See [`crate::cosim_workbench`].
+    pub show_cosim_workbench: bool,
+    /// Form + result state for the Co-Simulation workbench (two coupled
+    /// mass-spring-dampers exchanged through the in-process valenx-adapter-fmi
+    /// coordinator: exchanged-signal history + coupling iterations + error vs a
+    /// monolithic reference).
+    pub cosim: crate::cosim_workbench::CosimWorkbenchState,
 
     /// Whether the right-side Autonomy V&V workbench panel is visible. Defaults
     /// to `false`; toggled from the View menu or opened by the agent bridge

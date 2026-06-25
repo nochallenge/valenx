@@ -7805,6 +7805,7 @@ dependencies = [
  "valenx-adapter-eternafold",
  "valenx-adapter-fasttree",
  "valenx-adapter-fiji",
+ "valenx-adapter-fmi",
  "valenx-adapter-foldseek",
  "valenx-adapter-forecast",
  "valenx-adapter-freecad",
