@@ -56,8 +56,8 @@
 use eframe::egui;
 use nalgebra::Vector3;
 use valenx_mission_sim::{
-    lanchester_square_step, survivors_on, Entity, Event, ForceState, Mover, Scenario,
-    ScenarioResult, Side,
+    lanchester_square_step, monte_carlo, survivors_on, Entity, Event, ForceState, Mover,
+    OutcomeStats, Scenario, ScenarioResult, Side,
 };
 
 use crate::ValenxApp;
@@ -134,6 +134,17 @@ pub struct MissionSimParams {
     pub lanchester_b_rate: f64,
     /// Number of integration / plot sub-steps for the Lanchester curve (>= 1).
     pub lanchester_steps: usize,
+
+    // -- Monte-Carlo engagement analysis --
+    /// Number of Monte-Carlo replications of the constructive scenario (>= 1).
+    /// Each replication is the SAME abstract scenario with a fresh seeded
+    /// engagement stream; the spread of outcomes is pure statistics over the
+    /// existing `Pk` draw (no new lethality / targeting).
+    pub mc_runs: usize,
+    /// Base seed for the Monte-Carlo ensemble. The per-run seeds are derived
+    /// deterministically from this, so the same base seed replays an identical
+    /// ensemble (and identical statistics).
+    pub mc_seed: u64,
 }
 
 impl Default for MissionSimParams {
@@ -160,6 +171,8 @@ impl Default for MissionSimParams {
             lanchester_a_rate: 0.05,
             lanchester_b_rate: 0.03,
             lanchester_steps: 200,
+            mc_runs: 500,
+            mc_seed: 0xC0FFEE,
         }
     }
 }
@@ -290,6 +303,9 @@ pub struct MissionSimResult {
     pub engagement_count: usize,
     /// Lanchester `A(t)` / `B(t)` curve samples.
     pub lanchester: Vec<LanchesterPoint>,
+    /// Monte-Carlo engagement statistics, present once a Monte-Carlo ensemble has
+    /// been run (the single-run pipeline leaves this `None`).
+    pub mc_stats: Option<OutcomeStats>,
 }
 
 // ---------------------------------------------------------------------------
@@ -334,6 +350,8 @@ impl MissionSimWorkbenchState {
             "rate a",
             "rate b",
             "Lanchester steps",
+            "Monte-Carlo runs N",
+            "Monte-Carlo seed",
         ]
     }
 
@@ -384,6 +402,17 @@ impl MissionSimWorkbenchState {
             "Lanchester steps" => {
                 p.lanchester_steps = parse_count(value, "Lanchester steps", 1, 5000)? as usize;
             }
+            // -- Monte-Carlo engagement analysis --
+            "Monte-Carlo runs N" => {
+                p.mc_runs = parse_count(value, "Monte-Carlo runs N", 1, 1_000_000)? as usize;
+            }
+            "Monte-Carlo seed" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("Monte-Carlo seed must be >= 0, got {n}"));
+                }
+                p.mc_seed = n as u64;
+            }
             other => return Err(format!("unknown mission-sim control: {other:?}")),
         }
         Ok(())
@@ -393,15 +422,24 @@ impl MissionSimWorkbenchState {
     /// [`crate::agent_commands`]). This workbench keeps its result as a structured
     /// [`MissionSimResult`] and renders a one-line `status` summary (a `✔ …` line
     /// on success, a `⚠ …` line on error) — that same `status` string is returned
-    /// here. `None` when it is empty, i.e. the pipeline has not been run yet.
-    /// Read-only — lets an agent read the answer back after driving a run,
-    /// closing the live-driving loop.
+    /// here, with the **Monte-Carlo summary** (P(blue prevails) and the mean blue
+    /// survivors ± 95% CI) appended once a Monte-Carlo ensemble has been run.
+    /// `None` when nothing has run yet. Read-only — lets an agent read the answer
+    /// back after driving a run, closing the live-driving loop.
     pub fn agent_readout(&self) -> Option<String> {
         if self.status.is_empty() {
-            None
-        } else {
-            Some(self.status.clone())
+            return None;
         }
+        let mut out = self.status.clone();
+        if let Some(stats) = self.result.as_ref().and_then(|r| r.mc_stats.as_ref()) {
+            let bs = &stats.blue_survivors;
+            out.push_str(&format!(
+                " \u{00B7} MC[{} runs]: P(blue prevails) {:.3} \u{00B7} mean blue survivors {:.2} \
+                 (95% CI {:.2}\u{2013}{:.2})",
+                stats.runs, stats.p_blue_prevails, bs.mean, bs.ci95_lo, bs.ci95_hi
+            ));
+        }
+        Some(out)
     }
 
     /// Run the full mission-sim pipeline: build + validate the demo entities, run
@@ -455,7 +493,38 @@ impl MissionSimWorkbenchState {
             time_to_first_detection_s: res.metrics.time_to_first_detection_s,
             engagement_count,
             lanchester,
+            mc_stats: None,
         })
+    }
+
+    /// Run the **Monte-Carlo engagement analysis**: the single-run pipeline (for
+    /// the plan view + Lanchester curve), then `mc_runs` replications of the
+    /// *same* abstract scenario via `valenx-mission-sim`'s
+    /// [`monte_carlo`], aggregated into an [`OutcomeStats`] (which side prevails,
+    /// survivor spreads, exchange ratio, and a blue-survivor histogram).
+    ///
+    /// This adds **no** new lethality / targeting — it is pure statistics over the
+    /// existing abstract `Pk` draw. Every failure is returned as `Err(String)`
+    /// (no panics): a non-positive `mc_runs`, or any degenerate scenario
+    /// parameter, surfaces `valenx-mission-sim`'s own error verbatim.
+    pub fn run_monte_carlo(&self) -> Result<MissionSimResult, String> {
+        let p = &self.params;
+        if p.mc_runs == 0 {
+            return Err("Monte-Carlo runs must be >= 1".to_string());
+        }
+
+        // Base single run populates the plan view + Lanchester curve as usual.
+        let mut base = self.run()?;
+
+        // Build the same scenario the single run used, re-seeded for the
+        // ensemble, and sample it mc_runs times.
+        let entities = p.build_entities()?;
+        let scenario = Scenario::new(entities, p.stop_time_s, p.tick_dt_s, p.mc_seed)
+            .map_err(|e| e.to_string())?;
+        let stats = monte_carlo(&scenario, p.mc_runs).map_err(|e| e.to_string())?;
+
+        base.mc_stats = Some(stats);
+        Ok(base)
     }
 
     /// Integrate the Lanchester square-law ODE in `lanchester_steps` equal RK4
@@ -585,6 +654,7 @@ fn missionsim_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
     ui.separator();
 
     let mut do_run = false;
+    let mut do_run_mc = false;
 
     {
         let s = &mut app.missionsim;
@@ -759,6 +829,45 @@ fn missionsim_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 ui.end_row();
             });
 
+        // --- Monte-Carlo engagement analysis -------------------------------
+        ui.add_space(4.0);
+        ui.label(egui::RichText::new("Monte-Carlo engagement analysis").strong());
+        ui.label(
+            egui::RichText::new(
+                "Replicate the SAME abstract scenario N times with fresh seeded engagement \
+                 streams and aggregate the spread of outcomes. Pure statistics over the Pk \
+                 input \u{2014} no new lethality, targeting, or kill chain.",
+            )
+            .weak()
+            .small(),
+        );
+        egui::Grid::new("missionsim_montecarlo_params")
+            .num_columns(2)
+            .striped(true)
+            .show(ui, |ui| {
+                let lbl = ui.label("Monte-Carlo runs N");
+                ui.add(
+                    egui::DragValue::new(&mut p.mc_runs)
+                        .speed(10)
+                        .range(1..=1_000_000),
+                )
+                .labelled_by(lbl.id)
+                .on_hover_text(
+                    "Number of replications N of the scenario. More runs tighten the \
+                     confidence intervals (Monte-Carlo error is O(1/sqrt(N))). Must be >= 1.",
+                );
+                ui.end_row();
+
+                let lbl = ui.label("Monte-Carlo seed");
+                ui.add(egui::DragValue::new(&mut p.mc_seed).speed(1.0))
+                    .labelled_by(lbl.id)
+                    .on_hover_text(
+                        "Base seed for the ensemble. The per-run seeds derive from it, so the \
+                         same base seed replays identical statistics.",
+                    );
+                ui.end_row();
+            });
+
         ui.add_space(6.0);
         ui.horizontal(|ui| {
             if ui
@@ -771,12 +880,25 @@ fn missionsim_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
             {
                 do_run = true;
             }
+            if ui
+                .button(egui::RichText::new("Run Monte-Carlo").strong())
+                .on_hover_text(
+                    "Run the single scenario (plan view + Lanchester) AND replicate it N times \
+                     to estimate P(blue prevails), survivor spreads, and the outcome histogram.",
+                )
+                .clicked()
+            {
+                do_run_mc = true;
+            }
         });
     }
 
     // --- Execute (outside borrow) -------------------------------------------
     if do_run {
         run_and_store(app);
+    }
+    if do_run_mc {
+        run_monte_carlo_and_store(app);
     }
 
     // --- Status line ---------------------------------------------------------
@@ -858,6 +980,42 @@ pub(crate) fn run_and_store(app: &mut ValenxApp) {
     }
 }
 
+/// Run the Monte-Carlo pipeline and fold the result (or error) into the workbench
+/// status. The status carries the single-run summary plus the Monte-Carlo
+/// headline (P(blue prevails) and mean blue survivors ± 95% CI). Factored out so
+/// the Run Monte-Carlo button (and tests) can share it.
+pub(crate) fn run_monte_carlo_and_store(app: &mut ValenxApp) {
+    let s = &mut app.missionsim;
+    match s.run_monte_carlo() {
+        Ok(res) => {
+            let mc = res
+                .mc_stats
+                .as_ref()
+                .map(|st| {
+                    let bs = &st.blue_survivors;
+                    format!(
+                        " \u{00B7} MC[{} runs] P(blue) {:.3} \u{00B7} mean blue {:.2} (95% CI {:.2}\u{2013}{:.2})",
+                        st.runs, st.p_blue_prevails, bs.mean, bs.ci95_lo, bs.ci95_hi
+                    )
+                })
+                .unwrap_or_default();
+            s.status = format!(
+                "\u{2714} survivors B/R {}/{} \u{00B7} {} detections \u{00B7} {} engagements{}",
+                res.survivors_blue,
+                res.survivors_red,
+                res.detection_count,
+                res.engagement_count,
+                mc
+            );
+            s.result = Some(res);
+        }
+        Err(e) => {
+            s.status = format!("\u{26A0} {e}");
+            s.result = None;
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // 2-D visualisation (plan view + Lanchester plot + metrics readout)
 // ---------------------------------------------------------------------------
@@ -879,6 +1037,11 @@ fn draw_missionsim_viz(s: &MissionSimWorkbenchState, ui: &mut egui::Ui) {
     draw_lanchester_plot(res, ui);
     ui.add_space(8.0);
     draw_metrics_readout(res, ui);
+    if let Some(stats) = &res.mc_stats {
+        ui.add_space(8.0);
+        ui.separator();
+        draw_monte_carlo_panel(stats, ui);
+    }
 }
 
 /// View (a): a top-down **plan view** — every entity's track over the run (blue /
@@ -1199,6 +1362,172 @@ fn draw_metrics_readout(res: &MissionSimResult, ui: &mut egui::Ui) {
         });
 }
 
+/// View (d): the **Monte-Carlo engagement-analysis** panel, drawn in the same
+/// viewport with the same painter idiom as the plan view / Lanchester plot. It
+/// shows three things over the `N`-run ensemble:
+///
+/// * a **P(blue prevails) gauge** — a horizontal bar filled to the win fraction;
+/// * the blue-survivor **histogram** — one bar per integer survivor count, bar
+///   height proportional to the number of runs landing in that bin; and
+/// * a **mean ± 95% CI readout** for blue / red survivors and the exchange ratio,
+///   plus the outcome probabilities.
+///
+/// Pure statistics over the abstract `Pk` draw — nothing here is a lethality,
+/// targeting, or kill-chain model.
+fn draw_monte_carlo_panel(stats: &OutcomeStats, ui: &mut egui::Ui) {
+    ui.label(egui::RichText::new("Monte-Carlo engagement analysis").strong());
+    ui.label(
+        egui::RichText::new(format!(
+            "{} replications \u{00B7} green gauge = P(blue prevails) \u{00B7} bars = blue-survivor \
+             histogram (abstract Pk statistics only)",
+            stats.runs
+        ))
+        .weak()
+        .small(),
+    );
+
+    // --- P(blue prevails) gauge ------------------------------------------
+    let available = ui.available_size();
+    let gauge_w = available.x.min(460.0);
+    let (grect, _) = ui.allocate_exact_size(egui::vec2(gauge_w, 26.0), egui::Sense::hover());
+    let gp = ui.painter_at(grect);
+    gp.rect_filled(grect, 3.0, egui::Color32::from_rgb(20, 28, 40));
+    let frac = stats.p_blue_prevails.clamp(0.0, 1.0) as f32;
+    let fill =
+        egui::Rect::from_min_size(grect.min, egui::vec2(grect.width() * frac, grect.height()));
+    gp.rect_filled(fill, 3.0, egui::Color32::from_rgb(90, 150, 240));
+    gp.text(
+        grect.center(),
+        egui::Align2::CENTER_CENTER,
+        format!("P(blue prevails) = {:.3}", stats.p_blue_prevails),
+        egui::FontId::monospace(12.0),
+        egui::Color32::WHITE,
+    );
+
+    // --- Blue-survivor histogram -----------------------------------------
+    ui.add_space(6.0);
+    let (rect, _) = ui.allocate_exact_size(
+        egui::vec2(available.x.min(460.0), 160.0),
+        egui::Sense::hover(),
+    );
+    let painter = ui.painter_at(rect);
+    painter.rect_filled(rect, 0.0, egui::Color32::from_rgb(12, 20, 30));
+
+    let hist = &stats.blue_survivor_histogram;
+    let max_count = hist.iter().copied().max().unwrap_or(0);
+    if hist.is_empty() || max_count == 0 {
+        painter.text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            "no histogram data",
+            egui::FontId::monospace(12.0),
+            egui::Color32::from_gray(120),
+        );
+    } else {
+        let margin = 26.0_f32;
+        let inner = rect.shrink(margin);
+        // Baseline axis.
+        painter.line_segment(
+            [
+                egui::pos2(inner.left(), inner.bottom()),
+                egui::pos2(inner.right(), inner.bottom()),
+            ],
+            egui::Stroke::new(1.0, egui::Color32::from_gray(70)),
+        );
+        let n_bins = hist.len();
+        let slot_w = inner.width() / n_bins as f32;
+        let bar_w = (slot_w * 0.7).max(1.0);
+        let bar_col = egui::Color32::from_rgb(90, 150, 240);
+        for (k, &count) in hist.iter().enumerate() {
+            let h = (count as f32 / max_count as f32) * inner.height();
+            let cx = inner.left() + slot_w * (k as f32 + 0.5);
+            let bar = egui::Rect::from_min_max(
+                egui::pos2(cx - bar_w / 2.0, inner.bottom() - h),
+                egui::pos2(cx + bar_w / 2.0, inner.bottom()),
+            );
+            painter.rect_filled(bar, 0.0, bar_col);
+            // Bin label (the survivor count) under the axis.
+            painter.text(
+                egui::pos2(cx, inner.bottom() + 2.0),
+                egui::Align2::CENTER_TOP,
+                format!("{k}"),
+                egui::FontId::monospace(10.0),
+                egui::Color32::from_gray(150),
+            );
+            // Count above non-empty bars.
+            if count > 0 {
+                painter.text(
+                    egui::pos2(cx, inner.bottom() - h - 2.0),
+                    egui::Align2::CENTER_BOTTOM,
+                    format!("{count}"),
+                    egui::FontId::monospace(9.0),
+                    egui::Color32::from_gray(180),
+                );
+            }
+        }
+        // Axis captions.
+        painter.text(
+            egui::pos2(inner.center().x, rect.bottom() - 1.0),
+            egui::Align2::CENTER_BOTTOM,
+            "blue survivors",
+            egui::FontId::monospace(10.0),
+            egui::Color32::from_gray(150),
+        );
+        painter.text(
+            egui::pos2(rect.left() + 2.0, inner.top()),
+            egui::Align2::LEFT_TOP,
+            "runs",
+            egui::FontId::monospace(10.0),
+            egui::Color32::from_gray(150),
+        );
+    }
+
+    // --- Mean ± CI readout ------------------------------------------------
+    ui.add_space(4.0);
+    egui::Grid::new("missionsim_mc_grid")
+        .num_columns(2)
+        .striped(true)
+        .show(ui, |ui| {
+            let row = |ui: &mut egui::Ui, k: &str, v: String| {
+                ui.label(k);
+                ui.label(egui::RichText::new(v).monospace());
+                ui.end_row();
+            };
+            row(
+                ui,
+                "P(blue prevails)",
+                format!("{:.3}", stats.p_blue_prevails),
+            );
+            row(
+                ui,
+                "P(red prevails)",
+                format!("{:.3}", stats.p_red_prevails),
+            );
+            row(ui, "P(draw)", format!("{:.3}", stats.p_draw));
+            let fmt = |s: &valenx_mission_sim::SummaryStat| {
+                format!(
+                    "{:.3} \u{00B1} {:.3} (95% CI {:.3}\u{2013}{:.3})",
+                    s.mean, s.std, s.ci95_lo, s.ci95_hi
+                )
+            };
+            row(
+                ui,
+                "blue survivors (mean\u{00B1}sd)",
+                fmt(&stats.blue_survivors),
+            );
+            row(
+                ui,
+                "red survivors (mean\u{00B1}sd)",
+                fmt(&stats.red_survivors),
+            );
+            row(
+                ui,
+                "exchange ratio (mean\u{00B1}sd)",
+                fmt(&stats.exchange_ratio),
+            );
+        });
+}
+
 // ---------------------------------------------------------------------------
 // Tests (unit + headless_ui_tests, mirroring uas_workbench)
 // ---------------------------------------------------------------------------
@@ -1330,6 +1659,129 @@ mod tests {
             "zero Lanchester steps must return Err, not panic"
         );
     }
+
+    // ---- Monte-Carlo engagement analysis ----
+
+    #[test]
+    fn monte_carlo_populates_stats_and_single_run_views() {
+        // run_monte_carlo must populate the MC stats AND keep the single-run plan
+        // view + Lanchester curve (so the viewport still draws them).
+        let s = MissionSimWorkbenchState::default();
+        let res = s.run_monte_carlo().expect("monte-carlo run should succeed");
+        let stats = res.mc_stats.expect("MC stats present");
+        assert_eq!(stats.runs, s.params.mc_runs);
+        assert_eq!(res.tracks.len(), 6, "single-run plan view still populated");
+        assert_eq!(res.lanchester.len(), s.params.lanchester_steps + 1);
+        // Histogram bins sum to N (one bin per possible blue-survivor count).
+        assert_eq!(
+            stats.blue_survivor_histogram.iter().sum::<usize>(),
+            s.params.mc_runs,
+            "histogram bin counts must sum to N"
+        );
+        // 3 blue entities -> survivors in 0..=3 -> 4 bins.
+        assert_eq!(stats.blue_survivor_histogram.len(), 4);
+        // Probabilities partition unity.
+        let total = stats.p_blue_prevails + stats.p_red_prevails + stats.p_draw;
+        assert!(
+            (total - 1.0).abs() < 1e-12,
+            "outcome probabilities sum to 1"
+        );
+    }
+
+    #[test]
+    fn monte_carlo_is_reproducible_for_a_fixed_seed() {
+        // Same mc_seed -> bit-identical statistics.
+        let s = MissionSimWorkbenchState::default();
+        let a = s.run_monte_carlo().expect("run a").mc_stats.unwrap();
+        let b = s.run_monte_carlo().expect("run b").mc_stats.unwrap();
+        assert_eq!(
+            a.p_blue_prevails, b.p_blue_prevails,
+            "fixed seed reproduces P(blue prevails)"
+        );
+        assert_eq!(
+            a.blue_survivors.mean, b.blue_survivors.mean,
+            "fixed seed reproduces mean blue survivors"
+        );
+        assert_eq!(a.blue_survivor_histogram, b.blue_survivor_histogram);
+    }
+
+    #[test]
+    fn monte_carlo_pk_zero_blue_never_loses_an_entity() {
+        // Pk = 0: blue never removes a red AND red has no engagement of its own,
+        // so every run ends 3 blue vs 3 red -> every run is a draw and all 500
+        // runs land in the "3 blue survivors" histogram bin.
+        let mut s = MissionSimWorkbenchState::default();
+        s.params.pk = 0.0;
+        let stats = s.run_monte_carlo().expect("run").mc_stats.unwrap();
+        assert_eq!(stats.p_draw, 1.0, "Pk=0 symmetric survival -> all draws");
+        assert_eq!(stats.p_blue_prevails, 0.0);
+        assert!((stats.blue_survivors.mean - 3.0).abs() < 1e-12);
+        assert_eq!(
+            stats.blue_survivors.std, 0.0,
+            "deterministic -> zero spread"
+        );
+        assert_eq!(stats.blue_survivor_histogram[3], s.params.mc_runs);
+    }
+
+    #[test]
+    fn monte_carlo_zero_runs_returns_err() {
+        let mut s = MissionSimWorkbenchState::default();
+        s.params.mc_runs = 0;
+        assert!(
+            s.run_monte_carlo().is_err(),
+            "zero Monte-Carlo runs must return Err, not panic"
+        );
+    }
+
+    #[test]
+    fn monte_carlo_degenerate_scenario_returns_err() {
+        // A degenerate single-run parameter must fail the whole MC loud, not panic.
+        let mut s = MissionSimWorkbenchState::default();
+        s.params.stop_time_s = 0.0;
+        assert!(s.run_monte_carlo().is_err(), "zero stop time -> Err");
+        s.params.stop_time_s = 40.0;
+        s.params.pk = 2.0;
+        assert!(s.run_monte_carlo().is_err(), "Pk > 1 -> Err");
+    }
+
+    #[test]
+    fn agent_readout_includes_mc_summary_after_monte_carlo() {
+        // After a Monte-Carlo run the agent readout must carry the MC headline so
+        // an agent can read P(blue prevails) + mean blue survivors back.
+        let mut s = MissionSimWorkbenchState::default();
+        let res = s.run_monte_carlo().expect("run");
+        s.status = "\u{2714} ok".to_string();
+        s.result = Some(res);
+        let readout = s.agent_readout().expect("readout present");
+        assert!(
+            readout.contains("P(blue prevails)"),
+            "MC readout must report P(blue prevails): {readout}"
+        );
+        assert!(
+            readout.contains("mean blue survivors"),
+            "MC readout must report mean blue survivors +/- CI: {readout}"
+        );
+    }
+
+    #[test]
+    fn agent_set_drives_monte_carlo_controls() {
+        use crate::agent_commands::AgentValue;
+        let mut s = MissionSimWorkbenchState::default();
+        s.agent_set("Monte-Carlo runs N", &AgentValue::Int(250))
+            .expect("set runs");
+        assert_eq!(s.params.mc_runs, 250);
+        s.agent_set("Monte-Carlo seed", &AgentValue::Int(123))
+            .expect("set seed");
+        assert_eq!(s.params.mc_seed, 123);
+        // Fail-loud on a bad value (no panic, field unchanged).
+        assert!(s
+            .agent_set("Monte-Carlo runs N", &AgentValue::Int(0))
+            .is_err());
+        assert_eq!(
+            s.params.mc_runs, 250,
+            "rejected set must not change the field"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -1383,6 +1835,29 @@ mod headless_ui_tests {
     }
 
     #[test]
+    fn workbench_draws_with_monte_carlo_panel_without_panic() {
+        // Exercise the Monte-Carlo viewport panel (gauge + histogram bars + CI
+        // readout) end-to-end through the accesskit draw path.
+        let mut app = ValenxApp::default();
+        app.show_missionsim_workbench = true;
+        app.missionsim.params.mc_runs = 64;
+        run_monte_carlo_and_store(&mut app);
+        assert!(
+            app.missionsim
+                .result
+                .as_ref()
+                .is_some_and(|r| r.mc_stats.is_some()),
+            "Monte-Carlo run should populate mc_stats"
+        );
+        assert!(
+            app.missionsim.status.contains("P(blue)"),
+            "status line should carry the MC headline: {}",
+            app.missionsim.status
+        );
+        let _ = draw_and_collect_nodes(&mut app);
+    }
+
+    #[test]
     fn workbench_draws_with_error_status_without_panic() {
         let mut app = ValenxApp::default();
         app.show_missionsim_workbench = true;
@@ -1415,10 +1890,10 @@ mod headless_ui_tests {
             .map(|(_, n)| n)
             .filter(|n| n.role() == Role::SpinButton)
             .collect();
-        // Many numeric controls across blue / red / sensing / run / Lanchester;
-        // a conservative lower bound that all are present and named.
+        // Many numeric controls across blue / red / sensing / run / Lanchester /
+        // Monte-Carlo; a conservative lower bound that all are present and named.
         assert!(
-            spin_buttons.len() >= 18,
+            spin_buttons.len() >= 20,
             "expected many numeric controls as spin buttons, got {}",
             spin_buttons.len()
         );
@@ -1452,6 +1927,8 @@ mod headless_ui_tests {
             "rate a",
             "rate b",
             "Lanchester steps",
+            "Monte-Carlo runs N",
+            "Monte-Carlo seed",
         ] {
             assert!(
                 has_named_node(&nodes, caption),
