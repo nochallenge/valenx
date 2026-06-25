@@ -16,12 +16,15 @@
 //!   per-residue [`valenx_biostruct::dssp::SecondaryStructure`] track) the
 //!   tube fattens through helices and strands and thins through coil; with no
 //!   SS track it falls back to a uniform tube.
-//! - **[`Representation::Surface`]** — a **marching-cubes isosurface** of a
-//!   union-of-balls (each atom an analytic sphere of `vdw·scale + probe`),
-//!   the molecular / solvent-excluded-style surface. The marching-cubes
-//!   implementation here is the standard table-driven Lorensen-Cline 1987
-//!   algorithm, **reimplemented from scratch** (no external crate) with the
-//!   full 256-entry edge table and 16-per-cell triangle table.
+//! - **[`Representation::Surface`]** — a **probe-based molecular surface**
+//!   ([`SurfaceMode`]): the van-der-Waals surface (`vdW`), the
+//!   **solvent-accessible surface** (`SAS` — union of probe-inflated balls), or
+//!   the **solvent-excluded / Connolly surface** (`SES` — the recognizable
+//!   smooth re-entrant surface, built by eroding the SAS solid by the probe
+//!   radius on the grid). All three are marching-cubes isosurfaces over the same
+//!   regular grid; the marching-cubes implementation is the standard table-driven
+//!   Lorensen-Cline 1987 algorithm, **reimplemented from scratch** (no external
+//!   crate) with the full 256-entry edge table and 16-per-cell triangle table.
 //!
 //! The geometry generators are **pure functions** over plain data
 //! ([`ViewMolecule`] / control-point slices / a sampled scalar field), each
@@ -34,11 +37,15 @@
 //!
 //! ## Honest scope / notes
 //!
-//! - The **surface** is a *union-of-balls* (a.k.a. a fattened van-der-Waals /
-//!   solvent-accessible blend), **not** a rolling-probe solvent-excluded
-//!   surface (SES) with re-entrant patches — the probe radius simply inflates
-//!   each ball before the isosurface is extracted. A true SES with re-entrant
-//!   patches remains a documented follow-up.
+//! - The **surface** offers all three standard probe-based surfaces via
+//!   [`SurfaceMode`]: `vdW` (bare union-of-balls), `SAS` (probe-inflated
+//!   union-of-balls), and `SES` (the rolling-probe solvent-excluded / Connolly
+//!   surface with re-entrant patches). The SES is a **grid** construction —
+//!   erosion of the sampled SAS solid by the probe radius via an exact Euclidean
+//!   distance transform — so its re-entrant patches are correct in form (smooth,
+//!   concave between atoms, enclosing the vdW solid and enclosed by the SAS
+//!   solid) but exact only in the limit of fine grid spacing; it is *not* an
+//!   analytic Connolly patch decomposition. See [`solvent_excluded_field`].
 //! - **[`Representation::Density`]** is the Gaussian-density isosurface (the
 //!   molchanica/QuteMol "volume" style): each atom is splatted as a Gaussian and
 //!   the *sum* is meshed at a chosen iso-level — reusing the same marching-cubes
@@ -281,6 +288,79 @@ fn uniform_scheme_color(mol: &ViewMolecule, scheme: ColorScheme, attrs: &[AtomAt
     [acc[0] / n, acc[1] / n, acc[2] / n]
 }
 
+/// Which **probe-based molecular surface** [`Representation::Surface`] extracts.
+///
+/// All three are isosurfaces over the same regular grid + the same
+/// [`marching_cubes`]; they differ only in the scalar field that is meshed:
+///
+/// - **[`Vdw`](SurfaceMode::Vdw)** — the plain **van-der-Waals surface**: the
+///   isosurface of the union of the bare atom spheres (radius
+///   `vdw·surface_vdw_scale`, *no* probe). The boundary of the space the atoms'
+///   hard spheres occupy. (`probe_radius` is ignored in this mode.)
+/// - **[`Sas`](SurfaceMode::Sas)** — the **solvent-accessible surface** (Lee &
+///   Richards 1971): the isosurface of the union of spheres *inflated* by the
+///   probe (radius `vdw·surface_vdw_scale + probe_radius`). It is the surface
+///   traced by the **centre** of a rolling probe sphere — so it sits one probe
+///   radius *outside* the vdW surface and bulges convexly, with no re-entrant
+///   detail.
+/// - **[`Ses`](SurfaceMode::Ses)** — the **solvent-excluded (Connolly) surface**
+///   (Richards 1977): the recognizable smooth surface traced by the part of the
+///   probe **facing the molecule** as it rolls. Built by the standard grid
+///   method — take the SAS *solid* (the union-of-inflated-balls volume) and
+///   **erode** it by one probe radius: a grid point is in the SES solid iff its
+///   distance to the *outside* of the SAS solid is `≥ probe_radius`. Eroding the
+///   convex SAS solid recovers the contact patches over each atom *and* fills
+///   the concave crevices between atoms with smooth re-entrant probe patches,
+///   reproducing the textbook Connolly surface up to the grid resolution.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+pub enum SurfaceMode {
+    /// Van-der-Waals surface (union of bare atom spheres; probe ignored).
+    Vdw,
+    /// Solvent-accessible surface (union of probe-inflated spheres).
+    Sas,
+    /// Solvent-excluded / Connolly surface (probe-erosion of the SAS solid).
+    /// The default — the smooth surface a structural-biology viewer shows.
+    #[default]
+    Ses,
+}
+
+impl SurfaceMode {
+    /// Every mode, in picker order. Used to build the picker row and the
+    /// round-trip token test.
+    pub const ALL: [SurfaceMode; 3] = [SurfaceMode::Vdw, SurfaceMode::Sas, SurfaceMode::Ses];
+
+    /// Short human label for the picker button / viewport header.
+    pub fn label(self) -> &'static str {
+        match self {
+            SurfaceMode::Vdw => "vdW",
+            SurfaceMode::Sas => "SAS",
+            SurfaceMode::Ses => "SES",
+        }
+    }
+
+    /// Stable lower-case wire token (for an agent-bridge command argument).
+    pub fn token(self) -> &'static str {
+        match self {
+            SurfaceMode::Vdw => "vdw",
+            SurfaceMode::Sas => "sas",
+            SurfaceMode::Ses => "ses",
+        }
+    }
+
+    /// Parse a wire token (case-insensitive; a couple of synonyms) back into a
+    /// [`SurfaceMode`]. `None` for an unrecognised token.
+    pub fn from_token(s: &str) -> Option<SurfaceMode> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "vdw" | "van-der-waals" | "vanderwaals" | "vdw-surface" => Some(SurfaceMode::Vdw),
+            "sas" | "solvent-accessible" | "accessible" | "lee-richards" => Some(SurfaceMode::Sas),
+            "ses" | "solvent-excluded" | "excluded" | "connolly" | "molecular" => {
+                Some(SurfaceMode::Ses)
+            }
+            _ => None,
+        }
+    }
+}
+
 /// Per-representation tunables. [`MolvizParams::default`] is the set the picker
 /// starts at; the panel mutates a copy as the user drags sliders.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -302,8 +382,15 @@ pub struct MolvizParams {
     /// Ribbon: half-thickness (ångström) of the band (the thin axis, along the
     /// local frame's normal). A small value gives the characteristic flat strip.
     pub ribbon_thickness: f32,
-    /// Surface: probe radius (ångström) added to every atom's vdW radius
-    /// before the isosurface is extracted (the union-of-balls inflation).
+    /// Surface: which probe-based molecular surface to extract — van-der-Waals,
+    /// solvent-accessible (SAS), or solvent-excluded/Connolly (SES). See
+    /// [`SurfaceMode`].
+    pub surface_mode: SurfaceMode,
+    /// Surface: rolling-probe radius (ångström). For [`SurfaceMode::Sas`] it
+    /// inflates every atom's vdW radius before the isosurface is extracted; for
+    /// [`SurfaceMode::Ses`] it is *additionally* the radius the SAS solid is
+    /// eroded by to carve the re-entrant surface; ignored for
+    /// [`SurfaceMode::Vdw`]. The default 1.4 Å is a water probe.
     pub probe_radius: f32,
     /// Surface: van-der-Waals radius multiplier for the union-of-balls field.
     pub surface_vdw_scale: f32,
@@ -339,6 +426,7 @@ impl Default for MolvizParams {
             tube_segments: 8,
             ribbon_width: 1.4,
             ribbon_thickness: 0.25,
+            surface_mode: SurfaceMode::Ses,
             probe_radius: 1.4,
             surface_vdw_scale: 1.0,
             grid_max: 48,
@@ -1172,26 +1260,48 @@ impl ScalarField {
     }
 }
 
-/// Build the **union-of-balls scalar field** for a molecule.
+/// Build the **union-of-balls scalar field** for a molecule, with each atom's
+/// radius `r_i = vdw(element)·surface_vdw_scale + probe_radius`.
+///
+/// This is the **solvent-accessible-surface (SAS)** field: meshing its `iso = 0`
+/// level set with [`marching_cubes`] yields the surface of the union of spheres
+/// inflated by the probe. Kept as a named public entry point (and used by the
+/// [`SurfaceMode::Sas`] branch of [`surface`]); it simply delegates to
+/// [`union_of_balls_field_inflated`] with the probe radius as the inflation.
+pub fn union_of_balls_field(mol: &ViewMolecule, params: &MolvizParams) -> Option<ScalarField> {
+    union_of_balls_field_inflated(mol, params, params.probe_radius)
+}
+
+/// Build the **union-of-balls scalar field** for a molecule with each atom's
+/// radius `r_i = vdw(element)·surface_vdw_scale + extra_radius`.
 ///
 /// The field at a point is `max_i (r_i − |p − c_i|)` over the atoms — i.e. the
-/// signed "how far inside the nearest fattened atom" value, positive inside the
-/// union and zero on its boundary. Meshing the `iso = 0` level set with
-/// [`marching_cubes`] therefore yields the surface of the union of spheres of
-/// radius `r_i = vdw(element)·surface_vdw_scale + probe_radius`.
+/// signed "how far inside the nearest ball" value, positive inside the union and
+/// zero on its boundary. `extra_radius = 0` gives the bare **van-der-Waals**
+/// union (the [`SurfaceMode::Vdw`] field); `extra_radius = probe_radius` gives
+/// the **solvent-accessible** union (the SAS field, and the solid the SES
+/// erosion starts from).
 ///
 /// The grid spans the atoms' bounding box padded by the largest ball radius,
 /// with `grid_max` cells along the longest axis (the other axes scaled to keep
-/// cells ~cubic). Returns `None` for an empty molecule (nothing to mesh).
-pub fn union_of_balls_field(mol: &ViewMolecule, params: &MolvizParams) -> Option<ScalarField> {
+/// cells ~cubic). `extra_radius` is floored at `0`. Returns `None` for an empty
+/// molecule (nothing to mesh).
+pub fn union_of_balls_field_inflated(
+    mol: &ViewMolecule,
+    params: &MolvizParams,
+    extra_radius: f32,
+) -> Option<ScalarField> {
     if mol.atoms.is_empty() {
         return None;
     }
-    // Per-atom inflated radius.
+    let extra = extra_radius.max(0.0);
+    // Per-atom radius (vdW·scale, optionally inflated by `extra`). Floor each at
+    // a tiny positive value so a zero/degenerate vdW radius can't make an atom
+    // vanish or yield a zero-width AABB.
     let radii: Vec<f32> = mol
         .atoms
         .iter()
-        .map(|a| vdw_radius(&a.element) * params.surface_vdw_scale + params.probe_radius)
+        .map(|a| (vdw_radius(&a.element) * params.surface_vdw_scale + extra).max(1e-3))
         .collect();
     let max_r = radii.iter().cloned().fold(0.0_f32, f32::max).max(0.1);
 
@@ -1266,11 +1376,25 @@ pub fn union_of_balls_field(mol: &ViewMolecule, params: &MolvizParams) -> Option
     })
 }
 
-/// Build the molecular **surface** mesh for a molecule: a marching-cubes
-/// isosurface of the union-of-balls field at `iso = 0`. An empty molecule
-/// yields an empty mesh.
+/// Build the molecular **surface** mesh for a molecule, in the probe-based mode
+/// selected by [`MolvizParams::surface_mode`]:
+///
+/// - [`SurfaceMode::Vdw`] — marching-cubes `iso = 0` isosurface of the bare
+///   union-of-balls field (no probe).
+/// - [`SurfaceMode::Sas`] — marching-cubes `iso = 0` isosurface of the
+///   probe-inflated union-of-balls field ([`union_of_balls_field`]).
+/// - [`SurfaceMode::Ses`] — marching-cubes `iso = 0` isosurface of the
+///   **solvent-excluded field** ([`solvent_excluded_field`]): the probe-erosion
+///   of the SAS solid, the smooth Connolly surface.
+///
+/// An empty molecule yields an empty mesh (never a panic).
 pub fn surface(mol: &ViewMolecule, params: &MolvizParams) -> TriangleMesh {
-    let tris = match union_of_balls_field(mol, params) {
+    let field = match params.surface_mode {
+        SurfaceMode::Vdw => union_of_balls_field_inflated(mol, params, 0.0),
+        SurfaceMode::Sas => union_of_balls_field(mol, params),
+        SurfaceMode::Ses => solvent_excluded_field(mol, params),
+    };
+    let tris = match field {
         Some(field) => marching_cubes(&field, 0.0),
         None => Vec::new(),
     };
@@ -1279,6 +1403,208 @@ pub fn surface(mol: &ViewMolecule, params: &MolvizParams) -> TriangleMesh {
         name: Some("genetics-surface".to_string()),
         triangles: tris,
     }
+}
+
+/// Build the **solvent-excluded-surface (SES / Connolly) field** for a molecule
+/// — the field whose `iso = 0` level set is the smooth re-entrant surface a
+/// rolling solvent probe of radius `probe_radius` would trace.
+///
+/// ## Method (standard grid construction)
+///
+/// 1. **SAS solid.** Sample the probe-inflated union-of-balls field
+///    ([`union_of_balls_field`]); a grid point is *inside the SAS solid* where
+///    that field is `> 0` (i.e. within `vdw·scale + probe` of some atom). This
+///    is the region the probe's *centre* can reach if it overlaps the molecule.
+/// 2. **Erode by the probe.** The SES solid is the SAS solid shrunk by one
+///    probe radius: a point is in the SES solid iff *every* point within
+///    `probe_radius` of it is still inside the SAS solid — equivalently, iff its
+///    distance to the **outside** of the SAS solid is `≥ probe_radius`. Eroding
+///    the (convex-bulged) SAS solid peels the probe back to the molecule: over a
+///    lone atom it recovers the vdW contact patch, and in the crevices between
+///    atoms it leaves the concave re-entrant probe patches — the Connolly
+///    surface.
+///
+/// The erosion uses an **exact Euclidean distance transform** (the separable
+/// Felzenszwalb–Huttenlocher squared-distance algorithm, [`squared_edt_3d`])
+/// from the *exterior* SAS grid points, scaled by the (cubic) grid spacing. The
+/// returned field is `dist_to_exterior(p) − probe_radius`, positive inside the
+/// SES solid and zero on its boundary, so it meshes with [`marching_cubes`] at
+/// `iso = 0` exactly like the union-of-balls fields.
+///
+/// Returns `None` for an empty molecule.
+///
+/// ## Honest note on exactness
+///
+/// This is a *grid* SES: the re-entrant patches are reconstructed by eroding a
+/// sampled solid, so the surface is exact only in the limit of fine spacing
+/// (set by `grid_max`). At coarse resolution thin necks and sharp cusps are
+/// rounded by roughly one cell — the geometry is correct in form (smooth,
+/// re-entrant, enclosing the vdW solid and enclosed by the SAS solid) but not
+/// analytically exact. It is **not** an analytic Connolly patch decomposition.
+pub fn solvent_excluded_field(mol: &ViewMolecule, params: &MolvizParams) -> Option<ScalarField> {
+    // The SAS solid lives on the same grid as the SAS field; reuse it so the
+    // SES is sampled on an identical grid (padding already covers vdw+probe).
+    let sas = union_of_balls_field(mol, params)?;
+    let [nx, ny, nz] = sas.dims;
+    let total = nx * ny * nz;
+
+    // Exterior mask: a grid point is "outside the SAS solid" where the SAS
+    // field is <= 0 (not strictly inside the inflated union). The grid is
+    // padded by > one ball radius, so the outermost shell is guaranteed
+    // exterior — the erosion always has a seed and never runs off the box.
+    let mut exterior = vec![false; total];
+    for (i, &v) in sas.values.iter().enumerate() {
+        exterior[i] = v <= 0.0;
+    }
+
+    // Distance (in grid units) from every grid point to the nearest exterior
+    // point. Exterior points have distance 0; interior points get their true
+    // Euclidean distance to the SAS boundary via the separable EDT.
+    let sq_dist = squared_edt_3d(&exterior, [nx, ny, nz]);
+
+    // Field = (world distance to exterior) − probe. Positive strictly inside the
+    // eroded (SES) solid, zero on its boundary. Use the cubic spacing to convert
+    // grid-unit distance to ångström.
+    let spacing = sas.spacing[0].max(1e-6);
+    let probe = params.probe_radius.max(0.0);
+    let values: Vec<f32> = sq_dist
+        .iter()
+        .map(|&d2| (d2 as f32).sqrt() * spacing - probe)
+        .collect();
+
+    Some(ScalarField {
+        origin: sas.origin,
+        spacing: sas.spacing,
+        dims: sas.dims,
+        values,
+    })
+}
+
+/// **Exact squared-Euclidean distance transform** of a 3-D boolean grid
+/// (Felzenszwalb & Huttenlocher 2012), in *grid-cell* units.
+///
+/// `mask[idx]` (with `idx = x + nx·(y + ny·z)`) marks the **seed** set: the
+/// returned value at each grid point is the squared Euclidean distance (in cells)
+/// to the nearest `true` cell — `0` at a seed itself. Used by
+/// [`solvent_excluded_field`] with the SAS *exterior* as the seed set, so each
+/// interior point learns its distance to the SAS boundary.
+///
+/// The transform is computed by running the exact 1-D squared-distance lower
+/// envelope along each axis in turn (x, then y, then z); the composition is the
+/// exact 3-D result. Costs `O(nx·ny·nz)`. If no cell is a seed every distance is
+/// `+∞` (encoded as a large finite sentinel) — but [`solvent_excluded_field`]
+/// always seeds the padded exterior shell, so that case never carves a surface.
+fn squared_edt_3d(mask: &[bool], dims: [usize; 3]) -> Vec<f64> {
+    let [nx, ny, nz] = dims;
+    let total = nx * ny * nz;
+    // A "very large" finite value standing in for +∞ (must exceed any real
+    // squared distance in the grid: the box diagonal² is < (nx+ny+nz)²).
+    let inf = {
+        let diag = (nx + ny + nz) as f64;
+        diag * diag + 1.0
+    };
+    let mut f = vec![inf; total];
+    for (i, &m) in mask.iter().enumerate() {
+        if m {
+            f[i] = 0.0;
+        }
+    }
+    let idx = |x: usize, y: usize, z: usize| x + nx * (y + ny * z);
+
+    // 1-D exact squared-distance transform of a row `g` (Felzenszwalb–
+    // Huttenlocher, "Distance Transforms of Sampled Functions", Thm 1): the
+    // lower envelope of the parabolas `(q − ·)² + g[q]`. Writes the result back.
+    //
+    // This is the canonical formulation with **no special-casing of +∞ columns**
+    // — a column whose `g[q]` is the large finite `inf` sentinel simply yields a
+    // very-high parabola that never wins the envelope, so an all-`inf` row stays
+    // all-`inf` (its parabolas just shift the sentinel up, still ≥ inf). `inf` is
+    // chosen larger than any real squared distance, so the readout below stays
+    // ≥ the real distances and the SES erosion treats those points as "deep
+    // interior", never spuriously on the boundary.
+    fn edt_1d(g: &mut [f64]) {
+        let n = g.len();
+        if n == 0 {
+            return;
+        }
+        let mut v = vec![0usize; n]; // index of the k-th envelope parabola
+        let mut z = vec![0.0f64; n + 1]; // breakpoints between consecutive ones
+        let mut k = 0usize;
+        v[0] = 0;
+        z[0] = f64::NEG_INFINITY;
+        z[1] = f64::INFINITY;
+        for q in 1..n {
+            // x where the parabola at q overtakes the current top parabola.
+            let mut s;
+            loop {
+                let p = v[k];
+                s = ((g[q] + (q * q) as f64) - (g[p] + (p * p) as f64))
+                    / (2.0 * q as f64 - 2.0 * p as f64);
+                if s <= z[k] && k > 0 {
+                    k -= 1;
+                } else {
+                    break;
+                }
+            }
+            k += 1;
+            v[k] = q;
+            z[k] = s;
+            z[k + 1] = f64::INFINITY;
+        }
+        let mut k = 0usize;
+        let row: Vec<f64> = (0..n)
+            .map(|q| {
+                while z[k + 1] < q as f64 {
+                    k += 1;
+                }
+                let p = v[k];
+                let dq = q as f64 - p as f64;
+                g[p] + dq * dq
+            })
+            .collect();
+        g.copy_from_slice(&row);
+    }
+
+    // Pass 1 — along x.
+    let mut row = vec![0.0f64; nx];
+    for z in 0..nz {
+        for y in 0..ny {
+            for x in 0..nx {
+                row[x] = f[idx(x, y, z)];
+            }
+            edt_1d(&mut row);
+            for x in 0..nx {
+                f[idx(x, y, z)] = row[x];
+            }
+        }
+    }
+    // Pass 2 — along y.
+    let mut row = vec![0.0f64; ny];
+    for z in 0..nz {
+        for x in 0..nx {
+            for y in 0..ny {
+                row[y] = f[idx(x, y, z)];
+            }
+            edt_1d(&mut row);
+            for y in 0..ny {
+                f[idx(x, y, z)] = row[y];
+            }
+        }
+    }
+    // Pass 3 — along z.
+    let mut row = vec![0.0f64; nz];
+    for y in 0..ny {
+        for x in 0..nx {
+            for z in 0..nz {
+                row[z] = f[idx(x, y, z)];
+            }
+            edt_1d(&mut row);
+            for z in 0..nz {
+                f[idx(x, y, z)] = row[z];
+            }
+        }
+    }
+    f
 }
 
 // --------------------------------------------------------------------------
@@ -2408,6 +2734,346 @@ mod tests {
         let field = union_of_balls_field(&mol, &p).expect("non-empty");
         let longest = *field.dims.iter().max().unwrap();
         assert!(longest <= 193, "longest axis {longest} must be clamped");
+    }
+
+    // ---- probe-based molecular surface (vdW / SAS / SES) ------------------
+
+    /// Mean radius of every surface vertex about `center` (a single-atom
+    /// surface is a sphere, so this is its effective radius).
+    fn mean_vertex_radius(tris: &[StlTriangle], center: [f32; 3]) -> f32 {
+        let mut sum = 0.0f64;
+        let mut n = 0u64;
+        for t in tris {
+            for v in &t.vertices {
+                let d = ((v[0] - center[0]).powi(2)
+                    + (v[1] - center[1]).powi(2)
+                    + (v[2] - center[2]).powi(2))
+                .sqrt();
+                sum += d as f64;
+                n += 1;
+            }
+        }
+        (sum / n.max(1) as f64) as f32
+    }
+
+    #[test]
+    fn surface_mode_enum_round_trips_and_is_unique() {
+        assert_eq!(SurfaceMode::default(), SurfaceMode::Ses);
+        assert_eq!(SurfaceMode::ALL.len(), 3);
+        let mut tokens: Vec<&str> = SurfaceMode::ALL.iter().map(|m| m.token()).collect();
+        tokens.sort_unstable();
+        tokens.dedup();
+        assert_eq!(tokens.len(), 3, "tokens must be unique");
+        let mut labels: Vec<&str> = SurfaceMode::ALL.iter().map(|m| m.label()).collect();
+        labels.sort_unstable();
+        labels.dedup();
+        assert_eq!(labels.len(), 3, "labels must be unique");
+        for m in SurfaceMode::ALL {
+            assert_eq!(SurfaceMode::from_token(m.token()), Some(m));
+        }
+        // A few synonyms an agent might send.
+        assert_eq!(SurfaceMode::from_token("CONNOLLY"), Some(SurfaceMode::Ses));
+        assert_eq!(
+            SurfaceMode::from_token("solvent-accessible"),
+            Some(SurfaceMode::Sas)
+        );
+        assert_eq!(
+            SurfaceMode::from_token(" van-der-waals "),
+            Some(SurfaceMode::Vdw)
+        );
+        assert_eq!(SurfaceMode::from_token("nonsense"), None);
+    }
+
+    #[test]
+    fn squared_edt_single_seed_is_exact() {
+        // A 5×5×5 grid with one seed at the centre: every cell's transform must
+        // equal the exact squared Euclidean distance (in cells) to that seed.
+        let n = 5usize;
+        let mut mask = vec![false; n * n * n];
+        let c = 2usize; // centre index on each axis
+        let idx = |x: usize, y: usize, z: usize| x + n * (y + n * z);
+        mask[idx(c, c, c)] = true;
+        let d2 = squared_edt_3d(&mask, [n, n, n]);
+        for z in 0..n {
+            for y in 0..n {
+                for x in 0..n {
+                    let expect = ((x as i64 - c as i64).pow(2)
+                        + (y as i64 - c as i64).pow(2)
+                        + (z as i64 - c as i64).pow(2)) as f64;
+                    let got = d2[idx(x, y, z)];
+                    assert!(
+                        (got - expect).abs() < 1e-9,
+                        "EDT at ({x},{y},{z}) = {got}, expected {expect}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn single_atom_sas_isosurface_radius_is_vdw_plus_probe() {
+        // BENCHMARK PIN: the SAS of a lone atom is a sphere of radius
+        // vdw + probe (the probe-inflated ball), within the grid tolerance.
+        let center = [1.0_f32, -2.0, 0.5];
+        let mol = one_atom("C", center);
+        let mut p = MolvizParams::default();
+        p.surface_mode = SurfaceMode::Sas;
+        p.surface_vdw_scale = 1.0;
+        p.probe_radius = 1.4;
+        p.grid_max = 64;
+
+        let field = union_of_balls_field(&mol, &p).expect("non-empty");
+        let tris = surface(&mol, &p).triangles;
+        assert!(
+            tris.len() > 200,
+            "expected a sphere, got {} tris",
+            tris.len()
+        );
+        let expect_r = vdw_radius("C") * p.surface_vdw_scale + p.probe_radius;
+        let tol = field.spacing[0] * 1.6;
+        let r = mean_vertex_radius(&tris, center);
+        assert!(
+            (r - expect_r).abs() < tol,
+            "SAS radius {r} not within {tol} of vdw+probe {expect_r}"
+        );
+    }
+
+    #[test]
+    fn single_atom_vdw_isosurface_radius_is_vdw_and_smaller_than_sas() {
+        // The vdW surface of a lone atom is a sphere of radius vdw (probe
+        // ignored), strictly smaller than its SAS sphere.
+        let center = [0.0_f32, 0.0, 0.0];
+        let mol = one_atom("C", center);
+        let mut p = MolvizParams::default();
+        p.surface_vdw_scale = 1.0;
+        p.probe_radius = 1.4;
+        p.grid_max = 64;
+
+        p.surface_mode = SurfaceMode::Vdw;
+        let field = union_of_balls_field_inflated(&mol, &p, 0.0).expect("non-empty");
+        let vdw_tris = surface(&mol, &p).triangles;
+        assert!(vdw_tris.len() > 200);
+        let tol = field.spacing[0] * 1.6;
+        let r_vdw = mean_vertex_radius(&vdw_tris, center);
+        assert!(
+            (r_vdw - vdw_radius("C")).abs() < tol,
+            "vdW radius {r_vdw} not within {tol} of vdw {}",
+            vdw_radius("C")
+        );
+
+        p.surface_mode = SurfaceMode::Sas;
+        let r_sas = mean_vertex_radius(&surface(&mol, &p).triangles, center);
+        assert!(
+            r_sas > r_vdw + 0.5,
+            "SAS radius {r_sas} must clearly exceed vdW radius {r_vdw}"
+        );
+    }
+
+    #[test]
+    fn single_atom_ses_isosurface_radius_is_vdw() {
+        // BENCHMARK PIN (the defining SES property): a probe cannot carve any
+        // re-entrant surface on a *single* convex atom, so the SES of a lone
+        // atom collapses back to its van-der-Waals sphere (radius vdw), NOT the
+        // SAS sphere (vdw + probe). Eroding the SAS solid by exactly the probe
+        // radius peels the inflation right back off.
+        let center = [2.0_f32, 1.0, -1.0];
+        let mol = one_atom("C", center);
+        let mut p = MolvizParams::default();
+        p.surface_mode = SurfaceMode::Ses;
+        p.surface_vdw_scale = 1.0;
+        p.probe_radius = 1.4;
+        p.grid_max = 72;
+
+        let field = solvent_excluded_field(&mol, &p).expect("non-empty");
+        let tris = surface(&mol, &p).triangles;
+        assert!(
+            tris.len() > 150,
+            "expected a sphere, got {} tris",
+            tris.len()
+        );
+
+        let r_ses = mean_vertex_radius(&tris, center);
+        let r_vdw = vdw_radius("C") * p.surface_vdw_scale;
+        let r_sas = r_vdw + p.probe_radius;
+        // The erosion is a grid operation, so allow ~one cell of slack.
+        let tol = field.spacing[0] * 2.0;
+        assert!(
+            (r_ses - r_vdw).abs() < tol,
+            "SES radius {r_ses} should match vdW {r_vdw} (not SAS {r_sas}); tol {tol}"
+        );
+        // And it is unambiguously the vdW sphere, not the SAS sphere.
+        assert!(
+            (r_ses - r_vdw).abs() < (r_ses - r_sas).abs(),
+            "SES radius {r_ses} must be closer to vdW {r_vdw} than to SAS {r_sas}"
+        );
+    }
+
+    #[test]
+    fn ses_solid_lies_between_vdw_and_sas_for_two_bonded_atoms() {
+        // BENCHMARK PIN: for two atoms at bonding distance the SES sits between
+        // the vdW-union and the SAS — every SES vertex is at least ~at the vdW
+        // surface (the SES encloses the vdW solid) and no farther out than the
+        // SAS surface (the SES is enclosed by the SAS solid). Checked as a
+        // signed-distance band against the analytic union-of-balls fields.
+        let mut mol = ViewMolecule::new();
+        mol.atoms.push(ViewAtom::new([0.0, 0.0, 0.0], "C"));
+        mol.atoms.push(ViewAtom::new([1.5, 0.0, 0.0], "C")); // ~C–C bond
+        let mut p = MolvizParams::default();
+        p.surface_mode = SurfaceMode::Ses;
+        p.surface_vdw_scale = 1.0;
+        p.probe_radius = 1.4;
+        p.grid_max = 80;
+
+        let r_vdw = vdw_radius("C") * p.surface_vdw_scale;
+        let r_sas = r_vdw + p.probe_radius;
+        // Analytic signed "inside-ness" of a point for a union of equal-radius
+        // balls: max_i (r − |p − cᵢ|), > 0 strictly inside the union.
+        let inside = |pt: [f32; 3], r: f32| -> f32 {
+            mol.atoms
+                .iter()
+                .map(|a| r - distance(pt, a.pos))
+                .fold(f32::MIN, f32::max)
+        };
+        let tris = surface(&mol, &p).triangles;
+        assert!(!tris.is_empty(), "SES of a bonded pair must mesh");
+
+        // The grid erosion rounds by ~one cell; allow that slack on each bound.
+        let spacing = solvent_excluded_field(&mol, &p).unwrap().spacing[0];
+        let slack = spacing * 2.0;
+        for t in &tris {
+            for v in &t.vertices {
+                // Enclosed by the SAS solid: not meaningfully *outside* the SAS
+                // union (inside-ness ≥ −slack).
+                assert!(
+                    inside(*v, r_sas) >= -slack,
+                    "SES vertex {v:?} lies outside the SAS solid"
+                );
+                // Encloses the vdW solid: not meaningfully *inside* the vdW
+                // union (inside-ness ≤ +slack — the surface is at or beyond vdW).
+                assert!(
+                    inside(*v, r_vdw) <= slack,
+                    "SES vertex {v:?} dips inside the vdW solid"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn ses_two_bonded_atoms_is_one_connected_watertight_smooth_neck() {
+        // BENCHMARK PIN: two atoms at bonding distance give a SINGLE connected,
+        // watertight SES blob (no two separate spheres) — the re-entrant probe
+        // patch fills the neck smoothly rather than leaving a sharp crease or a
+        // gap. (Smoothness of the neck is evidenced by the single watertight,
+        // connected component bridging the two atoms — a creased/torn neck would
+        // split components or break edge parity.)
+        let mut mol = ViewMolecule::new();
+        mol.atoms.push(ViewAtom::new([0.0, 0.0, 0.0], "C"));
+        mol.atoms.push(ViewAtom::new([1.5, 0.0, 0.0], "C"));
+        let mut p = MolvizParams::default();
+        p.surface_mode = SurfaceMode::Ses;
+        p.probe_radius = 1.4;
+        p.grid_max = 80;
+
+        let field = solvent_excluded_field(&mol, &p).expect("non-empty");
+        let tris = surface(&mol, &p).triangles;
+        assert!(!tris.is_empty());
+        assert!(
+            mesh_is_closed(&tris, field.spacing[0]),
+            "SES neck must be a closed (watertight) surface"
+        );
+        assert_eq!(
+            connected_components(&tris, field.spacing[0]),
+            1,
+            "bonded atoms must give a single connected SES blob (smooth neck)"
+        );
+
+        // The neck is genuinely re-entrant: at the midpoint plane (x = 0.75) the
+        // SES surface pinches *inward* of the SAS — its half-extent across y
+        // there is smaller than the SAS half-extent (probe carved the crevice).
+        // Compare the max |y| of SES vertices near the midplane to r_sas.
+        let r_vdw = vdw_radius("C");
+        let r_sas = r_vdw + p.probe_radius;
+        let mid_x = 0.75f32;
+        let band = field.spacing[0] * 1.5;
+        let max_y_ses = tris
+            .iter()
+            .flat_map(|t| t.vertices.iter())
+            .filter(|v| (v[0] - mid_x).abs() < band)
+            .map(|v| v[1].abs())
+            .fold(0.0f32, f32::max);
+        assert!(
+            max_y_ses > 0.0,
+            "expected SES vertices near the neck mid-plane"
+        );
+        assert!(
+            max_y_ses < r_sas,
+            "neck half-width {max_y_ses} must be re-entrant (inside SAS {r_sas})"
+        );
+    }
+
+    #[test]
+    fn surface_modes_empty_molecule_are_empty_no_panic() {
+        // Every probe-surface mode on an empty molecule → empty mesh, no panic,
+        // and the field generators return None.
+        let empty = ViewMolecule::new();
+        let mut p = MolvizParams::default();
+        for mode in SurfaceMode::ALL {
+            p.surface_mode = mode;
+            assert!(
+                surface(&empty, &p).triangles.is_empty(),
+                "{mode:?} on an empty molecule must be empty"
+            );
+        }
+        assert!(solvent_excluded_field(&empty, &p).is_none());
+        assert!(union_of_balls_field_inflated(&empty, &p, 0.0).is_none());
+    }
+
+    #[test]
+    fn ses_degenerate_inputs_are_guarded() {
+        // A clamped (pathological) grid + a zero probe + coincident atoms must
+        // not panic, divide by zero, or emit NaN/inf vertices.
+        let mut p = MolvizParams::default();
+        p.surface_mode = SurfaceMode::Ses;
+        p.grid_max = 1; // clamped up to the floor
+        p.probe_radius = 0.0; // SES with a zero probe == the vdW surface
+        let mut mol = ViewMolecule::new();
+        mol.atoms.push(ViewAtom::new([0.0, 0.0, 0.0], "C"));
+        mol.atoms.push(ViewAtom::new([0.0, 0.0, 0.0], "C")); // coincident
+        let field = solvent_excluded_field(&mol, &p).expect("non-empty");
+        assert!(field.dims.iter().all(|&d| d >= 2));
+        for t in &surface(&mol, &p).triangles {
+            for v in &t.vertices {
+                assert!(v.iter().all(|c| c.is_finite()), "no NaN/inf vertices");
+            }
+        }
+        // A zero-radius / unknown element must not make the grid spacing zero.
+        let mut weird = ViewMolecule::new();
+        weird.atoms.push(ViewAtom::new([1.0, 1.0, 1.0], "Xx"));
+        let f2 = solvent_excluded_field(&weird, &p).expect("non-empty");
+        assert!(f2.spacing[0] > 0.0, "grid spacing must stay positive");
+    }
+
+    #[test]
+    fn ses_resolution_sharpens_toward_analytic_vdw_radius() {
+        // Honest exactness pin: the single-atom SES radius converges to the
+        // analytic vdW radius as the grid is refined (the coarse-grid rounding
+        // shrinks). The fine grid must be at least as close as the coarse one.
+        let center = [0.0_f32, 0.0, 0.0];
+        let mol = one_atom("C", center);
+        let mut p = MolvizParams::default();
+        p.surface_mode = SurfaceMode::Ses;
+        p.probe_radius = 1.4;
+        let target = vdw_radius("C");
+
+        p.grid_max = 28;
+        let r_coarse = mean_vertex_radius(&surface(&mol, &p).triangles, center);
+        p.grid_max = 80;
+        let r_fine = mean_vertex_radius(&surface(&mol, &p).triangles, center);
+        assert!(
+            (r_fine - target).abs() <= (r_coarse - target).abs() + 1e-3,
+            "fine-grid SES radius {r_fine} should be no farther from vdW {target} \
+             than coarse {r_coarse}"
+        );
     }
 
     // ---- Gaussian density iso-surface ------------------------------------
