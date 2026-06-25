@@ -540,6 +540,15 @@ members = [
     # General numerical-methods enabler: wraps any model f: inputs → outputs.
     "crates/valenx-uq",
 
+    # Defense / M&S (M1) — UAS / counter-UAS design → performance → trade study.
+    # Composes valenx-rotor (BEMT), valenx-drone (multirotor hover momentum
+    # theory), and valenx-fixedwing (parabolic-polar point performance) into a
+    # UasVehicle (multirotor + fixed-wing): hover power/endurance, range
+    # (electric-Breguet / cruise-power), payload margin, an N-parameter design
+    # sweep + Pareto front, and DEFENSIVE counter-UAS intercept GEOMETRY +
+    # detection timeline (pure kinematics; no weapon/targeting/lethality).
+    "crates/valenx-uas",
+
     # Phone-as-2nd-screen companion: serves the live valenx window to a phone
     # browser (PIN-gated, LAN-bound, frame-poll JPEG) and relays touch as OS
     # mouse input. Default build is std-only (CI-green on headless Linux);
