@@ -56,6 +56,60 @@ struct HvacResults {
     duct_h_in: f64,
 }
 
+impl HvacWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`.
+    /// Covers both duct shapes' dimensions (round `diameter` + rectangular
+    /// `width`/`height`) so an agent can set either regardless of the selected
+    /// shape; each string matches the form caption exactly.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "diameter (mm)",
+            "width (mm)",
+            "height (mm)",
+            "length (m)",
+            "velocity (m/s)",
+            "friction factor",
+            "flow (CFM)",
+            "max vel (FPM)",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the
+    /// wrong type / out of range returns `Err(String)` — never a panic. Ranges
+    /// mirror the form's `DragValue` clamps exactly.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        let ranged = |v: f64, lo: f64, hi: f64, what: &str| -> Result<f64, String> {
+            if v.is_finite() && (lo..=hi).contains(&v) {
+                Ok(v)
+            } else {
+                Err(format!("{what} must be in {lo}..={hi}, got {v}"))
+            }
+        };
+        match name {
+            "diameter (mm)" => {
+                self.diameter_mm = ranged(value.as_f64()?, 10.0, 2000.0, "diameter")?
+            }
+            "width (mm)" => self.width_mm = ranged(value.as_f64()?, 10.0, 2000.0, "width")?,
+            "height (mm)" => self.height_mm = ranged(value.as_f64()?, 10.0, 2000.0, "height")?,
+            "length (m)" => self.length_m = ranged(value.as_f64()?, 0.1, 500.0, "length")?,
+            "velocity (m/s)" => self.velocity_ms = ranged(value.as_f64()?, 0.1, 30.0, "velocity")?,
+            "friction factor" => self.friction = ranged(value.as_f64()?, 0.001, 0.1, "friction")?,
+            "flow (CFM)" => self.cfm = ranged(value.as_f64()?, 1.0, 100_000.0, "flow")?,
+            "max vel (FPM)" => {
+                self.max_velocity_fpm = ranged(value.as_f64()?, 50.0, 5000.0, "max vel")?
+            }
+            other => return Err(format!("unknown HVAC control: {other:?}")),
+        }
+        Ok(())
+    }
+}
+
 /// Compute the duct hydraulics for the current settings.
 fn run_hvac(s: &HvacWorkbenchState) -> HvacResults {
     let cs = match s.shape {
@@ -241,6 +295,26 @@ pub(crate) fn hvac_product() -> crate::WorkspaceProduct {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_commands::AgentValue;
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        let mut s = HvacWorkbenchState::default();
+        s.agent_set("velocity (m/s)", &AgentValue::Float(5.0))
+            .unwrap();
+        assert_eq!(s.velocity_ms, 5.0);
+        // Unknown caption -> Err (no panic).
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (bool into a numeric field) -> Err.
+        assert!(s
+            .agent_set("velocity (m/s)", &AgentValue::Bool(true))
+            .is_err());
+        // Out-of-range (velocity > 30) -> Err, field untouched.
+        assert!(s
+            .agent_set("velocity (m/s)", &AgentValue::Float(99.0))
+            .is_err());
+        assert_eq!(s.velocity_ms, 5.0, "rejected set leaves field untouched");
+    }
 
     #[test]
     fn pressure_drop_is_positive_and_grows_with_length() {

@@ -100,6 +100,45 @@ fn compute_report(mach: f64, gamma: f64) -> Result<FlowReport, GasError> {
 /// Validate the form, evaluate the relations and format the monospace readout.
 /// Extracted from the draw closure so it is unit-testable. On any domain error
 /// (`M <= 0`, `gamma <= 1`, non-finite) it sets `error` and clears `result`.
+impl GasDynamicsWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`;
+    /// each string matches exactly the caption the form draws.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &["Mach M", "gamma"]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the
+    /// wrong type / out of range returns `Err(String)` — never a panic. Ranges
+    /// mirror the 1-D compressible-flow domain the report enforces: Mach `> 0`
+    /// and `gamma > 1`.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        match name {
+            "Mach M" => {
+                let v = value.as_f64()?;
+                if !(v.is_finite() && v > 0.0) {
+                    return Err(format!("Mach M must be > 0, got {v}"));
+                }
+                self.mach = v;
+            }
+            "gamma" => {
+                let v = value.as_f64()?;
+                if !(v.is_finite() && v > 1.0) {
+                    return Err(format!("gamma must be > 1, got {v}"));
+                }
+                self.gamma = v;
+            }
+            other => return Err(format!("unknown GasDynamics control: {other:?}")),
+        }
+        Ok(())
+    }
+}
+
 fn run_gasdynamics(s: &mut GasDynamicsWorkbenchState) {
     s.error = None;
     match compute_report(s.mach, s.gamma) {
@@ -286,9 +325,26 @@ pub(crate) fn gasdynamics_product() -> crate::WorkspaceProduct {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_commands::AgentValue;
 
     fn close(a: f64, b: f64, tol: f64) -> bool {
         (a - b).abs() < tol
+    }
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        let mut s = GasDynamicsWorkbenchState::default();
+        s.agent_set("Mach M", &AgentValue::Float(3.0)).unwrap();
+        assert_eq!(s.mach, 3.0);
+        // Unknown caption -> Err (no panic).
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (string into numeric) -> Err.
+        assert!(s
+            .agent_set("gamma", &AgentValue::Str("air".into()))
+            .is_err());
+        // Out-of-domain (gamma <= 1) -> Err, field untouched.
+        assert!(s.agent_set("gamma", &AgentValue::Float(1.0)).is_err());
+        assert_eq!(s.gamma, 1.4, "rejected set leaves field untouched");
     }
 
     #[test]

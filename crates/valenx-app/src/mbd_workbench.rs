@@ -374,6 +374,90 @@ impl MbdWorkbenchState {
             MbdDemo::Drop => run_drop(p),
         }
     }
+
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`.
+    /// Covers the shared integrator controls plus BOTH demos' parameters
+    /// (pendulum + drop/contact) so an agent can set either regardless of the
+    /// selected demo; each string matches the form caption exactly.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            // -- shared --
+            "gravity g (m/s^2)",
+            "time step dt (s)",
+            "# steps",
+            // -- pendulum --
+            "rod length L (m)",
+            "release angle (rad)",
+            // -- drop / contact --
+            "drop height (m)",
+            "launch speed (m/s)",
+            "mass m (kg)",
+            "contact stiffness k (N/m)",
+            "contact damping c (N*s/m)",
+            "friction coeff mu",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the
+    /// wrong type / out of range returns `Err(String)` — never a panic. Ranges
+    /// mirror the form's `DragValue` clamps exactly (which themselves mirror the
+    /// `valenx_mbd` integrator / `ContactParams` preconditions).
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        use std::f64::consts::PI;
+        let ranged = |v: f64, lo: f64, hi: f64, what: &str| -> Result<f64, String> {
+            if v.is_finite() && (lo..=hi).contains(&v) {
+                Ok(v)
+            } else {
+                Err(format!("{what} must be in {lo}..={hi}, got {v}"))
+            }
+        };
+        let p = &mut self.params;
+        match name {
+            // -- shared --
+            "gravity g (m/s^2)" => p.gravity = ranged(value.as_f64()?, 0.001, 1.0e3, "gravity g")?,
+            "time step dt (s)" => p.dt = ranged(value.as_f64()?, 1.0e-6, 1.0, "time step dt")?,
+            "# steps" => {
+                let n = value.as_i64()?;
+                if (1..=(MAX_STEPS as i64)).contains(&n) {
+                    p.steps = n as usize;
+                } else {
+                    return Err(format!("# steps must be in 1..={MAX_STEPS}, got {n}"));
+                }
+            }
+            // -- pendulum --
+            "rod length L (m)" => {
+                p.rod_length = ranged(value.as_f64()?, 0.01, 1.0e3, "rod length L")?
+            }
+            "release angle (rad)" => {
+                p.release_angle = ranged(value.as_f64()?, -PI, PI, "release angle")?
+            }
+            // -- drop / contact --
+            "drop height (m)" => {
+                p.drop_height = ranged(value.as_f64()?, -1.0, 1.0e3, "drop height")?
+            }
+            "launch speed (m/s)" => {
+                p.launch_speed = ranged(value.as_f64()?, -1.0e3, 1.0e3, "launch speed")?
+            }
+            "mass m (kg)" => p.mass = ranged(value.as_f64()?, 0.001, 1.0e6, "mass m")?,
+            "contact stiffness k (N/m)" => {
+                p.contact_stiffness = ranged(value.as_f64()?, 1.0, 1.0e9, "contact stiffness k")?
+            }
+            "contact damping c (N*s/m)" => {
+                p.contact_damping = ranged(value.as_f64()?, 0.0, 1.0e7, "contact damping c")?
+            }
+            "friction coeff mu" => {
+                p.friction = ranged(value.as_f64()?, 0.0, 10.0, "friction coeff mu")?
+            }
+            other => return Err(format!("unknown MBD control: {other:?}")),
+        }
+        Ok(())
+    }
 }
 
 /// Append a sample to the trace, keeping it down-sampled to at most
@@ -1199,7 +1283,32 @@ fn draw_drop(res: &MbdResult, ui: &mut egui::Ui) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_commands::AgentValue;
     use std::f64::consts::PI;
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        let mut s = MbdWorkbenchState::default();
+        s.agent_set("gravity g (m/s^2)", &AgentValue::Float(3.71))
+            .unwrap();
+        assert_eq!(s.params.gravity, 3.71);
+        s.agent_set("# steps", &AgentValue::Int(1000)).unwrap();
+        assert_eq!(s.params.steps, 1000);
+        // Unknown caption -> Err (no panic).
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (string into a numeric field) -> Err.
+        assert!(s
+            .agent_set("gravity g (m/s^2)", &AgentValue::Str("mars".into()))
+            .is_err());
+        // Out-of-range (gravity 0 is below the 0.001 floor) -> Err, untouched.
+        assert!(s
+            .agent_set("gravity g (m/s^2)", &AgentValue::Float(0.0))
+            .is_err());
+        assert_eq!(
+            s.params.gravity, 3.71,
+            "rejected set leaves field untouched"
+        );
+    }
 
     #[test]
     fn default_pendulum_run_succeeds_and_is_populated() {

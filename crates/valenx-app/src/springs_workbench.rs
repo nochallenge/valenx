@@ -68,6 +68,54 @@ impl Default for SpringsWorkbenchState {
     }
 }
 
+impl SpringsWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`;
+    /// each string matches exactly the caption the form draws.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "wire d",
+            "mean coil D",
+            "free length",
+            "active coils n",
+            "shear modulus G (MPa)",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the
+    /// wrong type / out of range returns `Err(String)` (the bridge turns it into
+    /// a `warn` feed note) — never a panic. Ranges mirror the workbench's own
+    /// validity checks: every geometry / material value must be a finite `> 0`
+    /// (a non-positive wire diameter, coil diameter, length, coil count, or
+    /// shear modulus is physically meaningless and rejected here).
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        // Every Springs control is a strictly-positive real; share the check.
+        let positive = |v: f64, what: &str| -> Result<f64, String> {
+            if v.is_finite() && v > 0.0 {
+                Ok(v)
+            } else {
+                Err(format!("{what} must be > 0, got {v}"))
+            }
+        };
+        match name {
+            "wire d" => self.wire_diameter_mm = positive(value.as_f64()?, "wire d")?,
+            "mean coil D" => self.mean_coil_diameter_mm = positive(value.as_f64()?, "mean coil D")?,
+            "free length" => self.free_length_mm = positive(value.as_f64()?, "free length")?,
+            "active coils n" => self.n_active_coils = positive(value.as_f64()?, "active coils n")?,
+            "shear modulus G (MPa)" => {
+                self.shear_modulus_mpa = positive(value.as_f64()?, "shear modulus G")?
+            }
+            other => return Err(format!("unknown Springs control: {other:?}")),
+        }
+        Ok(())
+    }
+}
+
 /// Draw the Springs Workbench right-side panel. A no-op when the
 /// `show_springs_workbench` toggle is off.
 pub fn draw_springs_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
@@ -477,6 +525,24 @@ pub(crate) fn springs_product() -> crate::WorkspaceProduct {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_commands::AgentValue;
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        let mut s = SpringsWorkbenchState::default();
+        s.agent_set("wire d", &AgentValue::Float(1.6)).unwrap();
+        assert_eq!(s.wire_diameter_mm, 1.6);
+        // Unknown caption -> Err (no panic).
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (bool into a numeric field) -> Err.
+        assert!(s.agent_set("wire d", &AgentValue::Bool(true)).is_err());
+        // Non-positive -> Err, field untouched.
+        assert!(s.agent_set("wire d", &AgentValue::Float(0.0)).is_err());
+        assert_eq!(
+            s.wire_diameter_mm, 1.6,
+            "rejected set leaves field untouched"
+        );
+    }
 
     #[test]
     fn default_state_is_idle() {

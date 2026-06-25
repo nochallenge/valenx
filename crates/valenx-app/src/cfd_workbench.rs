@@ -142,6 +142,88 @@ fn flow_regime(re: f64, case: CfdCase) -> FlowRegime {
     }
 }
 
+impl CfdWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`;
+    /// each string matches exactly the caption the form draws. The drive-speed
+    /// control's caption is **case-dependent** (`lid speed U (m/s)` for the
+    /// cavity, `inlet speed U (m/s)` for the channel) — both spellings address
+    /// the same `speed` field in [`agent_set`](Self::agent_set); the neutral
+    /// `drive speed U (m/s)` is listed here.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "nx",
+            "ny",
+            "Lx",
+            "Ly",
+            "density ρ (kg/m³)",
+            "kinematic ν (m²/s)",
+            "drive speed U (m/s)",
+            "max SIMPLE iterations",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the
+    /// wrong type / out of range returns `Err(String)` — never a panic. Ranges
+    /// mirror [`validate_inputs`]: grid cells `nx`/`ny >= 1`, domain `Lx`/`Ly`
+    /// and fluid `density`/`viscosity` finite `> 0`, the SIMPLE iteration cap
+    /// `>= 1`. The drive speed accepts any finite value (a negative drive is a
+    /// valid reversed lid/inlet). Both case-dependent speed captions
+    /// (`lid speed U (m/s)` / `inlet speed U (m/s)`) plus the neutral
+    /// `drive speed U (m/s)` map to the same field.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        // A finite, strictly-positive real (domain / fluid props).
+        let positive = |v: f64, what: &str| -> Result<f64, String> {
+            if v.is_finite() && v > 0.0 {
+                Ok(v)
+            } else {
+                Err(format!("{what} must be > 0, got {v}"))
+            }
+        };
+        match name {
+            "nx" => {
+                let n = value.as_i64()?;
+                if n < 1 {
+                    return Err(format!("nx must be >= 1, got {n}"));
+                }
+                self.nx = n as usize;
+            }
+            "ny" => {
+                let n = value.as_i64()?;
+                if n < 1 {
+                    return Err(format!("ny must be >= 1, got {n}"));
+                }
+                self.ny = n as usize;
+            }
+            "Lx" => self.lx = positive(value.as_f64()?, "Lx")?,
+            "Ly" => self.ly = positive(value.as_f64()?, "Ly")?,
+            "density ρ (kg/m³)" => self.density = positive(value.as_f64()?, "density")?,
+            "kinematic ν (m²/s)" => self.viscosity = positive(value.as_f64()?, "viscosity")?,
+            "drive speed U (m/s)" | "lid speed U (m/s)" | "inlet speed U (m/s)" => {
+                let v = value.as_f64()?;
+                if !v.is_finite() {
+                    return Err(format!("drive speed U must be finite, got {v}"));
+                }
+                self.speed = v;
+            }
+            "max SIMPLE iterations" => {
+                let n = value.as_i64()?;
+                if n < 1 {
+                    return Err(format!("max SIMPLE iterations must be >= 1, got {n}"));
+                }
+                self.max_iterations = n as usize;
+            }
+            other => return Err(format!("unknown CFD control: {other:?}")),
+        }
+        Ok(())
+    }
+}
+
 /// Draw the CFD Workbench right-side panel. A no-op when the
 /// `show_cfd_workbench` toggle is off.
 pub fn draw_cfd_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
@@ -722,6 +804,26 @@ pub(crate) fn cfd_product() -> crate::WorkspaceProduct {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_commands::AgentValue;
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        let mut s = CfdWorkbenchState::default();
+        // A representative integer-grid set lands in state.
+        s.agent_set("nx", &AgentValue::Int(48)).unwrap();
+        assert_eq!(s.nx, 48);
+        // A float field accepts a real value.
+        s.agent_set("density ρ (kg/m³)", &AgentValue::Float(1.225))
+            .unwrap();
+        assert_eq!(s.density, 1.225);
+        // Unknown caption -> Err (no panic).
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (string into the integer grid count) -> Err.
+        assert!(s.agent_set("nx", &AgentValue::Str("many".into())).is_err());
+        // Out-of-range (zero cells) -> Err, field untouched.
+        assert!(s.agent_set("nx", &AgentValue::Int(0)).is_err());
+        assert_eq!(s.nx, 48, "rejected set leaves field untouched");
+    }
 
     #[test]
     fn background_solve_populates_the_readout() {

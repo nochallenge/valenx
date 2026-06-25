@@ -51,6 +51,39 @@ impl Default for PipingWorkbenchState {
     }
 }
 
+impl PipingWorkbenchState {
+    /// The user-visible captions of every (numeric) control the agent bridge can
+    /// set via `SetControl` (see [`crate::agent_commands`]). Returned by
+    /// `ListControls`. The pipe size / schedule / material are combo selections
+    /// (string / enum) and are not part of this scalar setter; only the section
+    /// `length (mm)` is a settable numeric.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &["length (mm)"]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the
+    /// wrong type / non-positive value returns `Err(String)` — never a panic.
+    /// `length (mm)` must be a finite `> 0` (mirrors `run_piping`'s check).
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        match name {
+            "length (mm)" => {
+                let v = value.as_f64()?;
+                if !(v.is_finite() && v > 0.0) {
+                    return Err(format!("length must be > 0, got {v}"));
+                }
+                self.length_mm = v;
+            }
+            other => return Err(format!("unknown Piping control: {other:?}")),
+        }
+        Ok(())
+    }
+}
+
 /// Draw the Piping Workbench right-side panel. A no-op when the
 /// `show_piping_workbench` toggle is off.
 pub fn draw_piping_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
@@ -334,6 +367,24 @@ pub(crate) fn piping_product() -> crate::WorkspaceProduct {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_commands::AgentValue;
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        let mut s = PipingWorkbenchState::default();
+        s.agent_set("length (mm)", &AgentValue::Float(2500.0))
+            .unwrap();
+        assert_eq!(s.length_mm, 2500.0);
+        // Unknown caption -> Err (no panic).
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (string into a numeric field) -> Err.
+        assert!(s
+            .agent_set("length (mm)", &AgentValue::Str("long".into()))
+            .is_err());
+        // Non-positive -> Err, field untouched.
+        assert!(s.agent_set("length (mm)", &AgentValue::Float(0.0)).is_err());
+        assert_eq!(s.length_mm, 2500.0, "rejected set leaves field untouched");
+    }
 
     #[test]
     fn default_state_is_idle() {

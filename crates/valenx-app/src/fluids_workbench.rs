@@ -258,6 +258,77 @@ impl FluidsWorkbenchState {
             mean_density,
         })
     }
+
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`;
+    /// each string matches exactly the caption the form draws.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "smoothing length h (m)",
+            "viscosity μ (Pa·s)",
+            "gravity |g| (m/s²)",
+            "rest density ρ₀ (kg/m³)",
+            "particle mass (kg)  [0 = auto]",
+            "time step dt (s)",
+            "number of steps",
+            "particles per axis N",
+            "box size (m)",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the
+    /// wrong type / out of range returns `Err(String)` — never a panic. Ranges
+    /// mirror the form's `DragValue` clamps exactly.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        let ranged = |v: f64, lo: f64, hi: f64, what: &str| -> Result<f64, String> {
+            if v.is_finite() && (lo..=hi).contains(&v) {
+                Ok(v)
+            } else {
+                Err(format!("{what} must be in {lo}..={hi}, got {v}"))
+            }
+        };
+        let ranged_int = |value: &crate::agent_commands::AgentValue,
+                          lo: i64,
+                          hi: i64,
+                          what: &str|
+         -> Result<usize, String> {
+            let n = value.as_i64()?;
+            if (lo..=hi).contains(&n) {
+                Ok(n as usize)
+            } else {
+                Err(format!("{what} must be in {lo}..={hi}, got {n}"))
+            }
+        };
+        let p = &mut self.params;
+        match name {
+            "smoothing length h (m)" => {
+                p.smoothing_length = ranged(value.as_f64()?, 1e-4, 1.0, "smoothing length h")?
+            }
+            "viscosity μ (Pa·s)" => {
+                p.viscosity = ranged(value.as_f64()?, 0.0, 10.0, "viscosity μ")?
+            }
+            "gravity |g| (m/s²)" => p.gravity_z = ranged(value.as_f64()?, 0.0, 100.0, "gravity")?,
+            "rest density ρ₀ (kg/m³)" => {
+                p.rest_density = ranged(value.as_f64()?, 1.0, 20_000.0, "rest density ρ₀")?
+            }
+            "particle mass (kg)  [0 = auto]" => {
+                p.mass_override = ranged(value.as_f64()?, 0.0, 100.0, "particle mass")?
+            }
+            "time step dt (s)" => p.dt = ranged(value.as_f64()?, 1e-6, 0.1, "time step dt")?,
+            "number of steps" => p.num_steps = ranged_int(value, 1, 500, "number of steps")?,
+            "particles per axis N" => {
+                p.n_per_axis = ranged_int(value, 1, 10, "particles per axis N")?
+            }
+            "box size (m)" => p.box_size = ranged(value.as_f64()?, 0.01, 10.0, "box size")?,
+            other => return Err(format!("unknown Fluids control: {other:?}")),
+        }
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -645,6 +716,32 @@ fn speed_color(t: f32) -> egui::Color32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_commands::AgentValue;
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        let mut s = FluidsWorkbenchState::default();
+        s.agent_set("viscosity μ (Pa·s)", &AgentValue::Float(0.5))
+            .unwrap();
+        assert_eq!(s.params.viscosity, 0.5);
+        s.agent_set("number of steps", &AgentValue::Int(50))
+            .unwrap();
+        assert_eq!(s.params.num_steps, 50);
+        // Unknown caption -> Err (no panic).
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (string into a numeric field) -> Err.
+        assert!(s
+            .agent_set("viscosity μ (Pa·s)", &AgentValue::Str("thick".into()))
+            .is_err());
+        // Out-of-range (steps > 500) -> Err, field untouched.
+        assert!(s
+            .agent_set("number of steps", &AgentValue::Int(9999))
+            .is_err());
+        assert_eq!(
+            s.params.num_steps, 50,
+            "rejected set leaves field untouched"
+        );
+    }
 
     #[test]
     fn default_run_succeeds_and_particles_in_box() {
