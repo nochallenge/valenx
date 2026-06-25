@@ -333,6 +333,21 @@ impl UqWorkbenchState {
         Ok(())
     }
 
+    /// The current computed-result text for the agent `ReadReadout` bridge (see
+    /// [`crate::agent_commands`]). This workbench keeps its result as a structured
+    /// [`UqResult`] and renders a one-line `status` summary (the `✔ mean … Pf …`
+    /// line on success, or a `⚠ …` line on error) — that same `status` string is
+    /// returned here. `None` when it is empty, i.e. the pipeline has not been run
+    /// yet. Read-only — lets an agent read the answer back after driving a run,
+    /// closing the live-driving loop.
+    pub fn agent_readout(&self) -> Option<String> {
+        if self.status.is_empty() {
+            None
+        } else {
+            Some(self.status.clone())
+        }
+    }
+
     /// Run the full UQ pipeline: validate + build the input distributions,
     /// Monte-Carlo sample them, evaluate `g` to an output sample set, summarise
     /// it (mean / std / quantiles), estimate first-order Sobol indices

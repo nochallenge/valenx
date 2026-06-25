@@ -206,6 +206,19 @@ impl FemWorkbenchState {
         }
         Ok(())
     }
+
+    /// The current computed-result text for the agent `ReadReadout` bridge (see
+    /// [`crate::agent_commands`]): the same `Result` string the panel renders
+    /// once a solve has produced one, else the last `error`, else `None` when the
+    /// model has not been run yet. Read-only — lets an agent read the answer back
+    /// after driving a solve, closing the live-driving loop.
+    pub fn agent_readout(&self) -> Option<String> {
+        if !self.result.is_empty() {
+            Some(self.result.clone())
+        } else {
+            self.error.clone()
+        }
+    }
 }
 
 /// Draw the FEM Workbench right-side panel. A no-op when the

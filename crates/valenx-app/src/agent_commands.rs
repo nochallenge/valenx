@@ -471,6 +471,25 @@ pub enum AgentCommand {
         #[serde(default)]
         workbench: Option<String>,
     },
+    /// **Read a workbench's COMPUTED result back into this channel's chat feed.**
+    /// This closes the live-driving loop: where [`SetControl`](AgentCommand::SetControl)
+    /// writes a tool's inputs and [`RunCommand`](AgentCommand::RunCommand) fires
+    /// the solve, `ReadReadout` reads the *answer* back so an agent can
+    /// **self-verify** what it just drove — no screenshot, no GUI focus needed.
+    ///
+    /// `workbench` selects the target tool by id (a [`TabKind::from_id`] alias,
+    /// e.g. `"uq"`); when omitted the **active tab's** workbench is used. The
+    /// resolved workbench's read-only `agent_readout` returns its current result
+    /// text (the same string the panel renders) — posted as a `result` feed note.
+    /// A workbench that has not been run yet (or has no readout wired) posts a
+    /// `warn` "not run yet / no readout" note instead; an unknown/unresolved
+    /// workbench posts a `warn` and changes nothing (never a panic). Purely
+    /// read-only: no app state is modified.
+    ReadReadout {
+        /// Optional target workbench id (default: the active tab's workbench).
+        #[serde(default)]
+        workbench: Option<String>,
+    },
     /// **Snap the central 3-D viewport camera to a canonical view.** `dir` is one
     /// of `front` / `back` / `left` / `right` / `top` / `bottom` / `iso`
     /// (case-insensitive), mapped to a [`valenx_viz::ViewDirection`] and applied
@@ -1310,6 +1329,9 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
         AgentCommand::ListControls { workbench } => {
             list_controls(app, ch, workbench.as_deref());
         }
+        AgentCommand::ReadReadout { workbench } => {
+            read_readout(app, ch, workbench.as_deref());
+        }
         AgentCommand::SetView { dir } => {
             // Snap the central viewport camera to a canonical ViewCube
             // orientation through the SAME `OrbitCamera::set_view` the ViewCube
@@ -1797,6 +1819,75 @@ fn list_controls(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
         format!("controls ({}): {}", names.len(), names.join(", "))
     };
     crate::assistant_workbench::append_feed_note(app, ch, "Claude", &body, "result");
+}
+
+/// Apply one [`ReadReadout`](AgentCommand::ReadReadout): resolve the target
+/// workbench (explicit id or the active tab), read its **computed result text**
+/// through that workbench's read-only `agent_readout`, and post it to channel
+/// `ch`'s chat feed as a `result` note — so an agent can read the answer back
+/// and self-verify what it just drove (the read half of the live-driving loop).
+///
+/// Fail-loud, never a panic: an unresolved/unknown workbench posts a `warn`
+/// note; a workbench that has not been run yet, or one with no readout wired,
+/// posts a `warn` "not run yet / no readout" note. A successful read posts the
+/// result text. No app state is modified (purely read-only).
+///
+/// Dispatch mirrors [`set_control`] / [`list_controls`]: a `match` over the
+/// resolved [`TabKind`] routes to the right workbench's `agent_readout`. Only
+/// the workbenches wired this round have one; the rest fall through to the
+/// "no readout" note (the honest follow-up-sweep surface, exactly like
+/// `agent_set` started).
+fn read_readout(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
+    let Some(kind) = resolve_target_kind(app, workbench) else {
+        let msg = match workbench {
+            Some(id) => format!("read_readout: unknown workbench id: {id}"),
+            None => "read_readout: no active tab to target (pass a workbench id)".to_string(),
+        };
+        crate::assistant_workbench::append_feed_note(app, ch, "Claude", &msg, "warn");
+        return;
+    };
+
+    // Route to the resolved workbench's read-only readout. Each arm returns
+    // `Option<String>` — `Some(text)` once the tool has a computed result (or its
+    // error line), `None` when it has not been run yet. Only the workbenches
+    // wired this round have an `agent_readout`; `other` means "no readout wired".
+    let readout: Option<Option<String>> = match kind {
+        TabKind::Uq => Some(app.uq.agent_readout()),
+        TabKind::Cfd => Some(app.cfd.agent_readout()),
+        TabKind::Fem => Some(app.fem.agent_readout()),
+        TabKind::Gears => Some(app.gears.agent_readout()),
+        TabKind::Springs => Some(app.springs.agent_readout()),
+        TabKind::Gasdynamics => Some(app.gasdynamics.agent_readout()),
+        TabKind::Fluids => Some(app.fluids.agent_readout()),
+        TabKind::Uas => Some(app.uas.agent_readout()),
+        TabKind::MissionSim => Some(app.missionsim.agent_readout()),
+        TabKind::Survivability => Some(app.survivability.agent_readout()),
+        _ => None,
+    };
+
+    match readout {
+        // The workbench is wired AND has a computed result → post it.
+        Some(Some(text)) => {
+            let body = format!("{} readout: {text}", kind.label());
+            crate::assistant_workbench::append_feed_note(app, ch, "Claude", &body, "result");
+        }
+        // Wired but not run yet → fail-loud warn.
+        Some(None) => {
+            let body = format!(
+                "read_readout: {} ({kind:?}) not run yet / no readout",
+                kind.label()
+            );
+            crate::assistant_workbench::append_feed_note(app, ch, "Claude", &body, "warn");
+        }
+        // No readout wired for this workbench yet (the follow-up-sweep surface).
+        None => {
+            let body = format!(
+                "read_readout: workbench {} ({kind:?}) has no readout wired yet",
+                kind.label()
+            );
+            crate::assistant_workbench::append_feed_note(app, ch, "Claude", &body, "warn");
+        }
+    }
 }
 
 /// **LAZY-BUILD materialiser.** Build unit `n`'s deferred product the first time
@@ -4125,6 +4216,145 @@ mod tests {
             AgentCommand::SetControl {
                 name: "whatever".into(),
                 value: AgentValue::Int(1),
+                workbench: Some("no-such-workbench".into()),
+            },
+        );
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        assert!(
+            body.contains("unknown workbench id"),
+            "bad workbench id posts a warn note; feed = {body:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn read_readout_parses_with_and_without_workbench() {
+        // The wire form round-trips; `workbench` is optional.
+        let r: AgentCommand =
+            serde_json::from_str(r#"{"cmd":"read_readout","workbench":"uq"}"#).unwrap();
+        assert_eq!(
+            r,
+            AgentCommand::ReadReadout {
+                workbench: Some("uq".into())
+            }
+        );
+        let r2: AgentCommand = serde_json::from_str(r#"{"cmd":"read_readout"}"#).unwrap();
+        assert_eq!(r2, AgentCommand::ReadReadout { workbench: None });
+    }
+
+    #[test]
+    fn read_readout_routed_through_poll_posts_the_uq_result() {
+        // The FULL live-driving loop end-to-end through the REAL poll path on
+        // channel 1: (1) `set_control` writes the UQ sample count, (2) the UQ
+        // pipeline is run (the same `run_and_store` the Run button calls, which
+        // folds the result into the workbench `status` summary), then (3)
+        // `read_readout` reads that computed result back into the unit's chat
+        // feed as a `result` note — so an agent can self-verify what it drove.
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        // Make UQ the active tab so the no-`workbench` `read_readout` resolves to
+        // it (exercises the active-tab routing too); the `set_control` line still
+        // names "uq" explicitly.
+        app.tab_bar.open(TabKind::Uq);
+        project_tabs::sync_active(&mut app);
+        let dir = isolate_cmd_dir(&mut app, "read_readout_uq");
+        // Point the per-unit FEED at the isolated dir so we can read it back.
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+
+        // Step 1: set the sample count via the poll path.
+        let path = cmd_path(&app, 1);
+        std::fs::write(
+            &path,
+            "{\"cmd\":\"set_control\",\"name\":\"Monte-Carlo samples N\",\"value\":256,\"workbench\":\"uq\"}\n",
+        )
+        .unwrap();
+        poll_and_apply_agent_commands(&mut app);
+        assert_eq!(app.uq.params.n_samples, 256, "set_control wrote the count");
+
+        // Step 2: run the UQ pipeline (folds the result into `status`).
+        crate::uq_workbench::run_and_store(&mut app);
+        let status = app.uq.status.clone();
+        assert!(
+            !status.is_empty() && app.uq.result.is_some(),
+            "uq produced a result + status summary"
+        );
+
+        // Step 3: read it back via the poll path (no `workbench` → active tab).
+        use std::io::Write as _;
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
+        writeln!(f, "{{\"cmd\":\"read_readout\"}}").unwrap();
+        app.last_agent_poll = None; // bypass the 1s throttle for the test
+        poll_and_apply_agent_commands(&mut app);
+
+        // The feed received a `result` note carrying the UQ readout text.
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let posted = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("kind").and_then(|k| k.as_str()) == Some("result")
+                    && v.get("detail")
+                        .and_then(|d| d.as_str())
+                        .is_some_and(|d| d.contains("readout") && d.contains(&status))
+            });
+        assert!(
+            posted,
+            "read_readout posts a `result` note with the UQ result text; feed = {body:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn read_readout_not_run_yet_posts_a_warn_note() {
+        // A workbench that has not been run yet (empty status / no result) posts a
+        // fail-loud `warn` "not run yet / no readout" note rather than a panic or
+        // a bogus empty result.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "read_readout_notrun");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        assert!(app.uq.status.is_empty() && app.uq.result.is_none());
+
+        apply(
+            &mut app,
+            1,
+            AgentCommand::ReadReadout {
+                workbench: Some("uq".into()),
+            },
+        );
+
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let warned = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("kind").and_then(|k| k.as_str()) == Some("warn")
+                    && v.get("detail")
+                        .and_then(|d| d.as_str())
+                        .is_some_and(|d| d.contains("not run yet"))
+            });
+        assert!(warned, "not-run posts a warn note; feed = {body:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn read_readout_unknown_workbench_posts_a_warn_note() {
+        // An unknown workbench id is a fail-loud `warn`, not a panic.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "read_readout_badwb");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        apply(
+            &mut app,
+            1,
+            AgentCommand::ReadReadout {
                 workbench: Some("no-such-workbench".into()),
             },
         );
