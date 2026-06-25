@@ -260,6 +260,7 @@ fn tab_kind_id(kind: TabKind) -> String {
         TabKind::Ocean => "ocean",
         TabKind::Rom => "rom",
         TabKind::Uq => "uq",
+        TabKind::Uas => "uas",
         TabKind::Photogrammetry => "photogrammetry",
         TabKind::Cosim => "cosim",
         TabKind::Mbd => "mbd",
