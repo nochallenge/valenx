@@ -9422,6 +9422,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-mission-sim"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "nalgebra",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "valenx-uas",
+]
+
+[[package]]
 name = "valenx-mohr"
 version = "0.1.0-alpha.1"
 dependencies = [
