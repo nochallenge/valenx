@@ -8007,6 +8007,7 @@ dependencies = [
  "valenx-osmosis",
  "valenx-pathtrace",
  "valenx-pharmacokinetics",
+ "valenx-photogrammetry",
  "valenx-phylo",
  "valenx-pipeflow",
  "valenx-pipenetwork",

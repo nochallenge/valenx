@@ -158,6 +158,7 @@ pub mod orifice_workbench;
 pub mod param_sketch_panel;
 pub mod pbr_forward_pass;
 pub mod pharmacokinetics_workbench;
+pub mod photogrammetry_workbench;
 pub mod pipeflow_workbench;
 pub mod pipenetwork_workbench;
 pub mod piping_workbench;
@@ -2018,6 +2019,18 @@ pub struct ValenxApp {
     /// Form + result state for the UQ workbench (output histogram + Sobol bar
     /// chart + FORM Pf over the in-process `valenx-uq` engine).
     pub uq: crate::uq_workbench::UqWorkbenchState,
+
+    /// Whether the right-side Photogrammetry / SfM scan workbench panel is
+    /// visible. Defaults to `false`; toggled from the View menu or opened by the
+    /// agent bridge under the id `"photogrammetry"` (aliases `"sfm"` / `"scan"`).
+    /// Wraps `valenx-photogrammetry` (COLMAP-style structure-from-motion:
+    /// features + matching + two-view geometry + incremental mapper + bundle
+    /// adjustment). See [`crate::photogrammetry_workbench`].
+    pub show_photogrammetry_workbench: bool,
+    /// Form + result state for the Photogrammetry workbench (synthetic-scene SfM
+    /// recovery: recovered sparse cloud + camera poses + reprojection error over
+    /// the in-process `valenx-photogrammetry` mapper).
+    pub photogrammetry: crate::photogrammetry_workbench::PhotogrammetryWorkbenchState,
 
     /// Whether the right-side Autonomy V&V workbench panel is visible. Defaults
     /// to `false`; toggled from the View menu or opened by the agent bridge
