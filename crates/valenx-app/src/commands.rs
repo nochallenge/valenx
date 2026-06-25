@@ -274,6 +274,7 @@ fn tab_kind_id(kind: TabKind) -> String {
         TabKind::Uq => "uq",
         TabKind::Uas => "uas",
         TabKind::MissionSim => "missionsim",
+        TabKind::MissionPlanner => "missionplanner",
         TabKind::Survivability => "survivability",
         TabKind::Photogrammetry => "photogrammetry",
         TabKind::Cosim => "cosim",
