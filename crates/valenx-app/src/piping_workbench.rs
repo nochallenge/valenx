@@ -75,14 +75,16 @@ pub fn draw_piping_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
-                    ui.label(egui::RichText::new("Nominal pipe size").strong());
+                    let nps_lbl = ui.label(egui::RichText::new("Nominal pipe size").strong());
                     egui::ComboBox::from_id_source("valenx_piping_nps")
                         .selected_text(format!("NPS {}", s.nominal_size))
                         .show_ui(ui, |ui| {
                             for nps in NPS_OPTIONS {
                                 ui.selectable_value(&mut s.nominal_size, (*nps).to_string(), *nps);
                             }
-                        });
+                        })
+                        .response
+                        .labelled_by(nps_lbl.id);
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Schedule").strong());

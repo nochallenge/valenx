@@ -270,10 +270,14 @@ pub(crate) fn engine_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 )
                 .labelled_by(lbl.id);
             });
-            ui.horizontal(|ui| {
-                ui.label("target cooling margin");
-                ui.add(egui::Slider::new(&mut s.target_margin, 1.0..=4.0));
-            });
+            // Use the Slider's own `.text(..)` caption (not a separate
+            // `ui.label`) so egui links BOTH the slider node and its internal
+            // value DragValue (Role::SpinButton) to the caption — an external
+            // `.labelled_by` would only name the slider, leaving the embedded
+            // SpinButton unnamed.
+            ui.add(
+                egui::Slider::new(&mut s.target_margin, 1.0..=4.0).text("target cooling margin"),
+            );
 
             // ── Combustion chemistry (predict chamber conditions) ─
             ui.add_space(4.0);
@@ -286,10 +290,7 @@ pub(crate) fn engine_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                         ui.selectable_value(&mut s.propellant, p, propellant_label(p));
                     }
                 });
-            ui.horizontal(|ui| {
-                ui.label("mixture ratio (O/F)");
-                ui.add(egui::Slider::new(&mut s.mixture_ratio, 1.5..=8.0));
-            });
+            ui.add(egui::Slider::new(&mut s.mixture_ratio, 1.5..=8.0).text("mixture ratio (O/F)"));
             let comb = combust(
                 s.propellant,
                 s.mixture_ratio,

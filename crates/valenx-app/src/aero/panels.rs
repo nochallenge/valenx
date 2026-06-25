@@ -86,7 +86,8 @@ pub fn draw_body_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
             let has_stl = app.stl.is_some();
             {
                 let form = &mut app.aero.form;
-                ui.label("Test body")
+                let body_lbl = ui
+                    .label("Test body")
                     .on_hover_text("Pick the geometry that goes in the tunnel.");
                 egui::ComboBox::from_id_source("aero_body_source")
                     .selected_text(form.body_source.label())
@@ -112,7 +113,9 @@ pub fn draw_body_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             BodySource::DemoBox.label(),
                         )
                         .on_hover_text("Built-in axis-aligned box — useful for sanity-check runs.");
-                    });
+                    })
+                    .response
+                    .labelled_by(body_lbl.id);
 
                 match form.body_source {
                     BodySource::CurrentCadModel => {
@@ -464,7 +467,7 @@ pub fn draw_tunnel_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
         .default_open(false)
         .show(ui, |ui| {
             let form = &mut app.aero.form;
-            ui.label("Grid resolution").on_hover_text(
+            let res_lbl = ui.label("Grid resolution").on_hover_text(
                 "Coarseness of the immersed-boundary voxel grid. Higher \
                      resolution = sharper wake but quadratically more memory.",
             );
@@ -480,7 +483,9 @@ pub fn draw_tunnel_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                                 format_count(r.max_cells()),
                             ));
                     }
-                });
+                })
+                .response
+                .labelled_by(res_lbl.id);
             derived(
                 ui,
                 format!(
@@ -565,7 +570,7 @@ pub fn draw_solver_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .num_columns(2)
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label("Turbulence model")
+                    let turb_lbl = ui.label("Turbulence model")
                         .on_hover_text(
                             "RANS closure picking the Reynolds-stress model. k-ω SST is \
                              the default robust choice for external aerodynamics.",
@@ -576,7 +581,9 @@ pub fn draw_solver_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             for t in TurbulenceChoice::ALL {
                                 ui.selectable_value(&mut form.turbulence, t, t.label());
                             }
-                        });
+                        })
+                        .response
+                        .labelled_by(turb_lbl.id);
                     ui.end_row();
 
                     let lbl = ui.label("Max iterations")
@@ -609,7 +616,7 @@ pub fn draw_solver_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     );
                     ui.end_row();
 
-                    ui.label("Run mode")
+                    let run_mode_lbl = ui.label("Run mode")
                         .on_hover_text("Single steady solve or an angle-of-attack polar sweep.");
                     egui::ComboBox::from_id_source("aero_run_mode")
                         .selected_text(form.run_mode.label())
@@ -628,7 +635,9 @@ pub fn draw_solver_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .on_hover_text(
                                 "Loop the solve across a range of angles of attack to build a Cd/Cl polar.",
                             );
-                        });
+                        })
+                        .response
+                        .labelled_by(run_mode_lbl.id);
                     ui.end_row();
                 });
 
@@ -1109,7 +1118,7 @@ pub fn draw_visualization_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 return;
             }
 
-            ui.label("Field");
+            let field_lbl = ui.label("Field");
             egui::ComboBox::from_id_source("aero_flow_field")
                 .selected_text(app.aero.form.flow_field.label())
                 .width(ui.available_width())
@@ -1117,7 +1126,9 @@ pub fn draw_visualization_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     for f in FlowField::ALL {
                         ui.selectable_value(&mut app.aero.form.flow_field, f, f.label());
                     }
-                });
+                })
+                .response
+                .labelled_by(field_lbl.id);
 
             // Cut-plane controls — only for the volumetric fields.
             if !app.aero.form.flow_field.is_surface() {
@@ -1126,18 +1137,22 @@ pub fn draw_visualization_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     .num_columns(2)
                     .spacing([8.0, 4.0])
                     .show(ui, |ui| {
-                        ui.label("Cut-plane axis");
+                        let cut_axis_lbl = ui.label("Cut-plane axis");
                         egui::ComboBox::from_id_source("aero_cut_axis")
                             .selected_text(app.aero.form.cut_axis.label())
                             .show_ui(ui, |ui| {
                                 for a in CutAxis::ALL {
                                     ui.selectable_value(&mut app.aero.form.cut_axis, a, a.label());
                                 }
-                            });
+                            })
+                            .response
+                            .labelled_by(cut_axis_lbl.id);
                         ui.end_row();
-                        ui.label("Cut position");
+                        // `.text(..)` (not a separate label) so egui links both
+                        // the slider and its internal value DragValue.
                         ui.add(
                             egui::Slider::new(&mut app.aero.form.cut_fraction, 0.0..=1.0)
+                                .text("Cut position")
                                 .custom_formatter(|v, _| format!("{:.0} %", v * 100.0)),
                         );
                         ui.end_row();

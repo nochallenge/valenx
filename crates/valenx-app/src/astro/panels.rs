@@ -250,7 +250,7 @@ pub fn draw_guidance_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
         .default_open(true)
         .show(ui, |ui| {
             let form = &mut app.astro.ascent;
-            ui.label("Steering law");
+            let steering_lbl = ui.label("Steering law");
             egui::ComboBox::from_id_source("astro_guidance_mode")
                 .selected_text(form.guidance.label())
                 .width(ui.available_width())
@@ -258,7 +258,9 @@ pub fn draw_guidance_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     for g in GuidanceChoice::ALL {
                         ui.selectable_value(&mut form.guidance, g, g.label());
                     }
-                });
+                })
+                .response
+                .labelled_by(steering_lbl.id);
             match form.guidance {
                 GuidanceChoice::OpenLoopGravityTurn => derived(
                     ui,
