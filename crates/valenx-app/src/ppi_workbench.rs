@@ -76,6 +76,7 @@ use eframe::egui;
 use valenx_align::msa::Msa;
 use valenx_ppi::{interactome_screen, predict_contacts, PairedMsa, ScreenEntry};
 
+use crate::agent_commands::AgentValue;
 use crate::ValenxApp;
 
 // ---------------------------------------------------------------------------
@@ -214,6 +215,23 @@ impl PpiAnalysis {
             PpiAnalysis::DegreeCentrality => "Degree centrality",
             PpiAnalysis::Betweenness => "Betweenness centrality",
             PpiAnalysis::ShortestPath => "Shortest path (BFS hops)",
+        }
+    }
+
+    /// Parse an analysis name (for the agent `SetControl` bridge) into a
+    /// [`PpiAnalysis`]. Case-insensitive; accepts the short menu words. Fail-loud
+    /// on an unrecognised name so a typo is a `warn` note, not a silent no-op.
+    fn from_name(s: &str) -> Result<PpiAnalysis, String> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "degree" | "degree centrality" | "degreecentrality" => {
+                Ok(PpiAnalysis::DegreeCentrality)
+            }
+            "betweenness" | "betweenness centrality" => Ok(PpiAnalysis::Betweenness),
+            "shortest" | "shortest path" | "shortestpath" | "path" => Ok(PpiAnalysis::ShortestPath),
+            other => Err(format!(
+                "unknown analysis '{other}' (expected 'degree', 'betweenness', or \
+                 'shortest path')"
+            )),
         }
     }
 }
@@ -526,6 +544,65 @@ impl PpiWorkbenchState {
             path,
             analysis: p.analysis,
         })
+    }
+
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`
+    /// so an agent can discover the name space. The captions match exactly what
+    /// the workbench form draws (and what each control is `labelled_by`).
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "# host proteins",
+            "# pathogen proteins",
+            "analysis",
+            "edge threshold",
+            "path from (node #)",
+            "path to (node #)",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the wrong
+    /// type returns `Err(String)` (the bridge turns it into a `warn` feed note) —
+    /// never a panic, and no field is written on error. The numeric captions read
+    /// [`AgentValue::as_i64`] / [`AgentValue::as_f64`]; the `analysis` enum caption
+    /// reads [`AgentValue::as_str`].
+    pub fn agent_set(&mut self, name: &str, value: &AgentValue) -> Result<(), String> {
+        let p = &mut self.params;
+        match name {
+            "# host proteins" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("# host proteins must be >= 0, got {n}"));
+                }
+                p.n_hosts = n as usize;
+            }
+            "# pathogen proteins" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("# pathogen proteins must be >= 0, got {n}"));
+                }
+                p.n_pathogens = n as usize;
+            }
+            "analysis" => p.analysis = PpiAnalysis::from_name(value.as_str()?)?,
+            "edge threshold" => p.threshold = value.as_f64()?,
+            "path from (node #)" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("path from (node #) must be >= 0, got {n}"));
+                }
+                p.path_from = n as usize;
+            }
+            "path to (node #)" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("path to (node #) must be >= 0, got {n}"));
+                }
+                p.path_to = n as usize;
+            }
+            other => return Err(format!("unknown PPI control: {other:?}")),
+        }
+        Ok(())
     }
 }
 
@@ -1313,6 +1390,52 @@ mod tests {
             PATHOGEN_NAMES.len(),
             "GUARD should edge to every effector at a mid threshold"
         );
+    }
+
+    // ---- agent_set / agent_control_names (the SetControl bridge) ----
+
+    #[test]
+    fn agent_set_sets_params_and_rejects_unknown_and_typemismatch() {
+        let mut s = PpiWorkbenchState::default();
+
+        // A representative numeric param, verified via state.
+        s.agent_set("# host proteins", &AgentValue::Int(2))
+            .expect("set # host proteins");
+        assert_eq!(s.params.n_hosts, 2);
+        // A float param.
+        s.agent_set("edge threshold", &AgentValue::Float(0.42))
+            .expect("set edge threshold");
+        assert!((s.params.threshold - 0.42).abs() < 1e-12);
+        // The enum-by-name combo.
+        s.agent_set("analysis", &AgentValue::Str("shortest path".into()))
+            .expect("set analysis");
+        assert_eq!(s.params.analysis, PpiAnalysis::ShortestPath);
+
+        // Unknown caption -> Err (not a panic).
+        assert!(s.agent_set("nope", &AgentValue::Int(1)).is_err());
+        // Type mismatch: a numeric caption fed a string -> Err.
+        assert!(s
+            .agent_set("# host proteins", &AgentValue::Str("two".into()))
+            .is_err());
+        // Type mismatch: the enum caption fed a number -> Err.
+        assert!(s.agent_set("analysis", &AgentValue::Int(1)).is_err());
+        // An unknown enum name -> Err.
+        assert!(s
+            .agent_set("analysis", &AgentValue::Str("bogus".into()))
+            .is_err());
+
+        // Every advertised control name is settable with a value of its type.
+        for name in PpiWorkbenchState::agent_control_names() {
+            let v = match *name {
+                "analysis" => AgentValue::Str("degree".into()),
+                "edge threshold" => AgentValue::Float(0.5),
+                _ => AgentValue::Int(1),
+            };
+            assert!(
+                s.agent_set(name, &v).is_ok(),
+                "advertised control '{name}' must be settable"
+            );
+        }
     }
 }
 

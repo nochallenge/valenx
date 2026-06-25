@@ -15,6 +15,7 @@ use nalgebra::Vector3;
 use valenx_collision::{distance, intersect, Aabb};
 use valenx_viz::{project_point, OrbitCamera, ViewDirection};
 
+use crate::agent_commands::AgentValue;
 use crate::ValenxApp;
 
 /// Persistent form + result state for the Collision Workbench.
@@ -46,6 +47,66 @@ impl Default for CollisionWorkbenchState {
             result: String::new(),
             error: None,
         }
+    }
+}
+
+impl CollisionWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`.
+    ///
+    /// The form draws the same `x`/`y`/`z` caption for every corner component,
+    /// disambiguated visually by the box header (`Box A` / `Box B`) and the
+    /// `min` / `max` row prefix. The agent name space mirrors that
+    /// disambiguation: `"Box A min x"`, `"Box B max z"`, etc. — a stable,
+    /// unambiguous name per drag-value.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "Box A min x",
+            "Box A min y",
+            "Box A min z",
+            "Box A max x",
+            "Box A max y",
+            "Box A max z",
+            "Box B min x",
+            "Box B min y",
+            "Box B min z",
+            "Box B max x",
+            "Box B max y",
+            "Box B max z",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Each of the twelve corner components is addressed by
+    /// `"Box <A|B> <min|max> <x|y|z>"` (the box header + row prefix + axis
+    /// caption the UI shows); every component reads [`AgentValue::as_f64`].
+    ///
+    /// Fail-loud: an unknown caption or a value of the wrong type returns
+    /// `Err(String)` — never a panic, and no field is written on error. Values
+    /// are stored verbatim; `run_collision` is what validates finiteness +
+    /// ordering at Compute time (so a not-yet-finite intermediate is allowed,
+    /// matching the manual drag flow).
+    pub fn agent_set(&mut self, name: &str, value: &AgentValue) -> Result<(), String> {
+        // (corner, axis) the caption addresses; the corner picks which [f64; 3].
+        let (corner, axis): (&mut [f64; 3], usize) = match name {
+            "Box A min x" => (&mut self.a_min, 0),
+            "Box A min y" => (&mut self.a_min, 1),
+            "Box A min z" => (&mut self.a_min, 2),
+            "Box A max x" => (&mut self.a_max, 0),
+            "Box A max y" => (&mut self.a_max, 1),
+            "Box A max z" => (&mut self.a_max, 2),
+            "Box B min x" => (&mut self.b_min, 0),
+            "Box B min y" => (&mut self.b_min, 1),
+            "Box B min z" => (&mut self.b_min, 2),
+            "Box B max x" => (&mut self.b_max, 0),
+            "Box B max y" => (&mut self.b_max, 1),
+            "Box B max z" => (&mut self.b_max, 2),
+            other => return Err(format!("unknown collision control: {other:?}")),
+        };
+        // Read the value first so a type error leaves the field untouched.
+        let v = value.as_f64()?;
+        corner[axis] = v;
+        Ok(())
     }
 }
 
@@ -430,6 +491,35 @@ mod tests {
             ..Default::default()
         };
         assert!(preview_boxes(&s).is_none());
+    }
+
+    #[test]
+    fn agent_set_addresses_each_corner_component_and_rejects_bad_input() {
+        let mut s = CollisionWorkbenchState::default();
+
+        // The repeated x/y/z captions are disambiguated by box + min/max.
+        s.agent_set("Box A min x", &AgentValue::Float(-1.0))
+            .expect("set A min x");
+        s.agent_set("Box A max z", &AgentValue::Float(99.0))
+            .expect("set A max z");
+        s.agent_set("Box B min y", &AgentValue::Int(7)) // Int widens to f64
+            .expect("set B min y");
+        s.agent_set("Box B max x", &AgentValue::Float(42.0))
+            .expect("set B max x");
+        assert_eq!(s.a_min[0], -1.0);
+        assert_eq!(s.a_max[2], 99.0);
+        assert_eq!(s.b_min[1], 7.0);
+        assert_eq!(s.b_max[0], 42.0);
+
+        // Unknown caption -> Err.
+        assert!(s.agent_set("Box C min x", &AgentValue::Float(0.0)).is_err());
+        // A bare axis caption is intentionally ambiguous → not a valid name.
+        assert!(s.agent_set("x", &AgentValue::Float(0.0)).is_err());
+        // Wrong type (a corner component needs a number) -> Err, field intact.
+        assert!(s
+            .agent_set("Box A min x", &AgentValue::Str("x".into()))
+            .is_err());
+        assert_eq!(s.a_min[0], -1.0, "rejected set leaves the field unchanged");
     }
 }
 

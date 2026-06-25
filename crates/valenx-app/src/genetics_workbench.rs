@@ -28,6 +28,7 @@
 
 use eframe::egui;
 
+use crate::agent_commands::AgentValue;
 use crate::genetics;
 use crate::ValenxApp;
 
@@ -109,6 +110,18 @@ impl GeneticsPanel {
         }
     }
 
+    /// Resolve a panel by its display [`label`](Self::label) (for the agent
+    /// `SetControl` bridge — the panel selector is set by the same name the
+    /// combo shows). Case-insensitive + whitespace-tolerant. Fail-loud on an
+    /// unrecognised name so a typo is a `warn` note, not a silent no-op.
+    pub fn from_label(s: &str) -> Result<GeneticsPanel, String> {
+        let want = s.trim();
+        Self::ALL
+            .into_iter()
+            .find(|p| p.label().eq_ignore_ascii_case(want))
+            .ok_or_else(|| format!("unknown bio tool panel '{want}'"))
+    }
+
     /// The backing crate name — shown under the panel header.
     pub fn crate_name(self) -> &'static str {
         match self {
@@ -156,6 +169,40 @@ pub struct GeneticsWorkbenchState {
     pub docking: genetics::docking::DockingPanel,
     pub genediting: genetics::genediting::GeneEditingPanel,
     pub structpredict: genetics::structpredict::StructPredictPanel,
+}
+
+impl GeneticsWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`.
+    ///
+    /// The Genetics workbench is a multi-panel host: its single host-level
+    /// control is the panel selector (the `"Bio tool panel"` combo), which
+    /// chooses which of the fifteen native bio toolkits is shown. Each sub-panel
+    /// has its own form, but those live in the [`crate::genetics`] sub-module
+    /// and are not surfaced through this host `agent_set` (a per-panel bridge
+    /// would be a separate, larger pass). The selector alone is exposed here.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &["Bio tool panel"]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. The single host control is the `"Bio tool panel"`
+    /// selector, set by the panel's display **name** (one of
+    /// [`GeneticsPanel::label`], e.g. `"Sequence"`, `"Docking"`).
+    ///
+    /// Fail-loud: an unknown caption, a value of the wrong type, or a panel name
+    /// that does not match any toolkit returns `Err(String)` — never a panic,
+    /// and no field is written on error. The panel name reads
+    /// [`AgentValue::as_str`] and is matched case-insensitively.
+    pub fn agent_set(&mut self, name: &str, value: &AgentValue) -> Result<(), String> {
+        match name {
+            "Bio tool panel" => {
+                self.active = GeneticsPanel::from_label(value.as_str()?)?;
+            }
+            other => return Err(format!("unknown genetics control: {other:?}")),
+        }
+        Ok(())
+    }
 }
 
 /// Draw the Genetics Workbench right-side panel.
@@ -310,6 +357,46 @@ mod tests {
             GeneticsWorkbenchState::default().active,
             GeneticsPanel::Sequence
         );
+    }
+
+    #[test]
+    fn from_label_round_trips_every_panel() {
+        // Every panel resolves from its own display label (case-insensitively).
+        for panel in GeneticsPanel::ALL {
+            assert_eq!(GeneticsPanel::from_label(panel.label()), Ok(panel));
+            assert_eq!(
+                GeneticsPanel::from_label(&panel.label().to_uppercase()),
+                Ok(panel)
+            );
+        }
+        assert!(GeneticsPanel::from_label("not a panel").is_err());
+    }
+
+    #[test]
+    fn agent_set_switches_panel_and_rejects_bad_input() {
+        let mut s = GeneticsWorkbenchState::default();
+        assert_eq!(s.active, GeneticsPanel::Sequence); // default
+
+        // The host selector is set by the panel's display name.
+        s.agent_set("Bio tool panel", &AgentValue::Str("Docking".into()))
+            .expect("switch panel by name");
+        assert_eq!(s.active, GeneticsPanel::Docking);
+        // Case-insensitive.
+        s.agent_set("Bio tool panel", &AgentValue::Str("rna structure".into()))
+            .expect("case-insensitive panel name");
+        assert_eq!(s.active, GeneticsPanel::RnaStructure);
+
+        // Unknown panel name -> Err (field unchanged).
+        assert!(s
+            .agent_set("Bio tool panel", &AgentValue::Str("Telepathy".into()))
+            .is_err());
+        assert_eq!(s.active, GeneticsPanel::RnaStructure);
+        // Unknown caption -> Err.
+        assert!(s
+            .agent_set("nope", &AgentValue::Str("Docking".into()))
+            .is_err());
+        // Wrong type (panel name needs a string) -> Err.
+        assert!(s.agent_set("Bio tool panel", &AgentValue::Int(3)).is_err());
     }
 }
 

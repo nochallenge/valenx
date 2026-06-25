@@ -109,7 +109,71 @@ impl Default for BlackHoleWorkbenchState {
     }
 }
 
+/// Parse a spacetime-family name (for the agent `SetControl` bridge) into a
+/// [`SpacetimeKind`]. Case-insensitive; accepts short names + the picker words.
+/// Fail-loud on an unknown name.
+fn parse_spacetime_kind(s: &str) -> Result<SpacetimeKind, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "schwarzschild" => Ok(SpacetimeKind::Schwarzschild),
+        "kerr" => Ok(SpacetimeKind::Kerr),
+        "reissner-nordstrom" | "reissner-nordström" | "reissnernordstrom" | "rn" => {
+            Ok(SpacetimeKind::ReissnerNordstrom)
+        }
+        "kerr-newman" | "kerrnewman" | "kn" => Ok(SpacetimeKind::KerrNewman),
+        other => Err(format!(
+            "unknown spacetime '{other}' (expected 'schwarzschild', 'kerr', \
+             'reissner-nordstrom', or 'kerr-newman')"
+        )),
+    }
+}
+
 impl BlackHoleWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). `spacetime` is the family
+    /// picker (set by option name); the rest are numeric.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "spacetime",
+            "mass M",
+            "spin a",
+            "charge Q",
+            "observer r (M)",
+            "observer \u{03B8} (\u{00B0})",
+            "image size (px)",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Numeric fields read [`AgentValue::as_f64`] /
+    /// [`AgentValue::as_i64`]; `spacetime` reads [`AgentValue::as_str`] and
+    /// matches the family names. Fail-loud: an unknown caption, wrong type, or
+    /// negative image size returns `Err` — never a panic, no field written on
+    /// error. (Setting `spin`/`charge` on a member that ignores them is allowed;
+    /// [`hole`](Self::hole) zeroes the unused degree of freedom at solve time.)
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        match name {
+            "spacetime" => self.kind = parse_spacetime_kind(value.as_str()?)?,
+            "mass M" => self.mass = value.as_f64()?,
+            "spin a" => self.spin = value.as_f64()?,
+            "charge Q" => self.charge = value.as_f64()?,
+            "observer r (M)" => self.r_obs = value.as_f64()?,
+            "observer \u{03B8} (\u{00B0})" => self.theta_obs_deg = value.as_f64()?,
+            "image size (px)" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("image size must be >= 0, got {n}"));
+                }
+                self.img_size = n as usize;
+            }
+            other => return Err(format!("unknown Black Hole control: {other:?}")),
+        }
+        Ok(())
+    }
+
     /// Build the parameter struct, zeroing spin/charge for the simpler members
     /// so the UI can't produce a contradictory hole.
     pub fn hole(&self) -> KerrNewman {
@@ -477,6 +541,30 @@ fn blackhole_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        use crate::agent_commands::AgentValue;
+        let mut s = BlackHoleWorkbenchState::default();
+        // A representative float set lands in state.
+        s.agent_set("mass M", &AgentValue::Float(2.5)).unwrap();
+        assert_eq!(s.mass, 2.5);
+        // The spacetime enum is set by option name.
+        s.agent_set("spacetime", &AgentValue::Str("kerr".into()))
+            .unwrap();
+        assert_eq!(s.kind, SpacetimeKind::Kerr);
+        // The non-ASCII observer-angle caption resolves.
+        s.agent_set("observer \u{03B8} (\u{00B0})", &AgentValue::Float(45.0))
+            .unwrap();
+        assert_eq!(s.theta_obs_deg, 45.0);
+        // Unknown caption -> Err.
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (string into the float mass) -> Err, field untouched.
+        assert!(s
+            .agent_set("mass M", &AgentValue::Str("heavy".into()))
+            .is_err());
+        assert_eq!(s.mass, 2.5, "rejected set leaves field untouched");
+    }
 
     #[test]
     fn schwarzschild_observables_match_closed_form() {

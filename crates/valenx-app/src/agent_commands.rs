@@ -1620,6 +1620,28 @@ fn set_control(
         TabKind::Frames => app.frames.agent_set(name, value),
         TabKind::Mbd => app.mbd.agent_set(name, value),
         TabKind::Piping => app.piping.agent_set(name, value),
+        // ---- agent_set sweep, batch 2 ----
+        TabKind::Aero => app.aero.agent_set(name, value),
+        TabKind::Astro => app.astro.agent_set(name, value),
+        TabKind::BlackHole => app.blackhole.agent_set(name, value),
+        TabKind::Reactdyn => app.reactdyn.agent_set(name, value),
+        TabKind::Render => app.render.agent_set(name, value),
+        TabKind::Reverse => app.reverse.agent_set(name, value),
+        TabKind::Sheetmetal => app.sheetmetal.agent_set(name, value),
+        TabKind::Fields => app.fields.agent_set(name, value),
+        TabKind::Animate => app.animate.agent_set(name, value),
+        TabKind::Fasteners => app.fasteners.agent_set(name, value),
+        TabKind::Collision => app.collision.agent_set(name, value),
+        TabKind::Interior => app.interior.agent_set(name, value),
+        TabKind::Geomatics => app.geomatics.agent_set(name, value),
+        TabKind::Genetics => app.genetics.agent_set(name, value),
+        TabKind::Neuro => app.neuro.agent_set(name, value),
+        TabKind::Ppi => app.ppi.agent_set(name, value),
+        TabKind::Autonomy => app.autonomy.agent_set(name, value),
+        TabKind::Photogrammetry => app.photogrammetry.agent_set(name, value),
+        TabKind::Cosim => app.cosim.agent_set(name, value),
+        TabKind::VariantEffect => app.variant_effect.agent_set(name, value),
+        TabKind::MeshToolbox => app.mesh_toolbox.agent_set(name, value),
         other => Err(format!(
             "set_control: workbench {other:?} ({}) has no settable controls yet",
             kind.label()
@@ -1684,6 +1706,50 @@ fn list_controls(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
         TabKind::Frames => crate::frames_workbench::FramesWorkbenchState::agent_control_names(),
         TabKind::Mbd => crate::mbd_workbench::MbdWorkbenchState::agent_control_names(),
         TabKind::Piping => crate::piping_workbench::PipingWorkbenchState::agent_control_names(),
+        // ---- agent_set sweep, batch 2 ----
+        TabKind::Aero => crate::aero_workbench::AeroWorkbenchState::agent_control_names(),
+        TabKind::Astro => crate::astro_workbench::AstroWorkbenchState::agent_control_names(),
+        TabKind::BlackHole => {
+            crate::blackhole_workbench::BlackHoleWorkbenchState::agent_control_names()
+        }
+        TabKind::Reactdyn => {
+            crate::reactdyn_workbench::ReactdynWorkbenchState::agent_control_names()
+        }
+        TabKind::Render => crate::render_workbench::RenderWorkbenchState::agent_control_names(),
+        TabKind::Reverse => crate::reverse_workbench::ReverseWorkbenchState::agent_control_names(),
+        TabKind::Sheetmetal => {
+            crate::sheetmetal_workbench::SheetmetalWorkbenchState::agent_control_names()
+        }
+        TabKind::Fields => crate::fields_workbench::FieldsWorkbenchState::agent_control_names(),
+        TabKind::Animate => crate::animate_workbench::AnimateWorkbenchState::agent_control_names(),
+        TabKind::Fasteners => {
+            crate::fasteners_workbench::FastenersWorkbenchState::agent_control_names()
+        }
+        TabKind::Collision => {
+            crate::collision_workbench::CollisionWorkbenchState::agent_control_names()
+        }
+        TabKind::Interior => {
+            crate::interior_workbench::InteriorWorkbenchState::agent_control_names()
+        }
+        TabKind::Geomatics => {
+            crate::geomatics_workbench::GeomaticsWorkbenchState::agent_control_names()
+        }
+        TabKind::Genetics => {
+            crate::genetics_workbench::GeneticsWorkbenchState::agent_control_names()
+        }
+        TabKind::Neuro => crate::neuro_workbench::NeuroWorkbenchState::agent_control_names(),
+        TabKind::Ppi => crate::ppi_workbench::PpiWorkbenchState::agent_control_names(),
+        TabKind::Autonomy => {
+            crate::autonomy_workbench::AutonomyWorkbenchState::agent_control_names()
+        }
+        TabKind::Photogrammetry => {
+            crate::photogrammetry_workbench::PhotogrammetryWorkbenchState::agent_control_names()
+        }
+        TabKind::Cosim => crate::cosim_workbench::CosimWorkbenchState::agent_control_names(),
+        TabKind::VariantEffect => {
+            crate::variant_effect_workbench::VariantEffectWorkbenchState::agent_control_names()
+        }
+        TabKind::MeshToolbox => crate::mesh_toolbox::MeshToolboxState::agent_control_names(),
         _ => &[],
     };
 
@@ -4092,6 +4158,63 @@ mod tests {
         assert_eq!(app.ocean.params.num_waves, 8);
         assert_eq!(app.mbd.params.gravity, 3.71);
         assert_eq!(app.rotor.blade_count, 3);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn set_control_routed_through_poll_sets_batch2_workbenches() {
+        // A representative slice of the batch-2 workbenches (this sweep) set via
+        // the REAL `poll_and_apply_agent_commands` path on one channel, proving
+        // each new `TabKind` arm routes to the right state's `agent_set`
+        // (active-tab-independent `workbench:` routing). These three keep their
+        // parameters private, so success is asserted through the publicly visible
+        // ack note `set_control` posts on a routed-and-validated set: a MISSING
+        // arm would instead post the "no settable controls yet" warn, so seeing
+        // the `set <name> = <value>` ack proves the dispatch arm exists and ran.
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "set_control_batch2");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        let path = cmd_path(&app, 1);
+        std::fs::write(
+            &path,
+            concat!(
+                "{\"cmd\":\"set_control\",\"name\":\"Furniture\",\"value\":\"sofa\",\"workbench\":\"interior\"}\n",
+                "{\"cmd\":\"set_control\",\"name\":\"max bounces\",\"value\":4,\"workbench\":\"render\"}\n",
+                "{\"cmd\":\"set_control\",\"name\":\"Variants (one per line)\",\"value\":\"p.R273H\",\"workbench\":\"varianteffect\"}\n",
+            ),
+        )
+        .unwrap();
+
+        poll_and_apply_agent_commands(&mut app);
+
+        // Read channel-1's feed and confirm an ack note landed for each set (and
+        // that none routed to the "no settable controls yet" fallthrough).
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let details: Vec<String> = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .filter_map(|v| v.get("detail").and_then(|d| d.as_str()).map(str::to_string))
+            .collect();
+        let has = |needle: &str| details.iter().any(|d| d.contains(needle));
+        assert!(
+            has("set Furniture = Str(\"sofa\")"),
+            "interior arm routed + set; feed = {details:?}"
+        );
+        assert!(
+            has("set max bounces = Int(4)"),
+            "render arm routed + set; feed = {details:?}"
+        );
+        assert!(
+            has("set Variants (one per line) = Str(\"p.R273H\")"),
+            "variant-effect arm routed + set; feed = {details:?}"
+        );
+        assert!(
+            !details.iter().any(|d| d.contains("no settable controls")),
+            "no batch-2 set fell through to the unwired fallthrough; feed = {details:?}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

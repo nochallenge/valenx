@@ -46,6 +46,7 @@ use valenx_autonomy_vnv::{
 // (valenx-sensors is already a valenx-app dependency).
 use valenx_sensors::{Command, Scene, Sphere, VehicleState};
 
+use crate::agent_commands::AgentValue;
 use crate::ValenxApp;
 
 // ---------------------------------------------------------------------------
@@ -343,6 +344,62 @@ impl AutonomyWorkbenchState {
                 p.bounds_half_y,
             ),
         })
+    }
+
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`
+    /// so an agent can discover the name space. The captions match exactly what
+    /// the workbench form draws (and what each control is `labelled_by`).
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "start x (m)",
+            "start y (m)",
+            "heading (deg)",
+            "speed (m/s)",
+            "time step dt (s)",
+            "steps",
+            "obstacle x (m)",
+            "obstacle y (m)",
+            "obstacle radius (m)",
+            "min clearance d (m)",
+            "collision radius (m)",
+            "bounds half-x (m)",
+            "bounds half-y (m)",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the wrong
+    /// type returns `Err(String)` (the bridge turns it into a `warn` feed note) —
+    /// never a panic, and no field is written on error. Every numeric caption
+    /// reads [`AgentValue::as_f64`]; the integer `steps` count reads
+    /// [`AgentValue::as_i64`]. Range/finiteness validation stays in
+    /// [`run`](Self::run) (so e.g. a negative `steps` surfaces there, not here).
+    pub fn agent_set(&mut self, name: &str, value: &AgentValue) -> Result<(), String> {
+        let p = &mut self.params;
+        match name {
+            "start x (m)" => p.start_x = value.as_f64()?,
+            "start y (m)" => p.start_y = value.as_f64()?,
+            "heading (deg)" => p.heading_deg = value.as_f64()?,
+            "speed (m/s)" => p.speed = value.as_f64()?,
+            "time step dt (s)" => p.dt = value.as_f64()?,
+            "steps" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("steps must be >= 0, got {n}"));
+                }
+                p.steps = n as usize;
+            }
+            "obstacle x (m)" => p.obstacle_x = value.as_f64()?,
+            "obstacle y (m)" => p.obstacle_y = value.as_f64()?,
+            "obstacle radius (m)" => p.obstacle_radius = value.as_f64()?,
+            "min clearance d (m)" => p.min_clearance = value.as_f64()?,
+            "collision radius (m)" => p.collision_radius = value.as_f64()?,
+            "bounds half-x (m)" => p.bounds_half_x = value.as_f64()?,
+            "bounds half-y (m)" => p.bounds_half_y = value.as_f64()?,
+            other => return Err(format!("unknown autonomy control: {other:?}")),
+        }
+        Ok(())
     }
 }
 
@@ -942,6 +999,53 @@ mod tests {
             s.run().is_err(),
             "negative min clearance must return Err, not panic"
         );
+    }
+
+    // ---- agent_set / agent_control_names (the SetControl bridge) ----
+
+    #[test]
+    fn agent_set_sets_params_and_rejects_unknown_and_typemismatch() {
+        let mut s = AutonomyWorkbenchState::default();
+
+        // A representative float param, verified via state.
+        s.agent_set("speed (m/s)", &AgentValue::Float(7.5))
+            .expect("set speed");
+        assert!((s.params.speed - 7.5).abs() < 1e-12);
+        // The integer step-count (an Int and a whole-valued Float both work).
+        s.agent_set("steps", &AgentValue::Int(40))
+            .expect("set steps");
+        assert_eq!(s.params.steps, 40);
+        s.agent_set("steps", &AgentValue::Float(50.0))
+            .expect("whole float -> usize");
+        assert_eq!(s.params.steps, 50);
+        // An Int widens to an f64 field.
+        s.agent_set("obstacle radius (m)", &AgentValue::Int(2))
+            .expect("set obstacle radius");
+        assert!((s.params.obstacle_radius - 2.0).abs() < 1e-12);
+
+        // Unknown caption -> Err (not a panic).
+        assert!(s.agent_set("nope", &AgentValue::Int(1)).is_err());
+        // Type mismatch: a numeric caption fed a string -> Err.
+        assert!(s
+            .agent_set("speed (m/s)", &AgentValue::Str("fast".into()))
+            .is_err());
+        // Type mismatch: the integer caption fed a fractional float -> Err.
+        assert!(s.agent_set("steps", &AgentValue::Float(3.5)).is_err());
+        // A negative steps value -> Err (not a silently-wrapped usize).
+        assert!(s.agent_set("steps", &AgentValue::Int(-1)).is_err());
+
+        // Every advertised control name is settable with a value of its type.
+        for name in AutonomyWorkbenchState::agent_control_names() {
+            let v = if *name == "steps" {
+                AgentValue::Int(5)
+            } else {
+                AgentValue::Float(1.0)
+            };
+            assert!(
+                s.agent_set(name, &v).is_ok(),
+                "advertised control '{name}' must be settable"
+            );
+        }
     }
 }
 

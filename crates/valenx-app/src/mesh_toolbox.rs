@@ -29,6 +29,7 @@ use nalgebra::Vector3;
 use valenx_mesh::transform::{Axis, Plane};
 use valenx_viz::TriangleMesh;
 
+use crate::agent_commands::AgentValue;
 use crate::audit::emit_audit;
 use crate::types::LoadedMesh;
 use crate::ValenxApp;
@@ -200,6 +201,147 @@ impl Default for MeshToolboxState {
             arch: ArchPanelState::default(),
             spreadsheet: SpreadsheetPanelState::default(),
         }
+    }
+}
+
+impl MeshToolboxState {
+    /// The user-visible captions of every **top-level** Mesh-Toolbox control the
+    /// agent bridge can set via `SetControl` (see [`crate::agent_commands`]).
+    /// Returned by `ListControls` so an agent can discover the name space.
+    ///
+    /// Scope: the primary mesh-editing + Part-primitive numeric/enum/toggle
+    /// controls that live directly on [`MeshToolboxState`] — Transformations,
+    /// Cut plane, Repair, Mesh Tools (decimate / Laplacian / Taubin / remesh /
+    /// fill), and the Part primitive parameters + fillet. The many nested
+    /// sub-panel workbenches (Sketcher, Part Design, Assembly, Surface, CAM,
+    /// Arch, Draft, TechDraw, Spreadsheet, Dock) each carry their own large
+    /// forms and are **not** exposed here — they would need their own
+    /// `agent_set` surfaces. Multi-component vector fields are addressed
+    /// per-axis with composite captions (e.g. `Translate X`) since the form
+    /// shares one label across the three drag-values.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            // -- Transformations --
+            "Translate X",
+            "Translate Y",
+            "Translate Z",
+            "Scale (uniform)",
+            "Scale (axes) X",
+            "Scale (axes) Y",
+            "Scale (axes) Z",
+            "Rotate axis",
+            "Angle (deg)",
+            "Mirror plane",
+            // -- Cut plane --
+            "Cut point X",
+            "Cut point Y",
+            "Cut point Z",
+            "Cut normal X",
+            "Cut normal Y",
+            "Cut normal Z",
+            "Show cut overlay",
+            // -- Repair --
+            "Merge coincident — tolerance",
+            // -- Mesh Tools --
+            "Decimate fraction",
+            "Laplacian iter",
+            "Laplacian factor",
+            "Taubin iter",
+            "Taubin lambda",
+            "Taubin mu",
+            "Remesh target edge",
+            "Remesh iter",
+            "Fill holes — max boundary length",
+            // -- Part primitives --
+            "Shape",
+            "Box size X",
+            "Box size Y",
+            "Box size Z",
+            "Cylinder radius",
+            "Cylinder height",
+            "Sphere radius",
+            "Cone base radius",
+            "Cone top radius",
+            "Cone height",
+            "Torus major radius",
+            "Torus minor radius",
+            "Create as operand B",
+            "Fillet radius",
+        ]
+    }
+
+    /// Set one top-level Mesh-Toolbox control by its caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the wrong
+    /// type returns `Err(String)` (the bridge turns it into a `warn` feed note)
+    /// — never a panic, and no field is written on error. Float fields read
+    /// [`AgentValue::as_f64`]; integer-count fields read [`AgentValue::as_i64`]
+    /// (with a range check for the `u32` iteration counts); the `Rotate axis` /
+    /// `Mirror plane` / `Shape` enums read [`AgentValue::as_str`]; the two
+    /// toggles read [`AgentValue::as_bool`]. Physical range validation (e.g. a
+    /// non-positive radius) is left to the downstream CAD/mesh op, which already
+    /// surfaces its own error in-panel.
+    pub fn agent_set(&mut self, name: &str, value: &AgentValue) -> Result<(), String> {
+        // Helper: read a u32 iteration count, fail-loud out of range.
+        fn as_u32(value: &AgentValue, caption: &str) -> Result<u32, String> {
+            let n = value.as_i64()?;
+            if !(0..=i64::from(u32::MAX)).contains(&n) {
+                return Err(format!("{caption} must be in 0..=4294967295, got {n}"));
+            }
+            Ok(n as u32)
+        }
+
+        match name {
+            // -- Transformations --
+            "Translate X" => self.translate[0] = value.as_f64()?,
+            "Translate Y" => self.translate[1] = value.as_f64()?,
+            "Translate Z" => self.translate[2] = value.as_f64()?,
+            "Scale (uniform)" => self.scale_uniform = value.as_f64()?,
+            "Scale (axes) X" => self.scale_per_axis[0] = value.as_f64()?,
+            "Scale (axes) Y" => self.scale_per_axis[1] = value.as_f64()?,
+            "Scale (axes) Z" => self.scale_per_axis[2] = value.as_f64()?,
+            "Rotate axis" => self.rotate_axis = ToolboxAxis::from_name(value.as_str()?)?,
+            "Angle (deg)" => self.rotate_angle_deg = value.as_f64()?,
+            "Mirror plane" => self.mirror_plane = ToolboxAxis::from_name(value.as_str()?)?,
+            // -- Cut plane --
+            "Cut point X" => self.cut_point[0] = value.as_f64()?,
+            "Cut point Y" => self.cut_point[1] = value.as_f64()?,
+            "Cut point Z" => self.cut_point[2] = value.as_f64()?,
+            "Cut normal X" => self.cut_normal[0] = value.as_f64()?,
+            "Cut normal Y" => self.cut_normal[1] = value.as_f64()?,
+            "Cut normal Z" => self.cut_normal[2] = value.as_f64()?,
+            "Show cut overlay" => self.cut_show_overlay = value.as_bool()?,
+            // -- Repair --
+            "Merge coincident — tolerance" => self.repair_tolerance = value.as_f64()?,
+            // -- Mesh Tools --
+            "Decimate fraction" => self.mesh_tools_decimate_fraction = value.as_f64()?,
+            "Laplacian iter" => self.mesh_tools_laplacian_iter = as_u32(value, "Laplacian iter")?,
+            "Laplacian factor" => self.mesh_tools_laplacian_factor = value.as_f64()?,
+            "Taubin iter" => self.mesh_tools_taubin_iter = as_u32(value, "Taubin iter")?,
+            "Taubin lambda" => self.mesh_tools_taubin_lambda = value.as_f64()?,
+            "Taubin mu" => self.mesh_tools_taubin_mu = value.as_f64()?,
+            "Remesh target edge" => self.mesh_tools_remesh_target = value.as_f64()?,
+            "Remesh iter" => self.mesh_tools_remesh_iter = as_u32(value, "Remesh iter")?,
+            "Fill holes — max boundary length" => {
+                self.mesh_tools_fill_holes_max = value.as_f64()?
+            }
+            // -- Part primitives --
+            "Shape" => self.cad_primitive = CadPrimitiveKind::from_name(value.as_str()?)?,
+            "Box size X" => self.cad_box_dims[0] = value.as_f64()?,
+            "Box size Y" => self.cad_box_dims[1] = value.as_f64()?,
+            "Box size Z" => self.cad_box_dims[2] = value.as_f64()?,
+            "Cylinder radius" => self.cad_cyl_radius = value.as_f64()?,
+            "Cylinder height" => self.cad_cyl_height = value.as_f64()?,
+            "Sphere radius" => self.cad_sphere_radius = value.as_f64()?,
+            "Cone base radius" => self.cad_cone_base = value.as_f64()?,
+            "Cone top radius" => self.cad_cone_top = value.as_f64()?,
+            "Cone height" => self.cad_cone_height = value.as_f64()?,
+            "Torus major radius" => self.cad_torus_major = value.as_f64()?,
+            "Torus minor radius" => self.cad_torus_minor = value.as_f64()?,
+            "Create as operand B" => self.cad_create_as_second = value.as_bool()?,
+            "Fillet radius" => self.cad_fillet_radius = value.as_f64()?,
+            other => return Err(format!("unknown mesh-toolbox control: {other:?}")),
+        }
+        Ok(())
     }
 }
 
@@ -1991,6 +2133,23 @@ impl CadPrimitiveKind {
             CadPrimitiveKind::Torus => "cad.primitive.torus",
         }
     }
+
+    /// Parse a primitive-shape name (for the agent `SetControl` bridge) into a
+    /// [`CadPrimitiveKind`]. Case-insensitive; accepts the menu words.
+    /// Fail-loud on an unrecognised name.
+    fn from_name(s: &str) -> Result<CadPrimitiveKind, String> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "box" => Ok(CadPrimitiveKind::Box),
+            "cylinder" => Ok(CadPrimitiveKind::Cylinder),
+            "sphere" => Ok(CadPrimitiveKind::Sphere),
+            "cone" | "frustum" | "cone / frustum" => Ok(CadPrimitiveKind::Cone),
+            "torus" => Ok(CadPrimitiveKind::Torus),
+            other => Err(format!(
+                "unknown CAD primitive '{other}' (expected box / cylinder / sphere / \
+                 cone / torus)"
+            )),
+        }
+    }
 }
 
 /// Three-way radio enum shared by the rotate-axis and mirror-plane
@@ -2025,6 +2184,18 @@ impl ToolboxAxis {
             ToolboxAxis::X => "X",
             ToolboxAxis::Y => "Y",
             ToolboxAxis::Z => "Z",
+        }
+    }
+
+    /// Parse an axis / plane name (for the agent `SetControl` bridge) into a
+    /// [`ToolboxAxis`]. Case-insensitive; accepts `X` / `Y` / `Z`. Fail-loud on
+    /// an unrecognised name.
+    fn from_name(s: &str) -> Result<ToolboxAxis, String> {
+        match s.trim().to_ascii_uppercase().as_str() {
+            "X" => Ok(ToolboxAxis::X),
+            "Y" => Ok(ToolboxAxis::Y),
+            "Z" => Ok(ToolboxAxis::Z),
+            other => Err(format!("unknown axis '{other}' (expected X, Y, or Z)")),
         }
     }
 }
@@ -14492,6 +14663,82 @@ mod tests {
             "expected `receptor read: ...cap...` got: {err}"
         );
         let _ = std::fs::remove_file(&tmp);
+    }
+
+    // ---- agent_set / agent_control_names (the SetControl bridge) ----
+
+    #[test]
+    fn agent_set_sets_toplevel_controls_and_rejects_unknown_and_typemismatch() {
+        let mut s = MeshToolboxState::default();
+
+        // A representative float component of a vector field, verified via state.
+        s.agent_set("Translate X", &AgentValue::Float(2.5))
+            .expect("set Translate X");
+        assert!((s.translate[0] - 2.5).abs() < 1e-12);
+        // A scalar float.
+        s.agent_set("Scale (uniform)", &AgentValue::Float(3.0))
+            .expect("set Scale (uniform)");
+        assert!((s.scale_uniform - 3.0).abs() < 1e-12);
+        // A u32 iteration count (Int widens; whole Float also accepted).
+        s.agent_set("Laplacian iter", &AgentValue::Int(7))
+            .expect("set Laplacian iter");
+        assert_eq!(s.mesh_tools_laplacian_iter, 7);
+        // The axis radio enum, by name.
+        s.agent_set("Rotate axis", &AgentValue::Str("y".into()))
+            .expect("set Rotate axis");
+        assert_eq!(s.rotate_axis, ToolboxAxis::Y);
+        // The Part-primitive Shape combo, by name.
+        s.agent_set("Shape", &AgentValue::Str("cylinder".into()))
+            .expect("set Shape");
+        assert_eq!(s.cad_primitive, CadPrimitiveKind::Cylinder);
+        // A boolean toggle.
+        s.agent_set("Show cut overlay", &AgentValue::Bool(true))
+            .expect("set Show cut overlay");
+        assert!(s.cut_show_overlay);
+        // A CAD numeric param.
+        s.agent_set("Cylinder radius", &AgentValue::Float(0.9))
+            .expect("set Cylinder radius");
+        assert!((s.cad_cyl_radius - 0.9).abs() < 1e-12);
+
+        // Unknown caption -> Err (not a panic).
+        assert!(s.agent_set("nope", &AgentValue::Int(1)).is_err());
+        // Type mismatch: a float caption fed a string -> Err.
+        assert!(s
+            .agent_set("Translate X", &AgentValue::Str("two".into()))
+            .is_err());
+        // Type mismatch: the enum caption fed a number -> Err.
+        assert!(s.agent_set("Rotate axis", &AgentValue::Int(1)).is_err());
+        // Type mismatch: the bool caption fed a number -> Err.
+        assert!(s
+            .agent_set("Show cut overlay", &AgentValue::Int(1))
+            .is_err());
+        // Out-of-range u32 iteration count -> Err (no silent truncation).
+        assert!(s.agent_set("Taubin iter", &AgentValue::Int(-1)).is_err());
+        assert!(s
+            .agent_set("Taubin iter", &AgentValue::Int(i64::from(u32::MAX) + 1))
+            .is_err());
+        // Unknown enum names -> Err.
+        assert!(s
+            .agent_set("Rotate axis", &AgentValue::Str("w".into()))
+            .is_err());
+        assert!(s
+            .agent_set("Shape", &AgentValue::Str("dodecahedron".into()))
+            .is_err());
+
+        // Every advertised control name is settable with a value of its type.
+        for name in MeshToolboxState::agent_control_names() {
+            let v = match *name {
+                "Rotate axis" | "Mirror plane" => AgentValue::Str("z".into()),
+                "Shape" => AgentValue::Str("box".into()),
+                "Show cut overlay" | "Create as operand B" => AgentValue::Bool(true),
+                "Laplacian iter" | "Taubin iter" | "Remesh iter" => AgentValue::Int(2),
+                _ => AgentValue::Float(1.0),
+            };
+            assert!(
+                s.agent_set(name, &v).is_ok(),
+                "advertised control '{name}' must be settable"
+            );
+        }
     }
 }
 

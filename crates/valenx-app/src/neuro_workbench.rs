@@ -17,6 +17,7 @@ use valenx_neuro::{
     ExtracellularRecorder, NeuroError, Scene, TissueGrid,
 };
 
+use crate::agent_commands::AgentValue;
 use crate::ValenxApp;
 
 /// Persistent state for the neural-interface workbench.
@@ -76,6 +77,77 @@ impl Default for NeuroWorkbenchState {
             results: None,
             error: None,
         }
+    }
+}
+
+impl NeuroWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`.
+    /// Every entry matches, byte-for-byte, the caption each `DragValue` is
+    /// `labelled_by` in the draw code (including the µ / σ / Ω / √ glyphs).
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "current (µA, cathodic)",
+            "electrode radius (µm)",
+            "tissue σ (S/m)",
+            "axons",
+            "nearest depth (mm)",
+            "spread (mm)",
+            "pulse width (µs)",
+            "Shannon k limit",
+            "at-electrode threshold I₀ (µA)",
+            "current\u{2013}distance k (µA/µm²)",
+            "fiber diameter (µm)",
+            "R_m (Ω·cm²)",
+            "R_i (Ω·cm)",
+            "C_m (µF/cm²)",
+            "k_myelinated (m/s per µm)",
+            "k_unmyelinated (m/s per √µm)",
+            "distance for latency (m)",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Caption strings match exactly what the workbench
+    /// draws (and what each control is `labelled_by`). Numeric fields read
+    /// [`AgentValue::as_f64`]; the lone integer field (`axons`) reads
+    /// [`AgentValue::as_i64`] and rejects a negative count.
+    ///
+    /// Fail-loud: an unknown caption or a value of the wrong type returns
+    /// `Err(String)` — never a panic, and no field is written on error. Values
+    /// are stored verbatim; `run_neuro` / the readout closures apply their own
+    /// `.max(..)` clamps at compute time (mirroring the manual drag flow), so a
+    /// physically-degenerate intermediate is allowed here without panicking.
+    pub fn agent_set(&mut self, name: &str, value: &AgentValue) -> Result<(), String> {
+        match name {
+            "current (µA, cathodic)" => self.electrode_ua = value.as_f64()?,
+            "electrode radius (µm)" => self.electrode_radius_um = value.as_f64()?,
+            "tissue σ (S/m)" => self.sigma_s_m = value.as_f64()?,
+            "axons" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("axons must be >= 0, got {n}"));
+                }
+                self.n_axons = n as usize;
+            }
+            "nearest depth (mm)" => self.depth_mm = value.as_f64()?,
+            "spread (mm)" => self.spread_mm = value.as_f64()?,
+            "pulse width (µs)" => self.pulse_width_us = value.as_f64()?,
+            "Shannon k limit" => self.k_limit = value.as_f64()?,
+            "at-electrode threshold I₀ (µA)" => self.cd_i0_ua = value.as_f64()?,
+            "current\u{2013}distance k (µA/µm²)" => self.cd_k_ua_per_um2 = value.as_f64()?,
+            "fiber diameter (µm)" => self.fiber_diameter_um = value.as_f64()?,
+            "R_m (Ω·cm²)" => self.r_m_ohm_cm2 = value.as_f64()?,
+            "R_i (Ω·cm)" => self.r_i_ohm_cm = value.as_f64()?,
+            "C_m (µF/cm²)" => self.c_m_uf_cm2 = value.as_f64()?,
+            "k_myelinated (m/s per µm)" => self.k_myel_m_per_s_per_um = value.as_f64()?,
+            "k_unmyelinated (m/s per √µm)" => {
+                self.k_unmyel_m_per_s_per_sqrt_um = value.as_f64()?
+            }
+            "distance for latency (m)" => self.conduction_distance_m = value.as_f64()?,
+            other => return Err(format!("unknown neuro control: {other:?}")),
+        }
+        Ok(())
     }
 }
 
@@ -668,6 +740,57 @@ mod tests {
         // At exactly the threshold current, the activation radius == the depth.
         s.electrode_ua = -502.0;
         assert!((current_distance_readout(&s).activation_radius_um - 500.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn agent_set_sets_numeric_and_integer_fields_and_rejects_bad_input() {
+        let mut s = NeuroWorkbenchState::default();
+
+        // A representative f64 control (with a µ glyph in the caption).
+        s.agent_set("current (µA, cathodic)", &AgentValue::Float(150.0))
+            .expect("set current");
+        assert_eq!(s.electrode_ua, 150.0);
+        // The σ glyph caption.
+        s.agent_set("tissue σ (S/m)", &AgentValue::Float(0.3))
+            .expect("set sigma");
+        assert_eq!(s.sigma_s_m, 0.3);
+        // The integer field (Int) — and Float-that-is-integral also coerces.
+        s.agent_set("axons", &AgentValue::Int(5))
+            .expect("set axons");
+        assert_eq!(s.n_axons, 5);
+        s.agent_set("axons", &AgentValue::Float(12.0))
+            .expect("integral float -> usize");
+        assert_eq!(s.n_axons, 12);
+        // A glyph-heavy caption (en-dash + superscript ²).
+        s.agent_set(
+            "current\u{2013}distance k (µA/µm²)",
+            &AgentValue::Float(0.002),
+        )
+        .expect("set cd k");
+        assert_eq!(s.cd_k_ua_per_um2, 0.002);
+
+        // Every advertised control name must be settable (with a number).
+        for cap in NeuroWorkbenchState::agent_control_names() {
+            let v = if *cap == "axons" {
+                AgentValue::Int(4)
+            } else {
+                AgentValue::Float(1.0)
+            };
+            assert!(
+                s.agent_set(cap, &v).is_ok(),
+                "advertised control '{cap}' must be settable"
+            );
+        }
+
+        // Unknown caption -> Err.
+        assert!(s.agent_set("laser power", &AgentValue::Float(1.0)).is_err());
+        // Wrong type: a numeric field needs a number; axons rejects a fraction.
+        assert!(s
+            .agent_set("current (µA, cathodic)", &AgentValue::Str("x".into()))
+            .is_err());
+        assert!(s.agent_set("axons", &AgentValue::Float(2.5)).is_err());
+        // Negative axon count -> Err.
+        assert!(s.agent_set("axons", &AgentValue::Int(-1)).is_err());
     }
 }
 

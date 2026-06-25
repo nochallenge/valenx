@@ -48,6 +48,40 @@ impl Default for SheetmetalWorkbenchState {
     }
 }
 
+impl SheetmetalWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). All four bend parameters
+    /// are numeric.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "thickness (mm)",
+            "inside radius (mm)",
+            "bend angle (\u{00B0})",
+            "k-factor",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Every bend parameter reads [`AgentValue::as_f64`].
+    /// Fail-loud: an unknown caption or a value of the wrong type returns `Err`
+    /// — never a panic, no field written on error. (Out-of-range values are
+    /// caught at [`run_sheetmetal`] time, which surfaces an in-panel error.)
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        match name {
+            "thickness (mm)" => self.thickness_mm = value.as_f64()?,
+            "inside radius (mm)" => self.inside_radius_mm = value.as_f64()?,
+            "bend angle (\u{00B0})" => self.bend_angle_deg = value.as_f64()?,
+            "k-factor" => self.k_factor = value.as_f64()?,
+            other => return Err(format!("unknown Sheet Metal control: {other:?}")),
+        }
+        Ok(())
+    }
+}
+
 /// Draw the Sheet Metal Workbench right-side panel. A no-op when the
 /// `show_sheetmetal_workbench` toggle is off.
 pub fn draw_sheetmetal_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
@@ -398,6 +432,29 @@ mod tests {
         let s = SheetmetalWorkbenchState::default();
         assert!(s.result.is_empty());
         assert!(s.error.is_none());
+    }
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        use crate::agent_commands::AgentValue;
+        let mut s = SheetmetalWorkbenchState::default();
+        // A representative float set lands in state.
+        s.agent_set("thickness (mm)", &AgentValue::Float(2.0))
+            .unwrap();
+        assert_eq!(s.thickness_mm, 2.0);
+        // The non-ASCII bend-angle caption resolves.
+        s.agent_set("bend angle (\u{00B0})", &AgentValue::Float(120.0))
+            .unwrap();
+        assert_eq!(s.bend_angle_deg, 120.0);
+        // Unknown caption -> Err.
+        assert!(s
+            .agent_set("no such control", &AgentValue::Float(1.0))
+            .is_err());
+        // Type mismatch (string into the float thickness) -> Err, field untouched.
+        assert!(s
+            .agent_set("thickness (mm)", &AgentValue::Str("thick".into()))
+            .is_err());
+        assert_eq!(s.thickness_mm, 2.0, "rejected set leaves field untouched");
     }
 
     #[test]
