@@ -61,6 +61,43 @@ impl Draft2dWorkbenchState {
         ]
     }
 
+    /// Add a straight **line** entity to the drawing by explicit endpoints, for
+    /// the agent `Add2dLine` bridge. Routes through the **same**
+    /// `Drawing2D::add(Entity2D::Line { .. })` path the form's `+` button uses
+    /// (layer `"0"`), so a bridge-added line is identical to a hand-added one —
+    /// the bridge just supplies the coordinates directly instead of the input
+    /// fields. The `drawing` field is module-private, so this is the public
+    /// seam the cross-module bridge writes through.
+    pub fn agent_add_line(&mut self, a: [f64; 2], b: [f64; 2]) {
+        self.drawing.add(Entity2D::Line {
+            layer: "0".to_string(),
+            a,
+            b,
+        });
+    }
+
+    /// Add a **circle** entity to the drawing by centre + radius, for the agent
+    /// `Add2dCircle` bridge. Routes through the **same**
+    /// `Drawing2D::add(Entity2D::Circle { .. })` path the form's `+` button uses
+    /// (layer `"0"`, radius floored at `0.1` exactly like the button), so a
+    /// bridge-added circle is identical to a hand-added one. The caller has
+    /// already validated `radius > 0`; the `0.1` floor is the same defensive
+    /// clamp the UI applies.
+    pub fn agent_add_circle(&mut self, centre: [f64; 2], radius: f64) {
+        self.drawing.add(Entity2D::Circle {
+            layer: "0".to_string(),
+            centre,
+            radius: radius.max(0.1),
+        });
+    }
+
+    /// The number of entities currently in the drawing — the public read the
+    /// agent bridge (and its tests) use to confirm an add landed, since the
+    /// `drawing` field itself is module-private.
+    pub fn entity_count(&self) -> usize {
+        self.drawing.entities.len()
+    }
+
     /// Set one labelled control by its user-visible caption, for the agent
     /// `SetControl` bridge. The captions match exactly what the form draws (the
     /// line endpoints are the Unicode-subscript captions). Fail-loud on an

@@ -49,6 +49,8 @@ use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 
+use valenx_viz::ViewDirection;
+
 use crate::project_tabs::{self, TabKind};
 use crate::ValenxApp;
 
@@ -464,6 +466,132 @@ pub enum AgentCommand {
         /// Optional target workbench id (default: the active tab's workbench).
         #[serde(default)]
         workbench: Option<String>,
+    },
+    /// **Snap the central 3-D viewport camera to a canonical view.** `dir` is one
+    /// of `front` / `back` / `left` / `right` / `top` / `bottom` / `iso`
+    /// (case-insensitive), mapped to a [`valenx_viz::ViewDirection`] and applied
+    /// via the **same** `OrbitCamera::set_view` the ViewCube buttons drive
+    /// ([`crate::ValenxApp::camera_mut`]). This closes the camera half of the
+    /// viewport AI-drivability gap over the robust polled file-bridge. An
+    /// unrecognised `dir` posts a `warn` feed note and changes nothing (never a
+    /// panic); a successful snap posts an ack note. The camera *target*/distance
+    /// are untouched — only the orbit angles snap, exactly like the ViewCube.
+    SetView {
+        /// Canonical view name (case-insensitive): `front`, `back`, `left`,
+        /// `right`, `top`, `bottom`, `iso`.
+        dir: String,
+    },
+    /// **Orbit the central 3-D camera by a degree delta** — the file-driven
+    /// equivalent of a middle-mouse drag. `dx_deg` changes azimuth, `dy_deg`
+    /// changes elevation (clamped to `±89.9°` by `OrbitCamera::orbit`, the same
+    /// vetted method the drag uses). Always succeeds (any finite delta is valid;
+    /// a non-finite delta is ignored with a `warn` note); posts an ack note with
+    /// the new azimuth/elevation.
+    Orbit {
+        /// Azimuth delta in degrees (horizontal orbit).
+        dx_deg: f32,
+        /// Elevation delta in degrees (vertical orbit, clamped to ±89.9°).
+        dy_deg: f32,
+    },
+    /// **Dolly the central 3-D camera in/out** — the file-driven equivalent of a
+    /// scroll-wheel zoom. `factor` is the fractional zoom `OrbitCamera::zoom`
+    /// takes: positive zooms **in** (e.g. `0.1` = 10% closer), negative zooms
+    /// out; the method clamps so the camera can't invert through the target. A
+    /// non-finite `factor` is ignored with a `warn` note; a valid zoom posts an
+    /// ack note with the new distance.
+    Zoom {
+        /// Fractional zoom amount (positive = in, negative = out).
+        factor: f32,
+    },
+    /// **Frame the whole loaded model in the central 3-D viewport** — the
+    /// file-driven equivalent of the "Fit / Frame all" action. Reframes the
+    /// camera around the loaded mesh's (or STL's) axis-aligned bounding box via
+    /// the **same** [`crate::ValenxApp::frame_current_mesh`] /
+    /// [`crate::ValenxApp::frame_current_stl`] methods the menu uses. When
+    /// **nothing** is loaded the camera is left unchanged and a `warn` feed note
+    /// says so (never a panic); on success an ack note is posted.
+    FrameAll,
+    /// **Add a straight-line vertex to the in-house CAD sketch** by explicit
+    /// model-space coordinates — the file-driven equivalent of a Line-tool click
+    /// on the sketch canvas. Routes through the **same**
+    /// [`crate::cad_workbench::CadWorkbenchState::sketch_add_point`] the mouse
+    /// click uses (first point seeds the start anchor, each later point appends a
+    /// `Line` segment; a no-op once the loop is closed). Always parses; posts an
+    /// ack note with the new anchor count.
+    AddSketchPoint {
+        /// Sketch-plane X (model units).
+        x: f64,
+        /// Sketch-plane Y (model units).
+        y: f64,
+    },
+    /// **Add a 3-point circular arc to the in-house CAD sketch** — the
+    /// file-driven equivalent of the Arc tool's three clicks (`start`, then a
+    /// point `via` ON the arc, then `end`). Routes through the **same**
+    /// [`crate::cad_workbench::CadWorkbenchState::sketch_add_arc`] the canvas
+    /// uses (if the sketch is empty `start` seeds the start anchor; a no-op once
+    /// the loop is closed). Always parses; posts an ack note.
+    AddSketchArc {
+        /// Arc start point `[x, y]` (model units).
+        start: [f64; 2],
+        /// A point ON the arc between start and end `[x, y]` (model units).
+        via: [f64; 2],
+        /// Arc end point `[x, y]` (model units).
+        end: [f64; 2],
+    },
+    /// **Extrude the current in-house CAD sketch profile into a solid** — the
+    /// file-driven equivalent of the panel's "Extrude sketch" button. Sweeps the
+    /// drawn profile (from
+    /// [`crate::cad_workbench::CadWorkbenchState::sketch_points`]) along +Z by
+    /// `height` through the **same**
+    /// [`crate::cad_workbench::CadWorkbenchState::add_extrude_from_sketch`] +
+    /// `request_rebuild` path the button uses. `height` must be `> 0` (and
+    /// finite) — otherwise a `warn` feed note is posted and nothing changes
+    /// (never a panic). A profile of fewer than 3 anchors is also reported. On a
+    /// valid extrude an ack note is posted and the tree is flagged to rebuild
+    /// into the viewport on the next frame.
+    ExtrudeSketch {
+        /// Extrude depth along +Z (model units); must be `> 0`.
+        height: f64,
+    },
+    /// **Add a straight line to the in-house 2-D drafting drawing** by explicit
+    /// endpoints — the file-driven equivalent of the 2-D form's line `+` button.
+    /// Routes through the **same** `Drawing2D::add(Entity2D::Line { .. })` path
+    /// (via [`crate::draft2d_workbench::Draft2dWorkbenchState::agent_add_line`],
+    /// layer `"0"`). Always parses; posts an ack note with the new entity count.
+    ///
+    /// Note the explicit `rename`: the enum's `rename_all = "snake_case"` would
+    /// map `Add2dLine` to `"add2d_line"` (no underscore before the digit), but
+    /// the wire tag is pinned to `"add_2d_line"` (matching the `show_2d` style).
+    #[serde(rename = "add_2d_line")]
+    Add2dLine {
+        /// First endpoint X (drawing units).
+        x1: f64,
+        /// First endpoint Y (drawing units).
+        y1: f64,
+        /// Second endpoint X (drawing units).
+        x2: f64,
+        /// Second endpoint Y (drawing units).
+        y2: f64,
+    },
+    /// **Add a circle to the in-house 2-D drafting drawing** by centre + radius —
+    /// the file-driven equivalent of the 2-D form's circle `+` button. Routes
+    /// through the **same** `Drawing2D::add(Entity2D::Circle { .. })` path (via
+    /// [`crate::draft2d_workbench::Draft2dWorkbenchState::agent_add_circle`],
+    /// layer `"0"`). `r` must be `> 0` (and finite) — otherwise a `warn` feed
+    /// note is posted and nothing changes (never a panic). On success an ack note
+    /// with the new entity count is posted.
+    ///
+    /// Explicit `rename` for the same reason as [`Add2dLine`](AgentCommand::Add2dLine):
+    /// `rename_all` would yield `"add2d_circle"`, but the wire tag is pinned to
+    /// `"add_2d_circle"`.
+    #[serde(rename = "add_2d_circle")]
+    Add2dCircle {
+        /// Circle centre X (drawing units).
+        cx: f64,
+        /// Circle centre Y (drawing units).
+        cy: f64,
+        /// Circle radius (drawing units); must be `> 0`.
+        r: f64,
     },
 }
 
@@ -1178,11 +1306,246 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
         AgentCommand::ListControls { workbench } => {
             list_controls(app, ch, workbench.as_deref());
         }
+        AgentCommand::SetView { dir } => {
+            // Snap the central viewport camera to a canonical ViewCube
+            // orientation through the SAME `OrbitCamera::set_view` the ViewCube
+            // buttons drive. An unrecognised name is a fail-loud warn note.
+            match view_direction_from_str(&dir) {
+                Some(vd) => {
+                    app.camera_mut().set_view(vd);
+                    crate::assistant_workbench::append_feed_note(
+                        app,
+                        ch,
+                        "Claude",
+                        &format!("view → {dir}"),
+                        "result",
+                    );
+                }
+                None => crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    &format!("set_view: unknown view direction: {dir:?} (use front/back/left/right/top/bottom/iso)"),
+                    "warn",
+                ),
+            }
+        }
+        AgentCommand::Orbit { dx_deg, dy_deg } => {
+            // Orbit by a degree delta through `OrbitCamera::orbit` (which clamps
+            // elevation). Guard non-finite deltas so a stray NaN can't poison the
+            // camera angles.
+            if dx_deg.is_finite() && dy_deg.is_finite() {
+                app.camera_mut().orbit(dx_deg, dy_deg);
+                let cam = app.camera_mut();
+                let (az, el) = (cam.azimuth_deg, cam.elevation_deg);
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    &format!("orbit → az {az:.1}°, el {el:.1}°"),
+                    "result",
+                );
+            } else {
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    "orbit: non-finite delta ignored",
+                    "warn",
+                );
+            }
+        }
+        AgentCommand::Zoom { factor } => {
+            // Dolly in/out through `OrbitCamera::zoom` (which clamps so the
+            // camera can't invert through the target). Guard a non-finite factor.
+            if factor.is_finite() {
+                app.camera_mut().zoom(factor);
+                let dist = app.camera_mut().distance;
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    &format!("zoom → distance {dist:.3}"),
+                    "result",
+                );
+            } else {
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    "zoom: non-finite factor ignored",
+                    "warn",
+                );
+            }
+        }
+        AgentCommand::FrameAll => {
+            // Reframe around the loaded model's AABB through the SAME
+            // `frame_current_*` methods the menu uses. Prefer a loaded mesh,
+            // fall back to a loaded STL; if neither is loaded leave the camera
+            // unchanged and say so (fail-loud, no panic).
+            if app.mesh.is_some() {
+                app.frame_current_mesh();
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    "framed loaded mesh",
+                    "result",
+                );
+            } else if app.stl.is_some() {
+                app.frame_current_stl();
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    "framed loaded STL",
+                    "result",
+                );
+            } else {
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    "frame_all: no mesh or STL loaded (camera unchanged)",
+                    "warn",
+                );
+            }
+        }
+        AgentCommand::AddSketchPoint { x, y } => {
+            // Append a Line-tool vertex to the in-house CAD sketch through the
+            // SAME `sketch_add_point` the canvas click uses.
+            app.cad.sketch_add_point(x, y);
+            let n = app.cad.sketch_anchor_count();
+            crate::assistant_workbench::append_feed_note(
+                app,
+                ch,
+                "Claude",
+                &format!("sketch point ({x}, {y}) — {n} anchor(s)"),
+                "result",
+            );
+        }
+        AgentCommand::AddSketchArc { start, via, end } => {
+            // Append a 3-point arc to the in-house CAD sketch through the SAME
+            // `sketch_add_arc` the Arc tool uses.
+            app.cad.sketch_add_arc(start, via, end);
+            let n = app.cad.sketch_anchor_count();
+            crate::assistant_workbench::append_feed_note(
+                app,
+                ch,
+                "Claude",
+                &format!("sketch arc → {n} anchor(s)"),
+                "result",
+            );
+        }
+        AgentCommand::ExtrudeSketch { height } => {
+            // Extrude the current sketch profile into a solid through the SAME
+            // `add_extrude_from_sketch` + `request_rebuild` path the panel button
+            // uses. Validate height > 0 (and finite) and a ≥3-anchor profile;
+            // both failures are fail-loud warn notes (no panic, no state change).
+            if !(height.is_finite() && height > 0.0) {
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    &format!("extrude_sketch: height must be > 0 (got {height})"),
+                    "warn",
+                );
+            } else {
+                // `sketch_points()` borrows `app.cad`; clone the profile so the
+                // following `&mut` call to `add_extrude_from_sketch` doesn't
+                // overlap the borrow.
+                let profile = app.cad.sketch_points();
+                if profile.len() < 3 {
+                    crate::assistant_workbench::append_feed_note(
+                        app,
+                        ch,
+                        "Claude",
+                        &format!(
+                            "extrude_sketch: need ≥3 sketch anchors to extrude (have {})",
+                            profile.len()
+                        ),
+                        "warn",
+                    );
+                } else {
+                    app.cad.add_extrude_from_sketch(&profile, height);
+                    app.cad.request_rebuild();
+                    crate::assistant_workbench::append_feed_note(
+                        app,
+                        ch,
+                        "Claude",
+                        &format!("extruded sketch ({} anchors) by {height}", profile.len()),
+                        "result",
+                    );
+                }
+            }
+        }
+        AgentCommand::Add2dLine { x1, y1, x2, y2 } => {
+            // Add a line to the in-house 2-D drawing through the SAME
+            // `Drawing2D::add(Entity2D::Line)` path the form's `+` button uses.
+            app.draft2d.agent_add_line([x1, y1], [x2, y2]);
+            let n = app.draft2d.entity_count();
+            crate::assistant_workbench::append_feed_note(
+                app,
+                ch,
+                "Claude",
+                &format!(
+                    "2-D line added — {n} entit{}",
+                    if n == 1 { "y" } else { "ies" }
+                ),
+                "result",
+            );
+        }
+        AgentCommand::Add2dCircle { cx, cy, r } => {
+            // Add a circle to the in-house 2-D drawing through the SAME
+            // `Drawing2D::add(Entity2D::Circle)` path the form's `+` button uses.
+            // Validate r > 0 (the button also floors at 0.1) — fail-loud on a
+            // non-positive radius rather than silently drawing a dot.
+            if !(r.is_finite() && r > 0.0) {
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    &format!("add_2d_circle: radius must be > 0 (got {r})"),
+                    "warn",
+                );
+            } else {
+                app.draft2d.agent_add_circle([cx, cy], r);
+                let n = app.draft2d.entity_count();
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    &format!(
+                        "2-D circle added — {n} entit{}",
+                        if n == 1 { "y" } else { "ies" }
+                    ),
+                    "result",
+                );
+            }
+        }
         AgentCommand::NewUnit { .. } => {
             // `new_unit` is a **global-channel bootstrap** command (it opens a
             // brand-new unit), handled by `apply_global`. On a per-unit channel
             // there is no new unit to open, so it is a deliberate no-op here.
         }
+    }
+}
+
+/// Map a case-insensitive view name to a [`ViewDirection`] for
+/// [`SetView`](AgentCommand::SetView). Accepts the seven ViewCube faces
+/// (`front` / `back` / `left` / `right` / `top` / `bottom`) plus `iso` (with
+/// `isometric` / `home` as friendly aliases). Anything else → `None`, which the
+/// caller turns into a fail-loud `warn` note.
+fn view_direction_from_str(s: &str) -> Option<ViewDirection> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "front" => Some(ViewDirection::Front),
+        "back" | "rear" => Some(ViewDirection::Back),
+        "left" => Some(ViewDirection::Left),
+        "right" => Some(ViewDirection::Right),
+        "top" => Some(ViewDirection::Top),
+        "bottom" => Some(ViewDirection::Bottom),
+        "iso" | "isometric" | "home" => Some(ViewDirection::Iso),
+        _ => None,
     }
 }
 
@@ -3692,6 +4055,375 @@ mod tests {
         assert!(
             posted && n > 0,
             "list_controls posts the caption list; feed = {body:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ---- Viewport bridge: camera control + 2-D sketch placement (gap 4) ----
+
+    #[test]
+    fn viewport_commands_parse_from_wire_form() {
+        // Each new command round-trips from its `{"cmd":...}` wire form.
+        let sv: AgentCommand = serde_json::from_str(r#"{"cmd":"set_view","dir":"front"}"#).unwrap();
+        assert_eq!(
+            sv,
+            AgentCommand::SetView {
+                dir: "front".into()
+            }
+        );
+        let orb: AgentCommand =
+            serde_json::from_str(r#"{"cmd":"orbit","dx_deg":30.0,"dy_deg":-10.0}"#).unwrap();
+        assert_eq!(
+            orb,
+            AgentCommand::Orbit {
+                dx_deg: 30.0,
+                dy_deg: -10.0
+            }
+        );
+        let z: AgentCommand = serde_json::from_str(r#"{"cmd":"zoom","factor":0.25}"#).unwrap();
+        assert_eq!(z, AgentCommand::Zoom { factor: 0.25 });
+        let fa: AgentCommand = serde_json::from_str(r#"{"cmd":"frame_all"}"#).unwrap();
+        assert_eq!(fa, AgentCommand::FrameAll);
+        let sp: AgentCommand =
+            serde_json::from_str(r#"{"cmd":"add_sketch_point","x":1.5,"y":2.5}"#).unwrap();
+        assert_eq!(sp, AgentCommand::AddSketchPoint { x: 1.5, y: 2.5 });
+        let sa: AgentCommand = serde_json::from_str(
+            r#"{"cmd":"add_sketch_arc","start":[0.0,0.0],"via":[1.0,1.0],"end":[2.0,0.0]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            sa,
+            AgentCommand::AddSketchArc {
+                start: [0.0, 0.0],
+                via: [1.0, 1.0],
+                end: [2.0, 0.0]
+            }
+        );
+        let ex: AgentCommand =
+            serde_json::from_str(r#"{"cmd":"extrude_sketch","height":3.0}"#).unwrap();
+        assert_eq!(ex, AgentCommand::ExtrudeSketch { height: 3.0 });
+        let l2: AgentCommand =
+            serde_json::from_str(r#"{"cmd":"add_2d_line","x1":0.0,"y1":0.0,"x2":5.0,"y2":5.0}"#)
+                .unwrap();
+        assert_eq!(
+            l2,
+            AgentCommand::Add2dLine {
+                x1: 0.0,
+                y1: 0.0,
+                x2: 5.0,
+                y2: 5.0
+            }
+        );
+        let c2: AgentCommand =
+            serde_json::from_str(r#"{"cmd":"add_2d_circle","cx":1.0,"cy":2.0,"r":4.0}"#).unwrap();
+        assert_eq!(
+            c2,
+            AgentCommand::Add2dCircle {
+                cx: 1.0,
+                cy: 2.0,
+                r: 4.0
+            }
+        );
+    }
+
+    #[test]
+    fn set_view_changes_camera_angles_through_real_poll_path() {
+        // End-to-end through `poll_and_apply_agent_commands`: a `set_view`
+        // command snaps the central camera to the named canonical view. Start
+        // from the default (az 45, el 25), set "front" (0, 0), then "top"
+        // (el 90) and assert the azimuth/elevation actually changed.
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "setview");
+        let path = cmd_path(&app, 1);
+        std::fs::write(&path, "{\"cmd\":\"set_view\",\"dir\":\"front\"}\n").unwrap();
+
+        // Sanity: default camera is NOT already on the Front view.
+        assert!(app.camera_mut().azimuth_deg != 0.0 || app.camera_mut().elevation_deg != 0.0);
+        poll_and_apply_agent_commands(&mut app);
+        assert_eq!(app.camera_mut().azimuth_deg, 0.0, "front azimuth");
+        assert_eq!(app.camera_mut().elevation_deg, 0.0, "front elevation");
+
+        // A second view ("top") moves elevation to 90.
+        use std::io::Write as _;
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
+        writeln!(f, "{{\"cmd\":\"set_view\",\"dir\":\"top\"}}").unwrap();
+        app.last_agent_poll = None; // bypass throttle
+        poll_and_apply_agent_commands(&mut app);
+        assert_eq!(app.camera_mut().elevation_deg, 90.0, "top elevation");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn set_view_unknown_direction_posts_warn_and_leaves_camera() {
+        // A bogus view name is a fail-loud `warn` note and changes nothing.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "setview_bad");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        let (az0, el0) = {
+            let c = app.camera_mut();
+            (c.azimuth_deg, c.elevation_deg)
+        };
+        apply(
+            &mut app,
+            1,
+            AgentCommand::SetView {
+                dir: "sideways".into(),
+            },
+        );
+        // Camera untouched.
+        assert_eq!(app.camera_mut().azimuth_deg, az0);
+        assert_eq!(app.camera_mut().elevation_deg, el0);
+        // A `warn` note was posted.
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let warned = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("kind").and_then(|k| k.as_str()) == Some("warn")
+                    && v.get("detail")
+                        .and_then(|d| d.as_str())
+                        .is_some_and(|d| d.contains("unknown view direction"))
+            });
+        assert!(warned, "unknown view posts a warn note; feed = {body:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn orbit_and_zoom_drive_the_camera() {
+        // Orbit changes azimuth/elevation; zoom changes distance — both through
+        // the vetted `OrbitCamera` methods. A non-finite delta/factor is ignored.
+        let mut app = ValenxApp::default();
+        let az0 = app.camera_mut().azimuth_deg;
+        let dist0 = app.camera_mut().distance;
+        apply(
+            &mut app,
+            1,
+            AgentCommand::Orbit {
+                dx_deg: 20.0,
+                dy_deg: 5.0,
+            },
+        );
+        assert!(
+            (app.camera_mut().azimuth_deg - (az0 + 20.0)).abs() < 1e-3,
+            "orbit advanced azimuth"
+        );
+        apply(&mut app, 1, AgentCommand::Zoom { factor: 0.5 });
+        assert!(
+            app.camera_mut().distance < dist0,
+            "zoom-in reduced distance"
+        );
+
+        // Non-finite inputs are no-ops (guarded), not panics.
+        let az_now = app.camera_mut().azimuth_deg;
+        apply(
+            &mut app,
+            1,
+            AgentCommand::Orbit {
+                dx_deg: f32::NAN,
+                dy_deg: 0.0,
+            },
+        );
+        assert_eq!(
+            app.camera_mut().azimuth_deg,
+            az_now,
+            "NaN orbit delta ignored"
+        );
+    }
+
+    #[test]
+    fn frame_all_with_nothing_loaded_posts_warn() {
+        // With no mesh/STL loaded, `frame_all` leaves the camera and posts a
+        // warn note (never a panic).
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "frameall_empty");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        assert!(app.mesh.is_none() && app.stl.is_none());
+        apply(&mut app, 1, AgentCommand::FrameAll);
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let warned = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("kind").and_then(|k| k.as_str()) == Some("warn")
+                    && v.get("detail")
+                        .and_then(|d| d.as_str())
+                        .is_some_and(|d| d.contains("no mesh or STL loaded"))
+            });
+        assert!(
+            warned,
+            "frame_all with nothing loaded warns; feed = {body:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn add_sketch_point_appends_a_vertex_through_real_poll_path() {
+        // End-to-end through the poll path: two `add_sketch_point` commands grow
+        // the in-house CAD sketch anchor count from 0 → 2 (verified via
+        // `sketch_points().len()` before/after).
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "sketchpoint");
+        let path = cmd_path(&app, 1);
+        assert_eq!(app.cad.sketch_points().len(), 0, "sketch starts empty");
+        std::fs::write(
+            &path,
+            "{\"cmd\":\"add_sketch_point\",\"x\":0.0,\"y\":0.0}\n{\"cmd\":\"add_sketch_point\",\"x\":1.0,\"y\":0.0}\n",
+        )
+        .unwrap();
+        poll_and_apply_agent_commands(&mut app);
+        assert_eq!(
+            app.cad.sketch_points().len(),
+            2,
+            "two bridge points appended two anchors"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn extrude_sketch_nonpositive_height_warns_no_panic() {
+        // ExtrudeSketch with height <= 0 must post a `warn` note and not panic.
+        // Seed a valid 3-anchor profile first so the height check is what fails.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "extrude_badheight");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        app.cad.sketch_add_point(0.0, 0.0);
+        app.cad.sketch_add_point(1.0, 0.0);
+        app.cad.sketch_add_point(1.0, 1.0);
+        assert_eq!(app.cad.sketch_points().len(), 3);
+
+        apply(&mut app, 1, AgentCommand::ExtrudeSketch { height: 0.0 });
+        apply(&mut app, 1, AgentCommand::ExtrudeSketch { height: -2.0 });
+
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let warned = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .filter(|v| {
+                v.get("kind").and_then(|k| k.as_str()) == Some("warn")
+                    && v.get("detail")
+                        .and_then(|d| d.as_str())
+                        .is_some_and(|d| d.contains("height must be > 0"))
+            })
+            .count();
+        assert!(
+            warned >= 2,
+            "both non-positive heights warned; feed = {body:?}"
+        );
+    }
+
+    #[test]
+    fn extrude_sketch_valid_height_flags_rebuild() {
+        // A valid extrude (>0 height, ≥3 anchors) requests a viewport rebuild —
+        // the same effect the panel button has. We can't read the private
+        // `rebuild_request`, so assert success indirectly via the ack note.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "extrude_ok");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        app.cad.sketch_add_point(0.0, 0.0);
+        app.cad.sketch_add_point(2.0, 0.0);
+        app.cad.sketch_add_point(2.0, 2.0);
+        app.cad.sketch_add_point(0.0, 2.0);
+
+        apply(&mut app, 1, AgentCommand::ExtrudeSketch { height: 1.5 });
+
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let acked = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("kind").and_then(|k| k.as_str()) == Some("result")
+                    && v.get("detail")
+                        .and_then(|d| d.as_str())
+                        .is_some_and(|d| d.contains("extruded sketch"))
+            });
+        assert!(acked, "valid extrude posts an ack note; feed = {body:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn add_2d_line_increments_drawing_entity_count_through_real_poll_path() {
+        // End-to-end: an `add_2d_line` command grows the 2-D drawing's entity
+        // count by one (verified via `entity_count()` before/after).
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "add2dline");
+        let path = cmd_path(&app, 1);
+        let before = app.draft2d.entity_count();
+        std::fs::write(
+            &path,
+            "{\"cmd\":\"add_2d_line\",\"x1\":0.0,\"y1\":0.0,\"x2\":10.0,\"y2\":10.0}\n",
+        )
+        .unwrap();
+        poll_and_apply_agent_commands(&mut app);
+        assert_eq!(
+            app.draft2d.entity_count(),
+            before + 1,
+            "bridge line added exactly one entity"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn add_2d_circle_nonpositive_radius_warns_no_change() {
+        // Add2dCircle with r <= 0 posts a `warn` and adds nothing.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "add2dcircle_badr");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        let before = app.draft2d.entity_count();
+        apply(
+            &mut app,
+            1,
+            AgentCommand::Add2dCircle {
+                cx: 0.0,
+                cy: 0.0,
+                r: 0.0,
+            },
+        );
+        assert_eq!(
+            app.draft2d.entity_count(),
+            before,
+            "non-positive radius added nothing"
+        );
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let warned = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("kind").and_then(|k| k.as_str()) == Some("warn")
+                    && v.get("detail")
+                        .and_then(|d| d.as_str())
+                        .is_some_and(|d| d.contains("radius must be > 0"))
+            });
+        assert!(warned, "bad-radius circle warns; feed = {body:?}");
+        // A valid radius DOES add one.
+        apply(
+            &mut app,
+            1,
+            AgentCommand::Add2dCircle {
+                cx: 0.0,
+                cy: 0.0,
+                r: 3.0,
+            },
+        );
+        assert_eq!(
+            app.draft2d.entity_count(),
+            before + 1,
+            "valid circle added one entity"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
