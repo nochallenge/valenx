@@ -182,7 +182,12 @@ impl GeneticsWorkbenchState {
     /// and are not surfaced through this host `agent_set` (a per-panel bridge
     /// would be a separate, larger pass). The selector alone is exposed here.
     pub fn agent_control_names() -> &'static [&'static str] {
-        &["Bio tool panel", "Demo structure"]
+        &[
+            "Bio tool panel",
+            "Demo structure",
+            "MD temperature",
+            "Run MD",
+        ]
     }
 
     /// Set one labelled control by its user-visible caption, for the agent
@@ -210,6 +215,26 @@ impl GeneticsWorkbenchState {
                 self.biostruct.load_demo(demo);
                 self.active = GeneticsPanel::MacromolecularStructure;
             }
+            // The in-house ENM molecular-dynamics target temperature (reduced
+            // units): scales the thermal vibration amplitude of `Run MD`.
+            "MD temperature" => {
+                let t = value.as_f64()?;
+                if !(0.0..=1.5).contains(&t) {
+                    return Err(format!("MD temperature must be in 0.0..=1.5, got {t}"));
+                }
+                self.biostruct.md_temperature = t;
+                self.active = GeneticsPanel::MacromolecularStructure;
+            }
+            // Trigger an ENM-MD run on the loaded structure (a `true` action):
+            // builds the real thermal-vibration trajectory and attaches it to
+            // the viewer's playback. The run summary flows back as the error
+            // string on failure / the readout on success.
+            "Run MD" => {
+                if value.as_bool()? {
+                    self.active = GeneticsPanel::MacromolecularStructure;
+                    self.biostruct.run_md()?;
+                }
+            }
             other => return Err(format!("unknown genetics control: {other:?}")),
         }
         Ok(())
@@ -222,7 +247,11 @@ impl GeneticsWorkbenchState {
     /// (`None`).
     pub fn agent_readout(&self) -> Option<String> {
         match self.active {
-            GeneticsPanel::MacromolecularStructure => Some(self.biostruct.structure_readout()),
+            GeneticsPanel::MacromolecularStructure => Some(format!(
+                "{}\n{}",
+                self.biostruct.structure_readout(),
+                self.biostruct.md_readout()
+            )),
             _ => None,
         }
     }
@@ -460,6 +489,36 @@ mod tests {
         let r = s.agent_readout().expect("readout on the structure panel");
         assert!(r.contains("Crambin"), "names crambin: {r}");
         assert!(r.contains("46 residues") && r.contains("327 atoms"), "{r}");
+    }
+
+    #[test]
+    fn agent_can_set_temperature_and_run_md() {
+        let mut s = GeneticsWorkbenchState::default();
+        // The MD controls are advertised to the agent.
+        let names = GeneticsWorkbenchState::agent_control_names();
+        assert!(names.contains(&"MD temperature") && names.contains(&"Run MD"));
+
+        // Set the MD temperature by name (also switches to the structure panel).
+        s.agent_set("MD temperature", &AgentValue::Float(0.5))
+            .expect("set MD temperature");
+        assert_eq!(s.active, GeneticsPanel::MacromolecularStructure);
+        assert!((s.biostruct.md_temperature - 0.5).abs() < 1e-12);
+        // Out-of-range / wrong type are fail-loud.
+        assert!(s
+            .agent_set("MD temperature", &AgentValue::Float(9.0))
+            .is_err());
+        assert!(s
+            .agent_set("MD temperature", &AgentValue::Str("hot".into()))
+            .is_err());
+
+        // Trigger the run; the trajectory attaches and the readout reports it.
+        s.agent_set("Run MD", &AgentValue::Bool(true))
+            .expect("run MD on the default crambin");
+        let r = s.agent_readout().expect("readout after MD");
+        assert!(r.contains("ENM MD") && r.contains("springs"), "{r}");
+        // `Run MD` with `false` is a no-op (does not error).
+        s.agent_set("Run MD", &AgentValue::Bool(false))
+            .expect("false is a no-op");
     }
 }
 
