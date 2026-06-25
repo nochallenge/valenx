@@ -69,6 +69,11 @@ pub(crate) struct TrajectoryPlayback {
     source: String,
     /// In-panel note (atom-count mismatch, etc.) — surfaced instead of a panic.
     note: Option<String>,
+    /// Diagnostics of the last in-house ENM-MD run, when the attached
+    /// trajectory came from [`Self::attach_enm_md`] — surfaced in the panel and
+    /// the agent readout (frames / springs / temperature / RMSD / energy). The
+    /// synthetic-wobble and loaded-file paths leave this `None`.
+    md: Option<EnmMd>,
 }
 
 impl TrajectoryPlayback {
@@ -124,6 +129,7 @@ impl TrajectoryPlayback {
         self.accum = 0.0;
         self.source = source.into();
         self.note = None;
+        self.md = None; // cleared here; an MD attach sets it afterwards
     }
 
     /// Build the base molecule + frames from a parsed [`Structure`] by
@@ -187,6 +193,40 @@ impl TrajectoryPlayback {
         self.attach(base, attrs, backbone, frames, "loaded valenx-md trajectory");
     }
 
+    /// Build the base molecule + frames from a parsed [`Structure`] by running
+    /// the in-house **Elastic Network Model MD** ([`enm_md`]) — a real,
+    /// physically-motivated thermal-vibration trajectory of the protein (the
+    /// large-scale collective "breathing" of its low-frequency normal modes),
+    /// not a synthetic per-atom wobble.
+    ///
+    /// Deterministic for a fixed seed; stores the run diagnostics
+    /// ([`EnmMd`]) so the panel / agent can report frames / springs /
+    /// temperature / RMSD / energy. Fail-loud: a structure with no atoms (or
+    /// fewer than two) sets [`note`] and attaches nothing.
+    fn attach_enm_md(&mut self, s: &Structure, params: EnmParams) {
+        let base = ViewMolecule::from_biostruct(s);
+        if base.atoms.len() < 2 {
+            self.note = Some("need ≥ 2 atoms to run MD".to_string());
+            return;
+        }
+        let attrs = structure_atom_attrs(s);
+        let backbone = ca_backbone(s);
+        let md = enm_md(&base, params);
+        if md.frames.is_empty() {
+            self.note = Some("ENM MD produced no frames".to_string());
+            return;
+        }
+        let summary = md.summary();
+        self.attach(base, attrs, backbone, md.frames.clone(), summary);
+        self.md = Some(md);
+    }
+
+    /// Diagnostics of the last in-house ENM-MD run, if the attached trajectory
+    /// came from [`Self::attach_enm_md`].
+    pub(crate) fn md(&self) -> Option<&EnmMd> {
+        self.md.as_ref()
+    }
+
     /// The base molecule with the positions of frame `index` applied, or `None`
     /// if nothing is attached / `index` is out of range. The returned molecule
     /// has **freshly detected bonds** for that frame's geometry, so a trajectory
@@ -248,6 +288,355 @@ fn synthetic_wobble_frames(
         .collect()
 }
 
+// ===========================================================================
+// In-house Elastic Network Model (ENM) molecular dynamics
+// ===========================================================================
+//
+// A real, physically-motivated MD trajectory of the loaded protein — the
+// thermal "breathing" you see in a CASP/PyMOL normal-mode movie — built
+// in-house with no external engine and no force field. It is the classic
+// **Tirion / anisotropic elastic-network model**: every pair of atoms closer
+// than a cutoff in the *reference* structure is joined by a harmonic spring
+// at its equilibrium length, the atoms are given Maxwell-Boltzmann thermal
+// velocities at a chosen temperature, and the system is propagated with the
+// symplectic **velocity-Verlet** integrator under light Langevin damping.
+//
+// Why ENM (and not the full valenx-md / OPLS force field): the ENM needs only
+// the heavy-atom coordinates already in the [`ViewMolecule`] — no bond
+// perception, no atom-typing, no partial charges — yet it reproduces the
+// large-scale collective motion (the low-frequency normal modes) that
+// dominate a protein's thermal fluctuation. That makes it the simplest path
+// that is *robust*: it cannot blow up (the potential is purely harmonic about
+// the input minimum, so the energy is bounded), it is fully deterministic for
+// a fixed seed, and every atom stays within a fraction of an ångström of its
+// start — exactly the gentle vibration the viewer should animate.
+//
+// All maths is done in f64 in a self-consistent reduced unit system
+// (length = Å, the spring constant `k` carries the energy/time scale); the
+// resulting per-frame Å coordinates feed straight into [`TrajectoryPlayback`].
+
+/// One full ENM-MD result: the per-frame coordinates plus the run diagnostics
+/// the panel / agent readout report. Pure data, no rendering.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct EnmMd {
+    /// Per-frame atom coordinates in **ångström**, in `ViewMolecule::atoms`
+    /// order — fed directly to [`TrajectoryPlayback::attach`].
+    pub(crate) frames: Vec<Vec<[f32; 3]>>,
+    /// The requested temperature (reduced units; higher ⇒ larger wobble).
+    pub(crate) temperature: f64,
+    /// Number of harmonic springs in the network (pairs within the cutoff).
+    pub(crate) n_springs: usize,
+    /// Total ENM energy (kinetic + spring potential) at the first and last
+    /// frame — equal-ish (bounded) is the stability signal.
+    pub(crate) energy_first: f64,
+    pub(crate) energy_last: f64,
+    /// Peak all-atom RMSD (Å) of any frame from the reference (frame 0). A
+    /// physical thermal run keeps this well under ~1 Å.
+    pub(crate) rmsd_max: f64,
+}
+
+impl EnmMd {
+    /// A compact one-line readout for the panel / agent bridge.
+    pub(crate) fn summary(&self) -> String {
+        format!(
+            "ENM MD: {} frames · {} springs · T={:.2} · RMSD≤{:.3} Å · E {:.3}→{:.3} (Δ {:+.1}%)",
+            self.frames.len(),
+            self.n_springs,
+            self.temperature,
+            self.rmsd_max,
+            self.energy_first,
+            self.energy_last,
+            if self.energy_first.abs() > 1e-12 {
+                100.0 * (self.energy_last - self.energy_first) / self.energy_first
+            } else {
+                0.0
+            },
+        )
+    }
+}
+
+/// A tiny deterministic PRNG (SplitMix64) so the thermal velocities are
+/// reproducible for a fixed seed without pulling the `rand` crate — the same
+/// dependency-light stance as `valenx-md`'s in-crate PRNG.
+struct SplitMix64(u64);
+impl SplitMix64 {
+    fn next_u64(&mut self) -> u64 {
+        self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+    /// Uniform f64 in `[0, 1)`.
+    fn next_f64(&mut self) -> f64 {
+        // Top 53 bits → exact double in [0,1).
+        (self.next_u64() >> 11) as f64 / (1u64 << 53) as f64
+    }
+    /// One standard-normal sample (Box-Muller; the paired value is discarded
+    /// for simplicity — we never need bit-exact rand parity, only determinism).
+    fn next_gaussian(&mut self) -> f64 {
+        // Guard u1 away from 0 so ln() is finite.
+        let u1 = self.next_f64().max(1e-12);
+        let u2 = self.next_f64();
+        (-2.0 * u1.ln()).sqrt() * (std::f64::consts::TAU * u2).cos()
+    }
+}
+
+/// Atomic mass (u) for the elements crambin contains, with a carbon-weight
+/// fallback so an exotic element never yields a zero/NaN acceleration.
+fn element_mass(symbol: &str) -> f64 {
+    match symbol.trim().to_ascii_uppercase().as_str() {
+        "H" => 1.008,
+        "C" => 12.011,
+        "N" => 14.007,
+        "O" => 15.999,
+        "S" => 32.06,
+        "P" => 30.974,
+        "FE" => 55.845,
+        _ => 12.011,
+    }
+}
+
+/// Parameters for an ENM-MD run. Defaults are tuned so crambin (327 atoms)
+/// produces a visibly vibrating but rock-stable trajectory.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct EnmParams {
+    /// Spring cutoff in ångström — pairs closer than this in the reference
+    /// structure are connected (8 Å is the standard ANM value).
+    pub(crate) cutoff: f64,
+    /// Harmonic spring constant (reduced energy / Å²). Sets the stiffness /
+    /// vibration frequency.
+    pub(crate) k: f64,
+    /// Target temperature (reduced units). Scales the thermal kinetic energy
+    /// and hence the vibration amplitude.
+    pub(crate) temperature: f64,
+    /// Integration time step (reduced). Kept well inside the stability limit
+    /// `dt < 2/ω_max` for the stiffest mode.
+    pub(crate) dt: f64,
+    /// Langevin velocity-damping coefficient per step — a light drag that
+    /// removes the slow numerical energy creep so a long run stays bounded
+    /// without killing the visible motion.
+    pub(crate) gamma: f64,
+    /// Number of trajectory frames to emit.
+    pub(crate) n_frames: usize,
+    /// Verlet sub-steps integrated between emitted frames (so the motion
+    /// advances meaningfully per displayed frame without storing every step).
+    pub(crate) substeps: usize,
+    /// PRNG seed — fixes the thermal velocities, making the whole run
+    /// deterministic.
+    pub(crate) seed: u64,
+}
+
+impl Default for EnmParams {
+    fn default() -> Self {
+        EnmParams {
+            cutoff: 8.0,
+            k: 1.0,
+            temperature: 0.30,
+            dt: 0.05,
+            // Very light per-substep drag: velocity-Verlet on a harmonic
+            // potential is already energy-conserving (symplectic, no drift), so
+            // this is only insurance against slow numerical creep — small enough
+            // that the protein keeps visibly vibrating across the whole reel
+            // rather than freezing after a few frames.
+            gamma: 0.0005,
+            n_frames: 60,
+            substeps: 6,
+            seed: 0x5EED,
+        }
+    }
+}
+
+/// Run an in-house **ENM velocity-Verlet** MD on a molecule's atoms and return
+/// the trajectory + diagnostics. Pure and deterministic for a fixed seed.
+///
+/// Steps:
+/// 1. Build the harmonic spring list: every atom pair within `cutoff` of each
+///    other in the reference coordinates, storing the equilibrium length `r0`.
+/// 2. Assign Maxwell-Boltzmann thermal velocities `v ~ N(0, kT/m)` from the
+///    seeded PRNG, then **remove net linear momentum** (no rigid drift) and
+///    rescale so the instantaneous temperature equals `temperature` exactly.
+/// 3. Propagate with velocity-Verlet (the symplectic integrator) under light
+///    Langevin damping, emitting `n_frames` snapshots `substeps` apart.
+///
+/// Returns an empty result (no frames) for a molecule with < 2 atoms — nothing
+/// to vibrate. Never panics: masses fall back to carbon, an atom with no
+/// spring still integrates (it just drifts thermally and is damped back).
+//
+// The fixed-size-3 coordinate loops (`for c in 0..3`) below index several
+// parallel per-atom buffers (`pos`/`vel`/`acc`/`f`) in lockstep; an iterator
+// rewrite across 2-3 arrays is less clear than the explicit component index,
+// so the range-loop lint is allowed for this routine.
+#[allow(clippy::needless_range_loop)]
+fn enm_md(mol: &ViewMolecule, p: EnmParams) -> EnmMd {
+    let n = mol.atoms.len();
+    if n < 2 {
+        return EnmMd {
+            temperature: p.temperature,
+            ..Default::default()
+        };
+    }
+
+    // --- positions (Å, f64), reference, masses --------------------------
+    let r0_ref: Vec<[f64; 3]> = mol
+        .atoms
+        .iter()
+        .map(|a| [a.pos[0] as f64, a.pos[1] as f64, a.pos[2] as f64])
+        .collect();
+    let mass: Vec<f64> = mol.atoms.iter().map(|a| element_mass(&a.element)).collect();
+
+    // --- spring network: pairs within the cutoff (store r0) -------------
+    let cutoff2 = p.cutoff * p.cutoff;
+    let mut springs: Vec<(usize, usize, f64)> = Vec::new();
+    for i in 0..n {
+        for j in (i + 1)..n {
+            let d = [
+                r0_ref[i][0] - r0_ref[j][0],
+                r0_ref[i][1] - r0_ref[j][1],
+                r0_ref[i][2] - r0_ref[j][2],
+            ];
+            let d2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+            if d2 <= cutoff2 && d2 > 1e-12 {
+                springs.push((i, j, d2.sqrt()));
+            }
+        }
+    }
+
+    // --- harmonic spring potential energy + forces ----------------------
+    // U = Σ ½k(|rij| - r0)² ;  F on i = -k(|rij| - r0) · (rij / |rij|).
+    let forces = |pos: &[[f64; 3]]| -> (Vec<[f64; 3]>, f64) {
+        let mut f = vec![[0.0; 3]; n];
+        let mut energy = 0.0;
+        for &(i, j, r0) in &springs {
+            let d = [
+                pos[i][0] - pos[j][0],
+                pos[i][1] - pos[j][1],
+                pos[i][2] - pos[j][2],
+            ];
+            let r = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+            if r < 1e-9 {
+                continue;
+            }
+            let dr = r - r0;
+            energy += 0.5 * p.k * dr * dr;
+            // Force magnitude / r, projected onto the bond unit vector.
+            let g = -p.k * dr / r;
+            for c in 0..3 {
+                let fc = g * d[c];
+                f[i][c] += fc;
+                f[j][c] -= fc;
+            }
+        }
+        (f, energy)
+    };
+
+    // --- Maxwell-Boltzmann velocities, momentum-removed, T-rescaled -----
+    let mut rng = SplitMix64(p.seed);
+    let mut vel = vec![[0.0; 3]; n];
+    for (i, v) in vel.iter_mut().enumerate() {
+        let sigma = (p.temperature / mass[i]).sqrt(); // √(kT/m), k_B ≡ 1
+        for c in 0..3 {
+            v[c] = sigma * rng.next_gaussian();
+        }
+    }
+    // Remove net linear momentum so the whole molecule does not translate.
+    let mtot: f64 = mass.iter().sum();
+    let mut p_net = [0.0; 3];
+    for i in 0..n {
+        for c in 0..3 {
+            p_net[c] += mass[i] * vel[i][c];
+        }
+    }
+    for i in 0..n {
+        for c in 0..3 {
+            vel[i][c] -= p_net[c] / mtot;
+        }
+    }
+    // Rescale to the requested temperature: T_inst = 2·KE / (3N·k_B).
+    let kinetic = |v: &[[f64; 3]]| -> f64 {
+        0.5 * (0..n)
+            .map(|i| mass[i] * (v[i][0] * v[i][0] + v[i][1] * v[i][1] + v[i][2] * v[i][2]))
+            .sum::<f64>()
+    };
+    let dof = 3.0 * n as f64 - 3.0; // momentum removed ⇒ 3 fewer DOF
+    let t_inst = 2.0 * kinetic(&vel) / dof; // k_B ≡ 1
+    if t_inst > 1e-12 {
+        let scale = (p.temperature / t_inst).sqrt();
+        for v in &mut vel {
+            for c in 0..3 {
+                v[c] *= scale;
+            }
+        }
+    }
+
+    // --- velocity-Verlet propagation with light Langevin damping --------
+    let mut pos = r0_ref.clone();
+    let (mut acc, e0_pot) = forces(&pos);
+    for (i, a) in acc.iter_mut().enumerate() {
+        for c in 0..3 {
+            a[c] /= mass[i];
+        }
+    }
+    let energy_first = kinetic(&vel) + e0_pot;
+
+    let mut frames: Vec<Vec<[f32; 3]>> = Vec::with_capacity(p.n_frames.max(1));
+    let snapshot = |pos: &[[f64; 3]]| -> Vec<[f32; 3]> {
+        pos.iter()
+            .map(|r| [r[0] as f32, r[1] as f32, r[2] as f32])
+            .collect()
+    };
+    frames.push(snapshot(&pos)); // frame 0 = the reference structure exactly
+
+    // Per-step velocity-damping factor (explicit, unconditionally stable for
+    // 0 ≤ gamma·dt < 1): v ← v·(1 - gamma) after the kick.
+    let damp = (1.0 - p.gamma).clamp(0.0, 1.0);
+    let mut energy_last = energy_first;
+    for _ in 1..p.n_frames.max(1) {
+        for _ in 0..p.substeps.max(1) {
+            // v(t+½dt) = v + ½dt·a ; r += dt·v ; a' = F(r)/m ; v += ½dt·a'.
+            for i in 0..n {
+                for c in 0..3 {
+                    vel[i][c] += 0.5 * p.dt * acc[i][c];
+                    pos[i][c] += p.dt * vel[i][c];
+                }
+            }
+            let (f, _e) = forces(&pos);
+            for i in 0..n {
+                for c in 0..3 {
+                    acc[i][c] = f[i][c] / mass[i];
+                    vel[i][c] += 0.5 * p.dt * acc[i][c];
+                    vel[i][c] *= damp; // light Langevin drag
+                }
+            }
+        }
+        let (_f, pe) = forces(&pos);
+        energy_last = kinetic(&vel) + pe;
+        frames.push(snapshot(&pos));
+    }
+
+    // --- peak RMSD from the reference (frame 0) -------------------------
+    let mut rmsd_max = 0.0_f64;
+    for frame in &frames {
+        let mut s = 0.0;
+        for (a, r) in frame.iter().zip(&r0_ref) {
+            let dx = a[0] as f64 - r[0];
+            let dy = a[1] as f64 - r[1];
+            let dz = a[2] as f64 - r[2];
+            s += dx * dx + dy * dy + dz * dz;
+        }
+        rmsd_max = rmsd_max.max((s / n as f64).sqrt());
+    }
+
+    EnmMd {
+        frames,
+        temperature: p.temperature,
+        n_springs: springs.len(),
+        energy_first,
+        energy_last,
+        rmsd_max,
+    }
+}
+
 /// Which structure sub-tool is showing.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 enum Tool {
@@ -295,6 +684,10 @@ pub struct BiostructPanel {
     /// atoms across coordinate frames (synthetic wobble or a loaded `valenx-md`
     /// trajectory). Empty until a trajectory is attached.
     pub(crate) trajectory: TrajectoryPlayback,
+    /// Target temperature (reduced units) for the in-house **Run MD (ENM)**
+    /// control — scales the thermal vibration amplitude. Reactive slider;
+    /// also settable through the agent `agent_set` bridge as `"MD temperature"`.
+    pub(crate) md_temperature: f64,
     /// Which built-in demo structure the "Demo structure" picker last loaded
     /// into `structure_a`. Default [`DemoStructure::Crambin`] (the real
     /// 46-residue protein, also `structure_a`'s default text).
@@ -354,6 +747,55 @@ impl BiostructPanel {
         self.structure_a = demo.pdb().to_string();
         self.error = None;
         self.trajectory.clear();
+    }
+
+    /// Run the in-house **ENM velocity-Verlet MD** on the structure currently in
+    /// `structure_a` and attach the resulting real thermal-vibration trajectory
+    /// to the viewer's playback (so pressing Play animates the protein
+    /// breathing). Uses the default ENM parameters with the panel's
+    /// `md_temperature`. Shared by the "Run MD (ENM)" button and the agent
+    /// `RunMd` bridge so both take the same path.
+    ///
+    /// Fail-loud: an unparseable structure sets the trajectory note and attaches
+    /// nothing (never panics). Returns the run summary on success for the agent.
+    pub(crate) fn run_md(&mut self) -> Result<String, String> {
+        match read_structure(&self.structure_a, "viewer") {
+            Ok(s) => {
+                let params = EnmParams {
+                    temperature: self.md_temperature,
+                    ..EnmParams::default()
+                };
+                self.trajectory.attach_enm_md(&s, params);
+                // Sensible default playback speed for the ~60-frame run.
+                self.trajectory.speed = 12.0;
+                match self.trajectory.md() {
+                    Some(md) => Ok(md.summary()),
+                    None => Err(self
+                        .trajectory
+                        .note
+                        .clone()
+                        .unwrap_or_else(|| "MD did not attach".to_string())),
+                }
+            }
+            Err(e) => {
+                let msg = format!("could not parse structure: {e}");
+                self.trajectory.note = Some(msg.clone());
+                Err(msg)
+            }
+        }
+    }
+
+    /// A one-line MD readout for the agent bridge: the last ENM-MD run summary
+    /// (frames / springs / temperature / RMSD / energy), or a hint that no run
+    /// has happened yet.
+    pub(crate) fn md_readout(&self) -> String {
+        match self.trajectory.md() {
+            Some(md) => md.summary(),
+            None => format!(
+                "no MD run yet (Run MD (ENM) to animate; target T={:.2})",
+                self.md_temperature
+            ),
+        }
     }
 
     /// A one-line readout of the structure currently loaded in `structure_a`,
@@ -827,6 +1269,7 @@ impl Default for BiostructPanel {
             color_scheme: ColorScheme::default(),
             molviz_params: MolvizParams::default(),
             trajectory: TrajectoryPlayback::default(),
+            md_temperature: EnmParams::default().temperature,
             demo: DemoStructure::default(),
         }
     }
@@ -1173,6 +1616,32 @@ fn draw_trajectory_controls(app: &mut ValenxApp, ui: &mut egui::Ui) {
 
     // --- attach buttons -------------------------------------------------
     ui.horizontal_wrapped(|ui| {
+        if ui
+            .button("Run MD (ENM)")
+            .on_hover_text(
+                "In-house Elastic Network Model molecular dynamics: harmonic \
+                 springs between nearby atoms, Maxwell-Boltzmann thermal \
+                 velocities, velocity-Verlet integration. Produces a real, \
+                 deterministic trajectory of the protein vibrating with thermal \
+                 motion — press Play to animate the breathing.",
+            )
+            .clicked()
+        {
+            // Result is surfaced via the trajectory note / readout below.
+            let _ = app.genetics.biostruct.run_md();
+            if app.genetics.biostruct.trajectory.is_attached() {
+                render_trajectory_frame(app);
+            }
+        }
+        // AI-drivable MD temperature: a labelled slider an agent can set by
+        // name (`"MD temperature"`) to scale the vibration amplitude.
+        let temp_cap = ui.label("MD temperature");
+        ui.add(egui::Slider::new(&mut app.genetics.biostruct.md_temperature, 0.0..=1.5).text("T"))
+            .labelled_by(temp_cap.id)
+            .on_hover_text(
+                "Reduced-unit temperature for Run MD (ENM): higher ⇒ larger thermal \
+             vibration. Re-run MD after changing it.",
+            );
         if ui
             .button("Generate demo trajectory")
             .on_hover_text(
@@ -1789,6 +2258,167 @@ mod tests {
         // 46 Cα atoms (one per residue) — enough for a ribbon and a meaningful
         // RMSD, unlike the 3-Cα demo peptide.
         assert_eq!(ca_coords(&s).len(), 46);
+    }
+
+    // ----- in-house ENM molecular dynamics --------------------------------
+
+    /// Helper: build crambin's ViewMolecule for the MD tests.
+    fn crambin_view() -> ViewMolecule {
+        let s = read_structure(CRAMBIN_PDB, "crambin").unwrap();
+        ViewMolecule::from_biostruct(&s)
+    }
+
+    #[test]
+    fn enm_md_runs_on_crambin_and_is_well_formed() {
+        let mol = crambin_view();
+        let md = enm_md(&mol, EnmParams::default());
+        // One frame per requested frame, every frame the right atom count.
+        assert_eq!(md.frames.len(), EnmParams::default().n_frames);
+        for f in &md.frames {
+            assert_eq!(f.len(), mol.atoms.len());
+            for c in f {
+                assert!(c.iter().all(|x| x.is_finite()), "no NaN/Inf coordinates");
+            }
+        }
+        // Crambin is dense → the 8 Å network has many springs.
+        assert!(md.n_springs > 1000, "ENM built {} springs", md.n_springs);
+    }
+
+    #[test]
+    fn enm_md_frame0_is_the_reference_structure() {
+        // Velocity-Verlet starts from the input coordinates, so frame 0 must be
+        // the reference exactly (the viewer shows the input before playback).
+        let mol = crambin_view();
+        let md = enm_md(&mol, EnmParams::default());
+        for (a, atom) in md.frames[0].iter().zip(&mol.atoms) {
+            assert_eq!(*a, atom.pos);
+        }
+    }
+
+    #[test]
+    fn enm_md_is_deterministic_for_a_fixed_seed() {
+        let mol = crambin_view();
+        let a = enm_md(&mol, EnmParams::default());
+        let b = enm_md(&mol, EnmParams::default());
+        assert_eq!(a.frames, b.frames, "same seed ⇒ identical trajectory");
+        // A different seed gives a *different* (still valid) trajectory.
+        let c = enm_md(
+            &mol,
+            EnmParams {
+                seed: 0xC0FFEE,
+                ..EnmParams::default()
+            },
+        );
+        assert_ne!(a.frames, c.frames, "different seed ⇒ different trajectory");
+    }
+
+    #[test]
+    fn enm_md_energy_is_bounded_no_blowup() {
+        // The symplectic integrator + light damping keep the total energy in a
+        // bounded band — it must not drift up by orders of magnitude (the
+        // signature of an unstable run). We integrate a long run and assert the
+        // final energy stays close to the initial.
+        let mol = crambin_view();
+        let md = enm_md(
+            &mol,
+            EnmParams {
+                n_frames: 200,
+                substeps: 8,
+                ..EnmParams::default()
+            },
+        );
+        assert!(md.energy_first.is_finite() && md.energy_last.is_finite());
+        assert!(md.energy_first > 0.0);
+        // Final within a factor of ~2 of initial (damping pulls it *down*, never
+        // an exponential blow-up).
+        let ratio = md.energy_last / md.energy_first;
+        assert!(
+            (0.25..=2.0).contains(&ratio),
+            "energy ratio {ratio} out of bounds (first {}, last {})",
+            md.energy_first,
+            md.energy_last
+        );
+    }
+
+    #[test]
+    fn enm_md_atoms_stay_near_equilibrium() {
+        // A physical thermal vibration keeps every atom within a fraction of an
+        // ångström of its start — the RMSD must stay small (no explosion).
+        let mol = crambin_view();
+        let md = enm_md(&mol, EnmParams::default());
+        assert!(md.rmsd_max > 0.0, "the structure must actually move");
+        assert!(
+            md.rmsd_max < 1.0,
+            "peak RMSD {:.3} Å too large — not a gentle thermal wobble",
+            md.rmsd_max
+        );
+    }
+
+    #[test]
+    fn enm_md_higher_temperature_gives_larger_motion() {
+        // Monotone physics check: a hotter run vibrates more (larger RMSD).
+        let mol = crambin_view();
+        let cold = enm_md(
+            &mol,
+            EnmParams {
+                temperature: 0.1,
+                ..EnmParams::default()
+            },
+        );
+        let hot = enm_md(
+            &mol,
+            EnmParams {
+                temperature: 0.8,
+                ..EnmParams::default()
+            },
+        );
+        assert!(
+            hot.rmsd_max > cold.rmsd_max,
+            "hot RMSD {:.3} should exceed cold {:.3}",
+            hot.rmsd_max,
+            cold.rmsd_max
+        );
+    }
+
+    #[test]
+    fn enm_md_short_molecule_is_a_no_op() {
+        // Fewer than two atoms → nothing to vibrate, empty result, no panic.
+        let one = ViewMolecule {
+            atoms: vec![ViewAtom::new([0.0, 0.0, 0.0], "C")],
+            bonds: vec![],
+        };
+        let md = enm_md(&one, EnmParams::default());
+        assert!(md.frames.is_empty());
+    }
+
+    #[test]
+    fn run_md_attaches_a_playable_trajectory_and_readout() {
+        // The panel-level path used by the button + agent bridge: run MD on the
+        // default (crambin) structure and confirm it attaches and reports.
+        let mut p = BiostructPanel::default();
+        let summary = p.run_md().expect("MD must attach on the default crambin");
+        assert!(p.trajectory.is_attached(), "trajectory must be attached");
+        assert!(p.trajectory.n_frames() >= 2);
+        assert!(summary.contains("ENM MD"));
+        // The readout reflects the run, not the "no run yet" hint.
+        let readout = p.md_readout();
+        assert!(readout.contains("ENM MD") && readout.contains("springs"));
+    }
+
+    #[test]
+    fn enm_md_temperature_zero_is_static_but_stable() {
+        // T = 0 ⇒ no thermal velocities ⇒ the structure sits at its minimum and
+        // does not move; still finite, still bounded (a degenerate-but-valid run).
+        let mol = crambin_view();
+        let md = enm_md(
+            &mol,
+            EnmParams {
+                temperature: 0.0,
+                ..EnmParams::default()
+            },
+        );
+        assert!(md.rmsd_max < 1e-6, "T=0 keeps the structure put");
+        assert!(md.energy_last.is_finite());
     }
 
     #[test]
