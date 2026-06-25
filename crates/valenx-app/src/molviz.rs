@@ -387,12 +387,42 @@ impl BackbonePoint {
 // field).
 // --------------------------------------------------------------------------
 
+/// A coarse three-state collapse of the eight DSSP secondary-structure codes,
+/// the granularity a viewer colours by: every helix flavour (`H`/`G`/`I`) →
+/// [`Helix`](SsKind::Helix), the sheet states (`E`/`B`) → [`Sheet`](SsKind::Sheet),
+/// and everything else (turn / bend / coil / unknown) → [`Coil`](SsKind::Coil).
+/// Drives [`ColorScheme::SecondaryStructure`].
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum SsKind {
+    /// α / 3₁₀ / π helix (DSSP `H`, `G`, `I`).
+    Helix,
+    /// Extended β-strand or isolated bridge (DSSP `E`, `B`).
+    Sheet,
+    /// Turn / bend / coil / loop / unknown (DSSP `T`, `S`, `-`).
+    Coil,
+}
+
+impl SsKind {
+    /// Collapse a DSSP one-letter code (as carried on [`BackbonePoint::ss`] and
+    /// produced by `valenx_biostruct::dssp::SecondaryStructure::code`) to the
+    /// three-state colouring granularity. Any unrecognised character (and the
+    /// coil code `-`) maps to [`Coil`](SsKind::Coil).
+    pub fn from_dssp_code(code: char) -> SsKind {
+        match code {
+            'H' | 'G' | 'I' => SsKind::Helix,
+            'E' | 'B' => SsKind::Sheet,
+            _ => SsKind::Coil,
+        }
+    }
+}
+
 /// Per-atom annotations the structure carries that the colour schemes need but
 /// [`crate::genetics::molecule_view::ViewAtom`] does not store (it keeps only
 /// position + element). The caller (which read the PDB/mmCIF and *does* have
-/// chain / residue / B-factor) supplies one of these per atom, in lockstep with
-/// `mol.atoms`, when colouring by chain / residue / B-factor. Element colouring
-/// needs none of this and ignores the attributes entirely.
+/// chain / residue / B-factor / secondary structure) supplies one of these per
+/// atom, in lockstep with `mol.atoms`, when colouring by chain / residue /
+/// B-factor / secondary structure. Element colouring needs none of this and
+/// ignores the attributes entirely.
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct AtomAttr {
     /// Chain identifier (e.g. `"A"`). Drives [`ColorScheme::Chain`]; empty is
@@ -404,16 +434,31 @@ pub struct AtomAttr {
     /// Crystallographic B-factor (temperature factor), ångström². Drives the
     /// blue→white→red [`ColorScheme::BFactor`] ramp.
     pub b_factor: f32,
+    /// This atom's residue's DSSP secondary structure (helix / sheet / coil),
+    /// or `None` when no SS track is available. Drives
+    /// [`ColorScheme::SecondaryStructure`]; `None` colours as coil (grey).
+    pub ss: Option<SsKind>,
 }
 
 impl AtomAttr {
-    /// An attribute record with the given chain, residue index and B-factor.
+    /// An attribute record with the given chain, residue index and B-factor and
+    /// **no** secondary-structure assignment (`ss = None`). Use
+    /// [`AtomAttr::with_ss`] to attach an SS state.
     pub fn new(chain: impl Into<String>, residue_index: i32, b_factor: f32) -> Self {
         AtomAttr {
             chain: chain.into(),
             residue_index,
             b_factor,
+            ss: None,
         }
+    }
+
+    /// This record with its secondary-structure state set (builder-style), so
+    /// the per-atom attr the structure builds can carry the residue's DSSP
+    /// state alongside chain / residue / B-factor.
+    pub fn with_ss(mut self, ss: Option<SsKind>) -> Self {
+        self.ss = ss;
+        self
     }
 }
 
@@ -432,15 +477,19 @@ pub enum ColorScheme {
     Residue,
     /// A blue→white→red ramp by B-factor (low → high temperature factor).
     BFactor,
+    /// By **secondary structure** (DSSP helix / sheet / coil): the standard
+    /// helix = magenta-red, sheet = yellow, coil = grey convention.
+    SecondaryStructure,
 }
 
 impl ColorScheme {
     /// Every scheme, in picker order.
-    pub const ALL: [ColorScheme; 4] = [
+    pub const ALL: [ColorScheme; 5] = [
         ColorScheme::Element,
         ColorScheme::Chain,
         ColorScheme::Residue,
         ColorScheme::BFactor,
+        ColorScheme::SecondaryStructure,
     ];
 
     /// Short human label for the picker button.
@@ -450,6 +499,7 @@ impl ColorScheme {
             ColorScheme::Chain => "Chain",
             ColorScheme::Residue => "Residue",
             ColorScheme::BFactor => "B-factor",
+            ColorScheme::SecondaryStructure => "Secondary structure",
         }
     }
 
@@ -460,6 +510,7 @@ impl ColorScheme {
             ColorScheme::Chain => "chain",
             ColorScheme::Residue => "residue",
             ColorScheme::BFactor => "bfactor",
+            ColorScheme::SecondaryStructure => "ss",
         }
     }
 
@@ -473,6 +524,12 @@ impl ColorScheme {
             "bfactor" | "b-factor" | "b_factor" | "temperature" | "putty" => {
                 Some(ColorScheme::BFactor)
             }
+            "ss"
+            | "secondary"
+            | "secondary-structure"
+            | "secondary_structure"
+            | "dssp"
+            | "sstruc" => Some(ColorScheme::SecondaryStructure),
             _ => None,
         }
     }
@@ -575,6 +632,20 @@ pub fn atom_color(
             };
             blue_white_red(t)
         }
+        ColorScheme::SecondaryStructure => ss_color(attr.ss),
+    }
+}
+
+/// The standard secondary-structure colour for an [`SsKind`]: helix =
+/// magenta-red, sheet = yellow, coil / loop / unknown (`None`) = light grey —
+/// the convention PyMOL / Chimera use. A missing assignment falls through to
+/// the coil grey (fail-loud-as-coil, never a panic), so an atom with no SS is
+/// rendered, not dropped.
+fn ss_color(ss: Option<SsKind>) -> [f32; 3] {
+    match ss {
+        Some(SsKind::Helix) => [0.90, 0.18, 0.55], // magenta-red helix
+        Some(SsKind::Sheet) => [0.95, 0.85, 0.18], // yellow strand
+        Some(SsKind::Coil) | None => [0.80, 0.80, 0.80], // light grey coil/loop
     }
 }
 
@@ -2669,11 +2740,11 @@ mod tests {
     #[test]
     fn color_scheme_enum_round_trips_and_is_unique() {
         assert_eq!(ColorScheme::default(), ColorScheme::Element);
-        assert_eq!(ColorScheme::ALL.len(), 4);
+        assert_eq!(ColorScheme::ALL.len(), 5);
         let mut tokens: Vec<&str> = ColorScheme::ALL.iter().map(|s| s.token()).collect();
         tokens.sort_unstable();
         tokens.dedup();
-        assert_eq!(tokens.len(), 4, "tokens must be unique");
+        assert_eq!(tokens.len(), 5, "tokens must be unique");
         for s in ColorScheme::ALL {
             assert_eq!(ColorScheme::from_token(s.token()), Some(s));
         }
@@ -2687,10 +2758,20 @@ mod tests {
             ColorScheme::from_token("b-factor"),
             Some(ColorScheme::BFactor)
         );
+        assert_eq!(
+            ColorScheme::from_token("DSSP"),
+            Some(ColorScheme::SecondaryStructure)
+        );
+        assert_eq!(
+            ColorScheme::from_token("secondary-structure"),
+            Some(ColorScheme::SecondaryStructure)
+        );
         assert_eq!(ColorScheme::from_token("nope"), None);
-        // Only the non-element schemes consult the per-atom attrs.
+        // Only the non-element schemes consult the per-atom attrs (SS reads
+        // `attr.ss`, so it needs them too).
         assert!(!ColorScheme::Element.needs_attrs());
         assert!(ColorScheme::Chain.needs_attrs());
+        assert!(ColorScheme::SecondaryStructure.needs_attrs());
     }
 
     #[test]
@@ -2764,6 +2845,64 @@ mod tests {
         let fctx = ColorContext::build(&flat);
         let mid = atom_color(ColorScheme::BFactor, "C", &flat[0], &fctx);
         assert!(mid.iter().all(|c| c.is_finite()));
+    }
+
+    #[test]
+    fn ss_kind_collapses_dssp_codes() {
+        // The eight DSSP codes collapse to the three colouring states.
+        for c in ['H', 'G', 'I'] {
+            assert_eq!(SsKind::from_dssp_code(c), SsKind::Helix, "{c} is helix");
+        }
+        for c in ['E', 'B'] {
+            assert_eq!(SsKind::from_dssp_code(c), SsKind::Sheet, "{c} is sheet");
+        }
+        // Turn / bend / coil / anything unrecognised → coil.
+        for c in ['T', 'S', '-', 'X', ' '] {
+            assert_eq!(SsKind::from_dssp_code(c), SsKind::Coil, "{c} is coil");
+        }
+    }
+
+    #[test]
+    fn secondary_structure_scheme_colors_by_state() {
+        // Helix residue → helix-red (R > G, and a magenta-ish R>B over G);
+        // sheet → yellow (R and G high, B low); coil → grey (all three ~equal);
+        // a missing SS (None) → the same coil grey, never a panic.
+        let ctx = ColorContext::build(&[]);
+        let helix = AtomAttr::new("A", 0, 0.0).with_ss(Some(SsKind::Helix));
+        let sheet = AtomAttr::new("A", 1, 0.0).with_ss(Some(SsKind::Sheet));
+        let coil = AtomAttr::new("A", 2, 0.0).with_ss(Some(SsKind::Coil));
+        let none = AtomAttr::new("A", 3, 0.0); // ss == None
+
+        let ch = atom_color(ColorScheme::SecondaryStructure, "C", &helix, &ctx);
+        let cs = atom_color(ColorScheme::SecondaryStructure, "C", &sheet, &ctx);
+        let cc = atom_color(ColorScheme::SecondaryStructure, "C", &coil, &ctx);
+        let cn = atom_color(ColorScheme::SecondaryStructure, "C", &none, &ctx);
+
+        // Helix is red-dominant (the magenta-red helix colour).
+        assert!(
+            ch[0] > ch[1] && ch[0] > 0.5,
+            "helix must be red-ish, got {ch:?}"
+        );
+        // Sheet is yellow: red & green high, blue low.
+        assert!(
+            cs[0] > 0.5 && cs[1] > 0.5 && cs[2] < cs[0] && cs[2] < cs[1],
+            "sheet must be yellow, got {cs:?}"
+        );
+        // Coil is grey: the three channels are (near) equal and mid-bright.
+        assert!(
+            (cc[0] - cc[1]).abs() < 1e-6 && (cc[1] - cc[2]).abs() < 1e-6,
+            "coil must be grey, got {cc:?}"
+        );
+        // A missing SS colours exactly as coil (fail-loud-as-coil).
+        assert_eq!(cn, cc, "no-SS atom must match the coil colour");
+        // The three states are visibly distinct.
+        assert_ne!(ch, cs);
+        assert_ne!(ch, cc);
+        assert_ne!(cs, cc);
+        // Every colour stays finite in [0,1].
+        for c in [ch, cs, cc, cn] {
+            assert!(c.iter().all(|&x| x.is_finite() && (0.0..=1.0).contains(&x)));
+        }
     }
 
     #[test]
