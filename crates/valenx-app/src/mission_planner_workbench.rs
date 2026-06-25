@@ -26,6 +26,7 @@
 //! `missionplanner.play` / `missionplanner.pause`.
 
 use eframe::egui;
+use valenx_mission_sim::los::line_of_sight;
 use valenx_mission_sim::planner::{Affiliation, PlannerScenario, M_PER_DEG_LAT};
 use valenx_mission_sim::routing::{astar, demo_field, CostGrid};
 use walkers::sources::{OpenStreetMap, TileSource};
@@ -87,6 +88,19 @@ pub struct MissionPlannerWorkbenchState {
     /// Human-readable status of the last `Compute route` (length in cells / km,
     /// or "no route"). Surfaced in the readout and the agent readout.
     pub route_status: String,
+
+    // --- Line of sight (in-house DDA ray-march over the same cost grid) ------
+    /// The observer / sensor cell `(x, y)` line-of-sight is computed FROM, over
+    /// the same [`Self::route_grid`] occupancy. Defaults to the route start.
+    pub los_observer: (usize, usize),
+    /// The last computed visibility to each target cell, paired as
+    /// `(target_cell, visible)`: `true` = clear sight line (GREEN), `false` =
+    /// masked by an obstacle (RED). Empty until `Compute LoS` runs. The targets
+    /// are the route goal plus each entity's current cell.
+    pub los_results: Vec<((usize, usize), bool)>,
+    /// Human-readable status of the last `Compute LoS` (visible / blocked
+    /// counts). Surfaced in the readout and the agent readout.
+    pub los_status: String,
 }
 
 impl Default for MissionPlannerWorkbenchState {
@@ -105,6 +119,10 @@ impl Default for MissionPlannerWorkbenchState {
             route_goal: (ROUTE_GRID_W - 1, ROUTE_GRID_H - 1),
             route: None,
             route_status: "no route computed".to_string(),
+            // Observe from the route start by default; LoS to the goal + entities.
+            los_observer: (0, 0),
+            los_results: Vec::new(),
+            los_status: "no LoS computed".to_string(),
         }
     }
 }
@@ -127,6 +145,8 @@ impl MissionPlannerWorkbenchState {
             "Route start Y",
             "Route goal X",
             "Route goal Y",
+            "Observer X",
+            "Observer Y",
         ]
     }
 
@@ -178,6 +198,47 @@ impl MissionPlannerWorkbenchState {
             total_m += (north_m * north_m + east_m * east_m).sqrt();
         }
         total_m / 1000.0
+    }
+
+    /// Compute **line of sight** from [`Self::los_observer`] to a set of target
+    /// cells over the same [`Self::route_grid`] occupancy, storing
+    /// `(target, visible)` pairs in [`Self::los_results`] and a visible/blocked
+    /// summary in [`Self::los_status`]. Shared by the in-panel `Compute LoS`
+    /// button and the `missionplanner.los` bridge id.
+    ///
+    /// Targets are the routing **goal** cell plus each **entity's** current cell
+    /// (entity lat/lon snapped to the nearest grid cell over the routing bbox).
+    /// Targets that coincide with the observer are skipped (a cell trivially sees
+    /// itself). Pure aside from updating `self`.
+    pub(crate) fn compute_los(&mut self) {
+        let bbox = route_bbox(&self.scenario);
+        let mut targets: Vec<(usize, usize)> = Vec::new();
+        // The routing goal is always a target of interest.
+        targets.push(self.route_goal);
+        // Each entity's current position, snapped to a grid cell.
+        for e in &self.scenario.entities {
+            targets.push(latlon_to_cell(e.lat, e.lon, &self.route_grid, bbox));
+        }
+        // De-duplicate and drop the observer's own cell (trivially visible).
+        targets.sort_unstable();
+        targets.dedup();
+        targets.retain(|&c| c != self.los_observer);
+
+        self.los_results = targets
+            .iter()
+            .map(|&t| (t, line_of_sight(&self.route_grid, self.los_observer, t)))
+            .collect();
+
+        let visible = self.los_results.iter().filter(|(_, v)| *v).count();
+        let blocked = self.los_results.len() - visible;
+        self.los_status = format!(
+            "LoS from ({},{}): {} visible \u{00B7} {} blocked \u{00B7} {} targets",
+            self.los_observer.0,
+            self.los_observer.1,
+            visible,
+            blocked,
+            self.los_results.len(),
+        );
     }
 
     /// Set every entity's APP-6 affiliation at once (the per-side override). Used
@@ -246,6 +307,8 @@ impl MissionPlannerWorkbenchState {
             }
             "Route goal X" => self.route_goal.0 = route_coord(value, ROUTE_GRID_W, "Route goal X")?,
             "Route goal Y" => self.route_goal.1 = route_coord(value, ROUTE_GRID_H, "Route goal Y")?,
+            "Observer X" => self.los_observer.0 = route_coord(value, ROUTE_GRID_W, "Observer X")?,
+            "Observer Y" => self.los_observer.1 = route_coord(value, ROUTE_GRID_H, "Observer Y")?,
             other => return Err(format!("unknown mission-planner control: {other:?}")),
         }
         Ok(())
@@ -264,7 +327,7 @@ impl MissionPlannerWorkbenchState {
         let [fr, ho, ne, un] = self.affiliation_counts();
         Some(format!(
             "Sim time {:.1}s \u{00B7} {} entities ({} arrived) \u{00B7} \
-             affiliation F{} H{} N{} U{} \u{00B7} playback {}x \u{00B7} {} \u{00B7} {}",
+             affiliation F{} H{} N{} U{} \u{00B7} playback {}x \u{00B7} {} \u{00B7} {} \u{00B7} {}",
             self.scenario.sim_time_s,
             self.scenario.entities.len(),
             done,
@@ -275,6 +338,7 @@ impl MissionPlannerWorkbenchState {
             self.playback_speed,
             if self.playing { "playing" } else { "paused" },
             self.route_status,
+            self.los_status,
         ))
     }
 }
@@ -315,6 +379,14 @@ pub(crate) fn pause(app: &mut ValenxApp) {
 /// path; delegates to [`MissionPlannerWorkbenchState::compute_route`].
 pub(crate) fn route(app: &mut ValenxApp) {
     app.mission_planner.compute_route();
+}
+
+/// Compute line of sight from the observer to the goal + entities (the in-panel
+/// `Compute LoS` action). Factored out so the button and the
+/// `missionplanner.los` bridge id share one path; delegates to
+/// [`MissionPlannerWorkbenchState::compute_los`].
+pub(crate) fn los(app: &mut ValenxApp) {
+    app.mission_planner.compute_los();
 }
 
 // ---------------------------------------------------------------------------
@@ -494,6 +566,65 @@ fn mission_planner_workbench_body_inner(app: &mut ValenxApp, ui: &mut egui::Ui) 
             .color(egui::Color32::from_rgb(255, 180, 90)),
     );
 
+    // --- Line of sight (in-house DDA ray-march over the cost field) ---------
+    ui.add_space(6.0);
+    ui.separator();
+    ui.label(
+        egui::RichText::new(
+            "Line of sight \u{00B7} in-house 2-D ray-march over the same grid \
+             [sensor visibility \u{2014} which targets are SEEN vs MASKED by terrain / obstacles]",
+        )
+        .weak()
+        .small(),
+    );
+    egui::Grid::new("mission_planner_los")
+        .num_columns(4)
+        .striped(true)
+        .show(ui, |ui| {
+            let lbl = ui.label("Observer X");
+            ui.add(
+                egui::DragValue::new(&mut s.los_observer.0)
+                    .speed(1)
+                    .range(0..=ROUTE_GRID_W - 1),
+            )
+            .labelled_by(lbl.id)
+            .on_hover_text("Observer / sensor cell column (0..grid width) over the cost field.");
+            let lbl = ui.label("Observer Y");
+            ui.add(
+                egui::DragValue::new(&mut s.los_observer.1)
+                    .speed(1)
+                    .range(0..=ROUTE_GRID_H - 1),
+            )
+            .labelled_by(lbl.id)
+            .on_hover_text("Observer / sensor cell row (0 = north edge).");
+            ui.end_row();
+        });
+    ui.horizontal(|ui| {
+        if ui
+            .button("\u{1F441} Compute LoS")
+            .on_hover_text(
+                "Ray-march line of sight from the observer to the route goal and every entity \
+                 over the demo cost field; clear lines draw GREEN, terrain-masked lines RED.",
+            )
+            .clicked()
+        {
+            s.compute_los();
+        }
+        if ui
+            .button("Observer = route start")
+            .on_hover_text("Move the observer cell to the current routing start cell.")
+            .clicked()
+        {
+            s.los_observer = s.route_start;
+        }
+    });
+    // LoS status readout (visible / blocked counts).
+    ui.label(
+        egui::RichText::new(&s.los_status)
+            .strong()
+            .color(egui::Color32::from_rgb(120, 220, 170)),
+    );
+
     ui.add_space(4.0);
     ui.horizontal(|ui| {
         // Play / Pause toggle (a single button whose label reflects state).
@@ -646,6 +777,38 @@ fn cell_to_latlon(cell: (usize, usize), grid: &CostGrid, bbox: (f64, f64, f64, f
     // y grows southward: y=0 -> max_lat (north), y=h-1 -> min_lat (south).
     let lat = max_lat - fy * (max_lat - min_lat);
     (lat, lon)
+}
+
+/// Inverse of [`cell_to_latlon`]: snap a geographic `(lat, lon)` to the nearest
+/// routing grid cell `(x, y)` inside `bbox`, clamped to the grid bounds. Used to
+/// place entities (which live at lat/lon) onto the cost grid for line-of-sight.
+/// A degenerate (zero-span) box maps to the grid centre.
+fn latlon_to_cell(
+    lat: f64,
+    lon: f64,
+    grid: &CostGrid,
+    bbox: (f64, f64, f64, f64),
+) -> (usize, usize) {
+    let (min_lat, max_lat, min_lon, max_lon) = bbox;
+    let span_lon = max_lon - min_lon;
+    let span_lat = max_lat - min_lat;
+    let fx = if span_lon.abs() > f64::EPSILON {
+        (lon - min_lon) / span_lon
+    } else {
+        0.5
+    };
+    // y=0 is the north (max_lat) edge, mirroring cell_to_latlon.
+    let fy = if span_lat.abs() > f64::EPSILON {
+        (max_lat - lat) / span_lat
+    } else {
+        0.5
+    };
+    let x = (fx * (grid.w.saturating_sub(1)) as f64).round();
+    let y = (fy * (grid.h.saturating_sub(1)) as f64).round();
+    // Clamp into bounds (entities outside the padded bbox snap to the edge).
+    let x = (x.max(0.0) as usize).min(grid.w.saturating_sub(1));
+    let y = (y.max(0.0) as usize).min(grid.h.saturating_sub(1));
+    (x, y)
 }
 
 /// Pick a slippy-map zoom (web-mercator `z`) whose tiles span the scenario
@@ -841,6 +1004,33 @@ fn draw_app6_frame(painter: &egui::Painter, c: egui::Pos2, r: f32, a: Affiliatio
     }
 }
 
+/// Paint a **dashed** line segment from `a` to `b` with the given `stroke`,
+/// alternating `dash` px of line with `gap` px of space. Used for **masked**
+/// line-of-sight rays so a blocked sight line reads distinctly from a clear
+/// (solid) one even for colour-blind users.
+fn dashed_line(
+    painter: &egui::Painter,
+    a: egui::Pos2,
+    b: egui::Pos2,
+    stroke: egui::Stroke,
+    dash: f32,
+    gap: f32,
+) {
+    let delta = b - a;
+    let len = delta.length();
+    if len < f32::EPSILON {
+        return;
+    }
+    let dir = delta / len;
+    let period = (dash + gap).max(1.0);
+    let mut t = 0.0;
+    while t < len {
+        let seg_end = (t + dash).min(len);
+        painter.line_segment([a + dir * t, a + dir * seg_end], stroke);
+        t += period;
+    }
+}
+
 /// A [`walkers::Plugin`] that paints the mission scenario — every entity's route
 /// polyline, its waypoint dots, and the entity marker + name label — on top of
 /// the OSM tile basemap, projecting each lat/lon to screen pixels with walkers'
@@ -854,6 +1044,12 @@ struct MissionOverlay {
     /// The geographic centres of the routing grid's **obstacle** cells, drawn as
     /// small hatched markers so the user sees what the route is avoiding.
     obstacles: Vec<(f64, f64)>,
+    /// The line-of-sight observer position as `(lat, lon)`, present only when a
+    /// LoS result has been computed (the origin of every sight line).
+    los_observer: Option<(f64, f64)>,
+    /// Each computed sight line as `(target_latlon, visible)`: a GREEN solid line
+    /// when `visible`, a RED dashed/dim line when masked by terrain.
+    los_lines: Vec<((f64, f64), bool)>,
 }
 
 impl MissionOverlay {
@@ -899,10 +1095,27 @@ impl MissionOverlay {
             }
         }
 
+        // Line-of-sight: project the observer + each target sight line to lat/lon
+        // over the same routing bbox so they pin to the basemap. Present only
+        // once `compute_los` has run (non-empty results).
+        let (los_observer, los_lines) = if s.los_results.is_empty() {
+            (None, Vec::new())
+        } else {
+            let obs = cell_to_latlon(s.los_observer, &s.route_grid, bbox);
+            let lines = s
+                .los_results
+                .iter()
+                .map(|&(cell, vis)| (cell_to_latlon(cell, &s.route_grid, bbox), vis))
+                .collect();
+            (Some(obs), lines)
+        };
+
         Self {
             entities,
             tactical_route,
             obstacles,
+            los_observer,
+            los_lines,
         }
     }
 }
@@ -971,6 +1184,39 @@ impl walkers::Plugin for MissionOverlay {
             painter.circle_stroke(sp, 5.0, egui::Stroke::new(1.5, egui::Color32::BLACK));
             painter.circle_stroke(gp, 5.0, egui::Stroke::new(2.0, tac_col));
             painter.circle_filled(gp, 2.5, egui::Color32::from_rgb(240, 80, 80));
+        }
+
+        // Line-of-sight rays from the observer to each target: GREEN solid when
+        // the sight line is clear, RED dashed/dim when terrain or an obstacle
+        // MASKS it. Drawn under the entity markers; the observer is an eye-ringed
+        // node. Defensive sensor-visibility analysis only.
+        if let Some((olat, olon)) = self.los_observer {
+            let op = to_px(olat, olon);
+            let vis_col = egui::Color32::from_rgb(90, 230, 130); // clear → green
+            let masked_col = egui::Color32::from_rgb(235, 90, 80); // masked → red
+            for &((tlat, tlon), visible) in &self.los_lines {
+                let tp = to_px(tlat, tlon);
+                if visible {
+                    // Solid bright green line for a clear sight line.
+                    painter.line_segment([op, tp], egui::Stroke::new(2.0, vis_col));
+                } else {
+                    // Dashed dim red line for a masked sight line.
+                    dashed_line(
+                        &painter,
+                        op,
+                        tp,
+                        egui::Stroke::new(1.6, masked_col),
+                        6.0,
+                        5.0,
+                    );
+                }
+                // Small target pip in the line's colour.
+                painter.circle_filled(tp, 2.6, if visible { vis_col } else { masked_col });
+            }
+            // Observer node: a white-ringed dot so the LoS origin is obvious.
+            painter.circle_filled(op, 3.4, egui::Color32::from_rgb(250, 250, 250));
+            painter.circle_stroke(op, 5.2, egui::Stroke::new(1.6, egui::Color32::BLACK));
+            painter.circle_stroke(op, 6.6, egui::Stroke::new(1.4, vis_col));
         }
 
         // Entity markers: the standard APP-6 / MIL-STD-2525 affiliation FRAME
@@ -1200,6 +1446,113 @@ mod tests {
             r.contains("route:"),
             "readout should surface the route status: {r}"
         );
+    }
+
+    #[test]
+    fn los_control_names_are_listed() {
+        let names = MissionPlannerWorkbenchState::agent_control_names();
+        assert!(names.contains(&"Observer X"));
+        assert!(names.contains(&"Observer Y"));
+    }
+
+    #[test]
+    fn compute_los_classifies_targets_over_the_demo_field() {
+        // From the NW corner observer, computing LoS produces one result per
+        // distinct target (goal + entities, minus the observer's own cell) and a
+        // visible/blocked summary. The demo field has obstacle walls, so at least
+        // one of the far targets is masked.
+        let mut s = MissionPlannerWorkbenchState::default();
+        assert!(s.los_results.is_empty());
+        s.los_observer = (0, 0);
+        s.compute_los();
+        assert!(
+            !s.los_results.is_empty(),
+            "LoS computes at least the goal target"
+        );
+        assert!(s.los_status.contains("visible") && s.los_status.contains("blocked"));
+        // Every result's `visible` flag matches a direct line_of_sight call.
+        for &(target, vis) in &s.los_results {
+            assert_eq!(
+                vis,
+                line_of_sight(&s.route_grid, s.los_observer, target),
+                "stored visibility must match the pure LoS for {target:?}"
+            );
+            // The observer's own cell is never a target.
+            assert_ne!(target, s.los_observer);
+        }
+        // The corner-to-corner demo field walls SE-bound sight lines, so the goal
+        // (SE corner) must be masked from the NW observer.
+        let goal_vis = s
+            .los_results
+            .iter()
+            .find(|(c, _)| *c == s.route_goal)
+            .map(|(_, v)| *v);
+        assert_eq!(
+            goal_vis,
+            Some(false),
+            "the SE goal is behind the demo walls → masked from the NW observer"
+        );
+    }
+
+    #[test]
+    fn agent_set_observer_coords_update_and_reject() {
+        use crate::agent_commands::AgentValue;
+        let mut s = MissionPlannerWorkbenchState::default();
+        s.agent_set("Observer X", &AgentValue::Int(5)).unwrap();
+        s.agent_set("Observer Y", &AgentValue::Int(6)).unwrap();
+        assert_eq!(s.los_observer, (5, 6));
+        // Out-of-range and wrong-type are fail-loud, leaving state intact.
+        let before = s.los_observer;
+        assert!(s.agent_set("Observer X", &AgentValue::Int(9999)).is_err());
+        assert!(s.agent_set("Observer Y", &AgentValue::Int(-1)).is_err());
+        assert!(s.agent_set("Observer X", &AgentValue::Float(1.5)).is_err());
+        assert_eq!(
+            s.los_observer, before,
+            "a rejected set must not mutate state"
+        );
+    }
+
+    #[test]
+    fn los_bridge_helper_computes_los() {
+        let mut app = ValenxApp::default();
+        assert!(app.mission_planner.los_results.is_empty());
+        los(&mut app);
+        assert!(
+            !app.mission_planner.los_results.is_empty(),
+            "the los() bridge helper computes visibility"
+        );
+    }
+
+    #[test]
+    fn readout_includes_los_status() {
+        let mut s = MissionPlannerWorkbenchState::default();
+        s.compute_los();
+        let r = s.agent_readout().expect("readout present");
+        assert!(
+            r.contains("LoS from"),
+            "readout should surface the LoS status: {r}"
+        );
+    }
+
+    #[test]
+    fn latlon_to_cell_round_trips_cell_centres() {
+        // latlon_to_cell is the inverse of cell_to_latlon at cell centres: every
+        // grid cell maps to lat/lon and back to itself.
+        let grid = demo_field(ROUTE_GRID_W, ROUTE_GRID_H);
+        let bbox = (37.0, 38.0, -122.5, -121.5);
+        for &cell in &[
+            (0, 0),
+            (ROUTE_GRID_W - 1, ROUTE_GRID_H - 1),
+            (10, 7),
+            (5, 0),
+        ] {
+            let (lat, lon) = cell_to_latlon(cell, &grid, bbox);
+            assert_eq!(
+                latlon_to_cell(lat, lon, &grid, bbox),
+                cell,
+                "round trip must recover cell {cell:?}"
+            );
+        }
     }
 
     #[test]

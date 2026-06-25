@@ -102,6 +102,7 @@
 pub mod engagement;
 pub mod entity;
 pub mod error;
+pub mod los;
 pub mod monte_carlo;
 pub mod planner;
 pub mod routing;

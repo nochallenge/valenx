@@ -1287,7 +1287,10 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
                 run_missionsim_bridge(app, ch, &id);
             } else if matches!(
                 id.as_str(),
-                "missionplanner.play" | "missionplanner.pause" | "missionplanner.route"
+                "missionplanner.play"
+                    | "missionplanner.pause"
+                    | "missionplanner.route"
+                    | "missionplanner.los"
             ) {
                 run_mission_planner_bridge(app, ch, &id);
             } else if matches!(id.as_str(), "morphogenesis.play" | "morphogenesis.pause") {
@@ -1663,11 +1666,12 @@ fn run_missionsim_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
 }
 
 /// Fire a Mission Planner action from the bridge. The Play / Pause toggles and
-/// the `Compute route` action exist only as in-panel buttons; this routes the
-/// bridge ids (`missionplanner.play`, `missionplanner.pause`,
-/// `missionplanner.route`) to the SAME `play` / `pause` / `route` functions the
-/// buttons call, so a `RunCommand` drives real-time playback or computes the
-/// tactical A\* route.
+/// the `Compute route` / `Compute LoS` actions exist only as in-panel buttons;
+/// this routes the bridge ids (`missionplanner.play`, `missionplanner.pause`,
+/// `missionplanner.route`, `missionplanner.los`) to the SAME `play` / `pause` /
+/// `route` / `los` functions the buttons call, so a `RunCommand` drives
+/// real-time playback, computes the tactical A\* route, or computes line of
+/// sight.
 ///
 /// The active tab must be a [`TabKind::MissionPlanner`]; otherwise this posts a
 /// fail-loud `warn` note and changes nothing. After acting it acks with the
@@ -1687,6 +1691,7 @@ fn run_mission_planner_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
         "missionplanner.play" => crate::mission_planner_workbench::play(app),
         "missionplanner.pause" => crate::mission_planner_workbench::pause(app),
         "missionplanner.route" => crate::mission_planner_workbench::route(app),
+        "missionplanner.los" => crate::mission_planner_workbench::los(app),
         _ => unreachable!("run_mission_planner_bridge called with a non-missionplanner id"),
     }
     let readout = app
