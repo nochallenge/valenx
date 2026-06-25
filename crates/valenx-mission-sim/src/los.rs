@@ -164,6 +164,115 @@ pub fn line_of_sight(grid: &CostGrid, from: (usize, usize), to: (usize, usize)) 
     false
 }
 
+/// Whether the observer at cell `from` has a clear **2.5-D terrain-masked** line
+/// of sight to the cell `to`, across the elevation of a
+/// [`HeightGrid`](crate::terrain::HeightGrid).
+///
+/// Unlike the flat-occupancy [`line_of_sight`] (which treats `f32::INFINITY` cost
+/// cells as opaque walls), this samples the **ground elevation** along the ray and
+/// checks it against the straight 3-D **sight line** from the observer's eye to the
+/// target. The sight line runs from `(elev[from] + obs_h)` at the observer to
+/// `(elev[to] + tgt_h)` at the target; at each intermediate cell the line's height
+/// is interpolated, and the view is **BLOCKED** if the terrain there rises above
+/// it. This models true **dead ground** behind a ridge: an intervening crest taller
+/// than the line of sight hides the target, even though nothing is an "obstacle".
+///
+/// `obs_h` and `tgt_h` are the observer and target heights **above the ground** in
+/// the same metres as the elevation (e.g. a `2 m` standing observer, a `0 m`
+/// ground target). A taller observer (`obs_h` large) can see *over* a low hill.
+///
+/// Endpoint handling mirrors [`line_of_sight`]: `from == to` is `true`, adjacent
+/// cells are mutually visible (nothing strictly between), the **endpoint cells
+/// themselves are not occlusion-tested**, and an **out-of-bounds** endpoint yields
+/// `false`. The traversal is the same supercover DDA, so a ridge the ideal ray only
+/// clips still masks the view. Pure — deterministic in the terrain and endpoints.
+pub fn line_of_sight_terrain(
+    height: &crate::terrain::HeightGrid,
+    from: (usize, usize),
+    to: (usize, usize),
+    obs_h: f32,
+    tgt_h: f32,
+) -> bool {
+    let (x0, y0) = from;
+    let (x1, y1) = to;
+
+    if !height.in_bounds(x0, y0) || !height.in_bounds(x1, y1) {
+        return false;
+    }
+    if from == to {
+        return true;
+    }
+
+    // Eye height at the observer and aim height at the target (ground + offset).
+    let z_from = height.elevation_at(x0, y0) as f64 + obs_h as f64;
+    let z_to = height.elevation_at(x1, y1) as f64 + tgt_h as f64;
+
+    // Total horizontal span, used to interpolate the sight-line height by fraction
+    // of distance covered (param t in 0..=1 along the segment).
+    let dx = (x1 as f64) - (x0 as f64);
+    let dy = (y1 as f64) - (y0 as f64);
+    let span2 = dx * dx + dy * dy;
+    if span2 == 0.0 {
+        return true; // same cell (already handled, but guards the divide below).
+    }
+
+    let mut x = x0 as isize;
+    let mut y = y0 as isize;
+    let tx = x1 as isize;
+    let ty = y1 as isize;
+
+    let step_x = dx.signum() as isize;
+    let step_y = dy.signum() as isize;
+    let (mut t_max_x, t_delta_x) = if step_x != 0 {
+        (0.5 / dx.abs(), 1.0 / dx.abs())
+    } else {
+        (f64::INFINITY, f64::INFINITY)
+    };
+    let (mut t_max_y, t_delta_y) = if step_y != 0 {
+        (0.5 / dy.abs(), 1.0 / dy.abs())
+    } else {
+        (f64::INFINITY, f64::INFINITY)
+    };
+
+    let max_steps = (tx - x).unsigned_abs() + (ty - y).unsigned_abs() + 2;
+    for _ in 0..max_steps {
+        if (t_max_x - t_max_y).abs() < 1e-9 {
+            x += step_x;
+            y += step_y;
+            t_max_x += t_delta_x;
+            t_max_y += t_delta_y;
+        } else if t_max_x < t_max_y {
+            x += step_x;
+            t_max_x += t_delta_x;
+        } else {
+            y += step_y;
+            t_max_y += t_delta_y;
+        }
+
+        if x == tx && y == ty {
+            return true; // reached target; nothing rose above the sight line.
+        }
+        if x < 0 || y < 0 {
+            return false;
+        }
+
+        // Fraction of the horizontal distance covered to this cell centre, and the
+        // sight-line height there (linear interpolation between eye and aim).
+        let cdx = (x as f64) - (x0 as f64);
+        let cdy = (y as f64) - (y0 as f64);
+        let t = ((cdx * cdx + cdy * cdy) / span2).sqrt().clamp(0.0, 1.0);
+        let line_z = z_from + (z_to - z_from) * t;
+
+        // Dead ground: terrain here taller than the sight line masks the target.
+        let ground_z = height.elevation_at(x as usize, y as usize) as f64;
+        if ground_z > line_z {
+            return false;
+        }
+    }
+
+    false // fail safe — target should have been reached within max_steps.
+}
+
 /// For an `observer` cell, whether it has line of sight to **each** target in
 /// `targets`, returned in the same order (`out[i] == line_of_sight(grid,
 /// observer, targets[i])`).
@@ -324,6 +433,85 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn terrain_los_clear_over_flat_ground() {
+        use crate::terrain::HeightGrid;
+        // A flat plateau: every line of sight is clear (no terrain rises to mask).
+        let t = HeightGrid::flat(12, 8, 300.0);
+        assert!(line_of_sight_terrain(&t, (0, 0), (11, 7), 2.0, 0.0));
+        assert!(line_of_sight_terrain(&t, (11, 7), (0, 0), 2.0, 0.0));
+        assert!(line_of_sight_terrain(&t, (0, 4), (11, 4), 2.0, 2.0)); // horizontal
+    }
+
+    #[test]
+    fn terrain_los_blocked_by_a_ridge_between() {
+        use crate::terrain::HeightGrid;
+        // Build a wall-like ridge: a tall north-south crest in the middle column.
+        // Two ground-level observers either side of it cannot see each other —
+        // the crest rises above the (flat) sight line between them = dead ground.
+        let w = 11;
+        let h = 5;
+        let mut elev = vec![100.0f32; w * h];
+        for y in 0..h {
+            elev[y * w + 5] = 900.0; // a sheer ridge at column x=5
+        }
+        let t = HeightGrid { w, h, elev };
+        assert!(
+            !line_of_sight_terrain(&t, (0, 2), (10, 2), 2.0, 2.0),
+            "a tall ridge between the two cells must mask the view (dead ground)"
+        );
+        // Without the ridge (flat) the same line is clear.
+        let flat = HeightGrid::flat(w, h, 100.0);
+        assert!(line_of_sight_terrain(&flat, (0, 2), (10, 2), 2.0, 2.0));
+    }
+
+    #[test]
+    fn tall_observer_sees_over_a_low_hill() {
+        use crate::terrain::HeightGrid;
+        // A modest hill (a single raised cell) sits between observer and target.
+        // A ground-level observer is masked by it, but raising the observer high
+        // enough lifts the sight line above the hill crest → target becomes visible.
+        let w = 9;
+        let h = 3;
+        let mut elev = vec![100.0f32; w * h];
+        elev[1 * w + 4] = 130.0; // a low hill (+30 m) at the midpoint (4,1)
+        let t = HeightGrid { w, h, elev };
+        // Low observer & target (1 m): the hill rises above the flat sight line.
+        assert!(
+            !line_of_sight_terrain(&t, (0, 1), (8, 1), 1.0, 1.0),
+            "a low observer should be masked by the intervening hill"
+        );
+        // A tall observer (100 m mast) lifts the sight line above the +30 m hill.
+        assert!(
+            line_of_sight_terrain(&t, (0, 1), (8, 1), 100.0, 1.0),
+            "a tall-enough observer should see over the low hill"
+        );
+    }
+
+    #[test]
+    fn terrain_los_endpoints_and_bounds() {
+        use crate::terrain::HeightGrid;
+        let t = HeightGrid::flat(5, 5, 200.0);
+        // A cell sees itself; adjacent cells are mutually visible.
+        assert!(line_of_sight_terrain(&t, (2, 2), (2, 2), 2.0, 0.0));
+        assert!(line_of_sight_terrain(&t, (2, 2), (3, 2), 2.0, 0.0));
+        // Out-of-bounds endpoints are never visible.
+        assert!(!line_of_sight_terrain(&t, (9, 0), (0, 0), 2.0, 0.0));
+        assert!(!line_of_sight_terrain(&t, (0, 0), (0, 9), 2.0, 0.0));
+    }
+
+    #[test]
+    fn terrain_and_flat_los_are_independent_models() {
+        use crate::terrain::demo_terrain;
+        // The demo landscape has a steep diagonal ridge; a ground observer in the
+        // NW corner looking to the SE corner crosses the ridge → masked in 2.5-D.
+        let t = demo_terrain(48, 48);
+        assert!(
+            !line_of_sight_terrain(&t, (2, 2), (45, 45), 2.0, 2.0),
+            "the SE target is in dead ground behind the demo ridge"
+        );
     }
 
     #[test]
