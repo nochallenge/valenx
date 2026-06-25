@@ -23,6 +23,7 @@ use valenx_solvespace_3d::{
     Sketch3D, Step,
 };
 
+use crate::agent_commands::AgentValue;
 use crate::types::LoadedMesh;
 use crate::ValenxApp;
 
@@ -727,6 +728,177 @@ impl CadWorkbenchState {
     /// "Rebuild → viewport" button. `draw_cad_workbench` performs the rebuild.
     pub fn request_rebuild(&mut self) {
         self.rebuild_request = true;
+    }
+
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`
+    /// so an agent can discover the name space. Matches the workspace-wide
+    /// `fn() -> &'static [&'static str]` contract (a fixed, discoverable list).
+    ///
+    /// Two groups:
+    /// * **Singletons** — the always-present model / sketch controls
+    ///   (`Material density`, `Extrude height`, `circle radius =`,
+    ///   `Snap to grid`, `Sketch tool`).
+    /// * **Per feature-tree step** — the feature tree is a `Vec<UiStep>`, so its
+    ///   step fields are addressed by a **1-based index**: `step {N} <field>`.
+    ///   Because the list must be `&'static`, the canonical entries below cover
+    ///   the representative **first** step (`step 1 …`) across *all* per-kind
+    ///   dimension captions (`dx`/`dy`/`dz`, `r`/`h`, `base r`/`top r`,
+    ///   `major`/`minor`, `height`, `angle°`) plus `op` / `shape` and the
+    ///   always-present placement (`x`/`y`/`z`) and rotation (`rx°`/`ry°`/`rz°`).
+    ///   [`agent_set`](Self::agent_set) generalises the **same** field names to
+    ///   any existing step — `step 2 dx`, `step 3 angle°`, … — and validates the
+    ///   index against the live tree.
+    ///
+    /// NOTE — live-canvas sketch point placement (`sketch_start` /
+    /// `sketch_segs` / `sketch_pending`) is intentionally **not** here: it is
+    /// already bridge-driven via the dedicated `add_sketch_point` path, so a
+    /// settable caption would duplicate that channel. Pure actions (Rebuild,
+    /// Undo, + Box, …) and read-only outputs (resolved values, mass, the
+    /// per-Extrude/Revolve `P{j}` profile points) are out of scope for
+    /// `SetControl`.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            // -- Singletons --
+            "Material density",
+            "Extrude height",
+            "circle radius =",
+            "Snap to grid",
+            "Sketch tool",
+            // -- Representative first step (the same field names work for any
+            //    `step {N}`; see agent_set) --
+            "step 1 op",
+            "step 1 shape",
+            "step 1 dx",
+            "step 1 dy",
+            "step 1 dz",
+            "step 1 r",
+            "step 1 h",
+            "step 1 base r",
+            "step 1 top r",
+            "step 1 major",
+            "step 1 minor",
+            "step 1 height",
+            "step 1 angle\u{00B0}",
+            "step 1 x",
+            "step 1 y",
+            "step 1 z",
+            "step 1 rx\u{00B0}",
+            "step 1 ry\u{00B0}",
+            "step 1 rz\u{00B0}",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Caption strings match exactly what the workbench
+    /// draws (and what each control is `labelled_by`), so an agent can set a
+    /// parameter by the same name a user reads.
+    ///
+    /// Fail-loud: an unknown caption or a value of the wrong type returns
+    /// `Err(String)` (the bridge turns it into a `warn` feed note) — never a
+    /// panic, and no field is written on error. Numeric singletons read
+    /// [`AgentValue::as_f64`]; the `Snap to grid` checkbox reads
+    /// [`AgentValue::as_bool`]; the enum / expression-string controls (the
+    /// `Sketch tool`, the parameter name in `circle radius =`, and every per-step
+    /// `op` / `shape` / dimension field) read [`AgentValue::as_str`]. Per-step
+    /// dimension fields are CAD **expressions** (e.g. `"size / 2"`, `"hole_r"`),
+    /// so they are stored verbatim as strings — a bare number is accepted as the
+    /// string form of that number.
+    pub fn agent_set(&mut self, name: &str, value: &AgentValue) -> Result<(), String> {
+        // A per-step dimension / placement / rotation field is a CAD
+        // **expression** stored verbatim as a string (e.g. `"size / 2"`,
+        // `"hole_r"`). Per the documented contract, a bare number is accepted as
+        // the string form of that number (`4` → `"4"`, `2.5` → `"2.5"`), so an
+        // agent may set a constant dimension without quoting it; a string is
+        // taken verbatim. A `bool` is the wrong shape and fails loudly.
+        let expr = |v: &AgentValue| -> Result<String, String> {
+            match v {
+                AgentValue::Str(s) => Ok(s.clone()),
+                AgentValue::Int(i) => Ok(i.to_string()),
+                AgentValue::Float(f) => Ok(f.to_string()),
+                other => Err(format!(
+                    "expected an expression string or number, got {other:?}"
+                )),
+            }
+        };
+
+        // -- Singletons --------------------------------------------------------
+        match name {
+            "Material density" => {
+                self.density = value.as_f64()?;
+                return Ok(());
+            }
+            "Extrude height" => {
+                self.sketch_extrude_height = value.as_f64()?;
+                return Ok(());
+            }
+            "circle radius =" => {
+                // The parameter *name* that drives the sketch circle's radius.
+                self.radius_param = value.as_str()?.to_string();
+                return Ok(());
+            }
+            "Snap to grid" => {
+                self.sketch_grid_snap = value.as_bool()?;
+                return Ok(());
+            }
+            "Sketch tool" => {
+                self.sketch_tool = parse_sketch_tool(value.as_str()?)?;
+                return Ok(());
+            }
+            _ => {}
+        }
+
+        // -- Per feature-tree step (`step {N} <field>`, 1-based) ---------------
+        if let Some(rest) = name.strip_prefix("step ") {
+            // Split "<N> <field>" on the first space.
+            let (num, field) = rest
+                .split_once(' ')
+                .ok_or_else(|| format!("malformed step control caption: {name:?}"))?;
+            let idx1: usize = num
+                .parse()
+                .map_err(|_| format!("step control caption has a non-numeric index: {name:?}"))?;
+            if idx1 == 0 {
+                return Err(format!("step index is 1-based, got 0 in {name:?}"));
+            }
+            // Compute the length up front so the out-of-range message can borrow
+            // it (the `get_mut` below holds a mutable borrow of `self.steps`).
+            let n_steps = self.steps.len();
+            let st = self.steps.get_mut(idx1 - 1).ok_or_else(|| {
+                format!("step {idx1} is out of range (the feature tree has {n_steps} step(s))")
+            })?;
+            match field {
+                // Enums (combos) — read by option name (string only).
+                "op" => st.op = parse_op(value.as_str()?)?,
+                "shape" => st.kind = parse_feature_kind(value.as_str()?)?,
+                // Dimension / placement / rotation expressions (stored verbatim;
+                // a bare number is taken as its string form, see `expr`).
+                "dx" => st.dx = expr(value)?,
+                "dy" => st.dy = expr(value)?,
+                "dz" => st.dz = expr(value)?,
+                "r" => st.radius = expr(value)?,
+                "h" => st.height = expr(value)?,
+                "base r" => st.radius = expr(value)?,
+                "top r" => st.top_radius = expr(value)?,
+                "major" => st.major = expr(value)?,
+                "minor" => st.minor = expr(value)?,
+                "height" => st.height = expr(value)?,
+                "angle\u{00B0}" => st.angle = expr(value)?,
+                "x" => st.x = expr(value)?,
+                "y" => st.y = expr(value)?,
+                "z" => st.z = expr(value)?,
+                "rx\u{00B0}" => st.rx = expr(value)?,
+                "ry\u{00B0}" => st.ry = expr(value)?,
+                "rz\u{00B0}" => st.rz = expr(value)?,
+                other => {
+                    return Err(format!(
+                        "unknown step field {other:?} in CAD control {name:?}"
+                    ))
+                }
+            }
+            return Ok(());
+        }
+
+        Err(format!("unknown CAD control: {name:?}"))
     }
 }
 
@@ -2158,6 +2330,52 @@ fn kind_label(kind: FeatureKind) -> &'static str {
         FeatureKind::Torus => "Torus",
         FeatureKind::Extrude => "Extrude",
         FeatureKind::Revolve => "Revolve",
+    }
+}
+
+/// Parse a boolean-op name (for the agent `SetControl` bridge) into an [`Op`].
+/// Case-insensitive; accepts the combo's menu words. Fail-loud on an
+/// unrecognised name so a typo is a `warn` note, not a silent no-op.
+fn parse_op(s: &str) -> Result<Op, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "new" => Ok(Op::New),
+        "join" | "union" | "add" => Ok(Op::Join),
+        "cut" | "subtract" | "difference" => Ok(Op::Cut),
+        "intersect" | "intersection" => Ok(Op::Intersect),
+        other => Err(format!(
+            "unknown op '{other}' (expected 'New', 'Join', 'Cut', or 'Intersect')"
+        )),
+    }
+}
+
+/// Parse a primitive-shape name (for the agent `SetControl` bridge) into a
+/// [`FeatureKind`]. Case-insensitive; accepts the combo's menu words. Fail-loud.
+fn parse_feature_kind(s: &str) -> Result<FeatureKind, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "box" | "cube" => Ok(FeatureKind::Box),
+        "cylinder" | "cyl" => Ok(FeatureKind::Cylinder),
+        "sphere" => Ok(FeatureKind::Sphere),
+        "cone" => Ok(FeatureKind::Cone),
+        "torus" => Ok(FeatureKind::Torus),
+        "extrude" => Ok(FeatureKind::Extrude),
+        "revolve" => Ok(FeatureKind::Revolve),
+        other => Err(format!(
+            "unknown shape '{other}' (expected 'Box', 'Cylinder', 'Sphere', \
+             'Cone', 'Torus', 'Extrude', or 'Revolve')"
+        )),
+    }
+}
+
+/// Parse a sketch-tool name (for the agent `SetControl` bridge) into a
+/// [`SketchTool`]. Case-insensitive; accepts the tool-row words. Fail-loud.
+fn parse_sketch_tool(s: &str) -> Result<SketchTool, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "line" => Ok(SketchTool::Line),
+        "arc" => Ok(SketchTool::Arc),
+        "spline" => Ok(SketchTool::Spline),
+        other => Err(format!(
+            "unknown sketch tool '{other}' (expected 'Line', 'Arc', or 'Spline')"
+        )),
     }
 }
 
@@ -5619,6 +5837,95 @@ mod headless_ui_tests {
             assert!(
                 has_named_node(&nodes, caption),
                 "per-point caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+    }
+
+    /// The agent `SetControl` bridge: each representative control sets the
+    /// matching state field by its user-visible caption; an unknown caption, a
+    /// wrong-type value, and an out-of-range step index all fail loud (Err, no
+    /// panic) and leave state untouched.
+    #[test]
+    fn agent_set_sets_controls_and_rejects_bad_input() {
+        let mut s = CadWorkbenchState::default();
+
+        // -- Singletons: numeric, enum (by option name), bool ----------------
+        s.agent_set("Material density", &AgentValue::Float(7.85))
+            .expect("set material density");
+        assert_eq!(s.density, 7.85);
+
+        s.agent_set("Extrude height", &AgentValue::Float(3.5))
+            .expect("set extrude height");
+        assert_eq!(s.sketch_extrude_height, 3.5);
+
+        s.agent_set("Sketch tool", &AgentValue::Str("Arc".into()))
+            .expect("set sketch tool by name");
+        assert_eq!(s.sketch_tool, SketchTool::Arc);
+
+        s.agent_set("Snap to grid", &AgentValue::Bool(false))
+            .expect("set snap-to-grid");
+        assert!(!s.sketch_grid_snap);
+
+        // `circle radius =` is the parameter *name* (a string), not a number.
+        s.agent_set("circle radius =", &AgentValue::Str("base".into()))
+            .expect("set radius-driving parameter name");
+        assert_eq!(s.radius_param, "base");
+
+        // -- Per-step fields (1-based index) ---------------------------------
+        // The default tree is [Box(New), Cylinder(Cut)]; step 1 is the Box.
+        s.agent_set("step 1 dx", &AgentValue::Str("size / 2".into()))
+            .expect("set step 1 dx expression");
+        assert_eq!(s.steps[0].dx, "size / 2");
+
+        s.agent_set("step 1 op", &AgentValue::Str("Join".into()))
+            .expect("set step 1 op by name");
+        assert_eq!(s.steps[0].op, Op::Join);
+
+        s.agent_set("step 2 shape", &AgentValue::Str("Sphere".into()))
+            .expect("set step 2 shape by name");
+        assert_eq!(s.steps[1].kind, FeatureKind::Sphere);
+
+        // A bare number is accepted as the string form for an expression field.
+        s.agent_set("step 1 dz", &AgentValue::Int(4))
+            .expect("integer coerces to expression string");
+        assert_eq!(s.steps[0].dz, "4");
+
+        // -- Fail-loud cases (each returns Err; none panics) -----------------
+        // Unknown caption.
+        assert!(s
+            .agent_set("does not exist", &AgentValue::Float(1.0))
+            .is_err());
+        // Unknown per-step field.
+        assert!(s
+            .agent_set("step 1 wat", &AgentValue::Str("x".into()))
+            .is_err());
+        // Type mismatch: a string into a numeric singleton.
+        let before = s.density;
+        assert!(s
+            .agent_set("Material density", &AgentValue::Str("heavy".into()))
+            .is_err());
+        assert_eq!(s.density, before, "rejected set left density unchanged");
+        // Type mismatch: a non-string into an enum control.
+        assert!(s.agent_set("Sketch tool", &AgentValue::Float(2.0)).is_err());
+        // Unknown enum option name.
+        assert!(s
+            .agent_set("step 1 shape", &AgentValue::Str("Dodecahedron".into()))
+            .is_err());
+        // Out-of-range step index (tree has 2 steps).
+        assert!(s
+            .agent_set("step 9 dx", &AgentValue::Str("1".into()))
+            .is_err());
+        // 0 is rejected (the index is 1-based).
+        assert!(s
+            .agent_set("step 0 dx", &AgentValue::Str("1".into()))
+            .is_err());
+
+        // -- Discovery list advertises the representative name space ----------
+        let names = CadWorkbenchState::agent_control_names();
+        for expect in ["Material density", "Sketch tool", "step 1 op", "step 1 dx"] {
+            assert!(
+                names.contains(&expect),
+                "agent_control_names should advertise {expect:?}"
             );
         }
     }

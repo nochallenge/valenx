@@ -84,6 +84,26 @@ impl OptObjective {
     }
 }
 
+/// Parse an optimizer-objective name (for the agent `SetControl` bridge) into
+/// an [`OptObjective`]. Case-insensitive; accepts the radio labels (with or
+/// without the hyphen / spaces). Fail-loud on an unrecognised name so a typo is
+/// a `warn` note, not a silent no-op.
+fn parse_opt_objective(s: &str) -> Result<OptObjective, String> {
+    match s
+        .trim()
+        .to_ascii_lowercase()
+        .replace(['-', '_'], " ")
+        .as_str()
+    {
+        "max payload" | "maxpayload" | "payload" => Ok(OptObjective::MaxPayload),
+        "max apoapsis" | "maxapoapsis" | "apoapsis" => Ok(OptObjective::MaxApoapsis),
+        "min peak g" | "minpeakg" | "min peakg" | "peak g" | "min g" => Ok(OptObjective::MinPeakG),
+        other => Err(format!(
+            "unknown objective '{other}' (expected 'max payload', 'max apoapsis', or 'min peak-g')"
+        )),
+    }
+}
+
 /// Which trajectory channel the LV-1 ascent plot draws against time. The
 /// scrubber readout always lists every quantity; this only selects the curve.
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -241,6 +261,90 @@ impl Default for RocketWorkbenchState {
             scrub_t: 0.0,
             plot_y: PlotQuantity::default(),
         }
+    }
+}
+
+impl RocketWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`
+    /// so an agent can discover the name space.
+    ///
+    /// Scope: the genuinely-settable **numeric** interstage knobs + the sizing
+    /// target + the optimizer **objective** enum. The captions match exactly the
+    /// labels the workbench form draws (so an agent sets a parameter by the same
+    /// name a user reads). The `strut area A` / `material yield σy` captions are
+    /// addressed in the form's **display units** (cm² and MPa respectively), the
+    /// same numbers the user edits.
+    ///
+    /// Deliberately **not** exposed (3-D / output-only / action controls): the
+    /// `▶ playback · t (s)` scrubber and the `plot:` channel radio (both
+    /// inspect-only view state), and the buttons (`Auto-design`, `Fly the LV-1`,
+    /// `Show the 3-D rocket model`, `Run AI optimization`) which are *actions*,
+    /// not settable values. The fixed medium-lift trajectory is not
+    /// parameterised here, so no trajectory knobs are listed.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "supported mass",
+            "strut count N",
+            "strut area A",
+            "material yield σy",
+            "target SF",
+            "optimizer objective",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. The caption strings match what the workbench form
+    /// draws (and what each control is `labelled_by`), so an agent can set a
+    /// parameter by the same name a user reads.
+    ///
+    /// Fail-loud: an unknown caption or a value of the wrong type returns
+    /// `Err(String)` (the bridge turns it into a `warn` feed note) — never a
+    /// panic, and no field is written on error. Numeric fields read
+    /// [`AgentValue::as_f64`] / [`AgentValue::as_i64`]; the objective enum reads
+    /// [`AgentValue::as_str`] and matches the radio labels. `strut area A` is
+    /// given in **cm²** and `material yield σy` in **MPa** — the same display
+    /// units the form edits — and converted to the stored SI value (m² / Pa).
+    /// Numeric values are clamped to the same ranges the DragValues/Slider
+    /// enforce so an out-of-range set lands on a valid, reactive design.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        match name {
+            // -- Interstage structure (numeric) --
+            "supported mass" => {
+                self.design.supported_mass_kg = value.as_f64()?.clamp(100.0, 200_000.0);
+            }
+            "strut count N" => {
+                let n = value.as_i64()?;
+                if n < 1 {
+                    return Err(format!("strut count N must be >= 1, got {n}"));
+                }
+                self.design.strut_count = (n as usize).min(64);
+            }
+            // The form edits strut area in cm² and stores m² (×1e-4).
+            "strut area A" => {
+                let cm2 = value.as_f64()?.clamp(0.01, 2000.0);
+                self.design.strut_area_m2 = cm2 * 1.0e-4;
+            }
+            // The form edits yield in MPa and stores Pa (×1e6).
+            "material yield σy" => {
+                let mpa = value.as_f64()?.clamp(1.0, 2000.0);
+                self.design.material_yield_pa = mpa * 1.0e6;
+            }
+            // -- Sizing aid target --
+            "target SF" => {
+                self.target_sf = value.as_f64()?.clamp(1.0, 3.0);
+            }
+            // -- Optimizer objective enum --
+            "optimizer objective" => {
+                self.opt_objective = parse_opt_objective(value.as_str()?)?;
+            }
+            other => return Err(format!("unknown Rocket control: {other:?}")),
+        }
+        Ok(())
     }
 }
 
@@ -1622,6 +1726,116 @@ mod tests {
             assert!(
                 (per * n as f64 - total).abs() < 1e-12,
                 "N={n}: {per}×{n} should equal total {total}"
+            );
+        }
+    }
+
+    // ---- agent bridge: agent_set / agent_control_names ----
+
+    #[test]
+    fn agent_set_writes_validated_fields_and_rejects_bad_input() {
+        use crate::agent_commands::AgentValue;
+        let mut s = RocketWorkbenchState::default();
+
+        // Numeric float field (stored verbatim, kg).
+        s.agent_set("supported mass", &AgentValue::Float(9_000.0))
+            .expect("set supported mass");
+        assert!((s.design.supported_mass_kg - 9_000.0).abs() < 1e-9);
+
+        // Integer count (usize); a whole-valued float is also accepted.
+        s.agent_set("strut count N", &AgentValue::Int(12))
+            .expect("set strut count");
+        assert_eq!(s.design.strut_count, 12);
+        s.agent_set("strut count N", &AgentValue::Float(6.0))
+            .expect("whole float -> usize");
+        assert_eq!(s.design.strut_count, 6);
+
+        // Display-unit conversions: strut area is cm² -> m², yield MPa -> Pa.
+        s.agent_set("strut area A", &AgentValue::Float(20.0))
+            .expect("set strut area");
+        assert!((s.design.strut_area_m2 - 20.0e-4).abs() < 1e-12);
+        s.agent_set("material yield σy", &AgentValue::Float(324.0))
+            .expect("set yield");
+        assert!((s.design.material_yield_pa - 324.0e6).abs() < 1.0);
+
+        // Sizing target slider value.
+        s.agent_set("target SF", &AgentValue::Float(2.0))
+            .expect("set target SF");
+        assert!((s.target_sf - 2.0).abs() < 1e-9);
+
+        // Objective enum by radio label (case/hyphen tolerant).
+        s.agent_set(
+            "optimizer objective",
+            &AgentValue::Str("max apoapsis".into()),
+        )
+        .expect("set objective");
+        assert_eq!(s.opt_objective, OptObjective::MaxApoapsis);
+        s.agent_set("optimizer objective", &AgentValue::Str("Min Peak-G".into()))
+            .expect("hyphen/case tolerant");
+        assert_eq!(s.opt_objective, OptObjective::MinPeakG);
+
+        // Range clamping (no panic, lands on a valid value).
+        s.agent_set("strut count N", &AgentValue::Int(1000))
+            .expect("clamp high");
+        assert_eq!(s.design.strut_count, 64);
+
+        // --- Fail-loud cases: unknown caption + wrong type + bad enum/int ---
+        assert!(
+            s.agent_set("no such control", &AgentValue::Float(1.0))
+                .is_err(),
+            "unknown caption must Err"
+        );
+        assert!(
+            s.agent_set("supported mass", &AgentValue::Str("nope".into()))
+                .is_err(),
+            "string into a numeric field must Err"
+        );
+        assert!(
+            s.agent_set("optimizer objective", &AgentValue::Float(1.0))
+                .is_err(),
+            "number into the enum field must Err"
+        );
+        assert!(
+            s.agent_set(
+                "optimizer objective",
+                &AgentValue::Str("orbit-speed".into())
+            )
+            .is_err(),
+            "unknown objective name must Err"
+        );
+        assert!(
+            s.agent_set("strut count N", &AgentValue::Int(0)).is_err(),
+            "strut count < 1 must Err"
+        );
+    }
+
+    #[test]
+    fn agent_control_names_are_unique_and_settable() {
+        use crate::agent_commands::AgentValue;
+        let names = RocketWorkbenchState::agent_control_names();
+        assert!(!names.is_empty());
+        // No duplicate captions.
+        let mut sorted = names.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), names.len(), "control names must be unique");
+        // Every advertised caption is actually settable (numeric for the
+        // numeric ones, the objective label for the enum) — i.e. none of the
+        // listed names returns the "unknown control" error.
+        let mut s = RocketWorkbenchState::default();
+        for &n in names {
+            // Each caption is exercised with a value of the TYPE it reads: the
+            // objective is an enum (a radio label), `strut count N` is an integer
+            // count (read via `as_i64`, so a fractional `Float` would fail loudly
+            // and is not the right shape here), and the rest are real-valued.
+            let v = match n {
+                "optimizer objective" => AgentValue::Str("max payload".into()),
+                "strut count N" => AgentValue::Int(4),
+                _ => AgentValue::Float(1.5),
+            };
+            assert!(
+                s.agent_set(n, &v).is_ok(),
+                "advertised control '{n}' must be settable"
             );
         }
     }

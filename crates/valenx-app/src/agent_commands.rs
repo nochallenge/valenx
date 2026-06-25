@@ -1642,6 +1642,10 @@ fn set_control(
         TabKind::Cosim => app.cosim.agent_set(name, value),
         TabKind::VariantEffect => app.variant_effect.agent_set(name, value),
         TabKind::MeshToolbox => app.mesh_toolbox.agent_set(name, value),
+        // ---- agent_set sweep, batch 3 (rocket / engine / cad) ----
+        TabKind::Rocket => app.rocket.agent_set(name, value),
+        TabKind::Engine => app.engine.agent_set(name, value),
+        TabKind::Cad => app.cad.agent_set(name, value),
         other => Err(format!(
             "set_control: workbench {other:?} ({}) has no settable controls yet",
             kind.label()
@@ -1750,6 +1754,10 @@ fn list_controls(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
             crate::variant_effect_workbench::VariantEffectWorkbenchState::agent_control_names()
         }
         TabKind::MeshToolbox => crate::mesh_toolbox::MeshToolboxState::agent_control_names(),
+        // ---- agent_set sweep, batch 3 (rocket / engine / cad) ----
+        TabKind::Rocket => crate::rocket_workbench::RocketWorkbenchState::agent_control_names(),
+        TabKind::Engine => crate::engine_workbench::EngineWorkbenchState::agent_control_names(),
+        TabKind::Cad => crate::cad_workbench::CadWorkbenchState::agent_control_names(),
         _ => &[],
     };
 
@@ -4214,6 +4222,66 @@ mod tests {
         assert!(
             !details.iter().any(|d| d.contains("no settable controls")),
             "no batch-2 set fell through to the unwired fallthrough; feed = {details:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn set_control_routed_through_poll_sets_batch3_rocket_engine_cad() {
+        // The final batch-3 workbenches (rocket / engine / cad) set via the REAL
+        // `poll_and_apply_agent_commands` path on one channel, proving each new
+        // `TabKind` arm routes to the right state's `agent_set`
+        // (active-tab-independent `workbench:` routing). All three keep their
+        // parameters private to their own module, so — exactly as batch-2 does —
+        // success is asserted through the publicly visible ack note `set_control`
+        // posts on a routed-and-validated set: a MISSING arm would instead post
+        // the "no settable controls yet" warn, so seeing the `set <name> =
+        // <value>` ack proves the dispatch arm exists and ran. Each chosen value
+        // is a type the target's `agent_set` accepts without a validation error,
+        // so it produces the ack (not a warn).
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "set_control_batch3");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        let path = cmd_path(&app, 1);
+        std::fs::write(
+            &path,
+            concat!(
+                "{\"cmd\":\"set_control\",\"name\":\"strut count N\",\"value\":4,\"workbench\":\"rocket\"}\n",
+                "{\"cmd\":\"set_control\",\"name\":\"chamber temp\",\"value\":3500.0,\"workbench\":\"engine\"}\n",
+                "{\"cmd\":\"set_control\",\"name\":\"Material density\",\"value\":7850.0,\"workbench\":\"cad\"}\n",
+            ),
+        )
+        .unwrap();
+
+        poll_and_apply_agent_commands(&mut app);
+
+        // Read channel-1's feed and confirm an ack note landed for each set (and
+        // that none routed to the "no settable controls yet" fallthrough).
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let details: Vec<String> = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .filter_map(|v| v.get("detail").and_then(|d| d.as_str()).map(str::to_string))
+            .collect();
+        let has = |needle: &str| details.iter().any(|d| d.contains(needle));
+        assert!(
+            has("set strut count N = Int(4)"),
+            "rocket arm routed + set; feed = {details:?}"
+        );
+        assert!(
+            has("set chamber temp = Float(3500.0)"),
+            "engine arm routed + set; feed = {details:?}"
+        );
+        assert!(
+            has("set Material density = Float(7850.0)"),
+            "cad arm routed + set; feed = {details:?}"
+        );
+        assert!(
+            !details.iter().any(|d| d.contains("no settable controls")),
+            "no batch-3 set fell through to the unwired fallthrough; feed = {details:?}"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
