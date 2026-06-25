@@ -248,6 +248,7 @@ pub mod weir_workbench;
 pub mod welcome_tour;
 pub mod wgpu_renderer;
 pub mod workbench_chrome;
+pub mod workbench_focus;
 
 // Concern-focused helper modules — what used to be a single
 // `helpers.rs` bag-of-everything (1422 LOC, 36 fns spanning 8+
@@ -727,6 +728,19 @@ pub struct FloorPlanView {
     /// Readout rows shown beside the plan (room + furniture counts).
     pub lines: Vec<String>,
 }
+
+/// Memoised command-palette entry list with its cache key. The key is
+/// `(registry.len(), library.content_rev(), show_non_oss_adapters,
+/// focus_category)`; the value is the built [`crate::commands::CommandKind`]
+/// list. Aliased so [`ValenxApp::palette_cache`] stays under clippy's
+/// type-complexity bar. See the cache-build site in `update.rs`.
+type PaletteCache = Option<(
+    usize,
+    u64,
+    bool,
+    Option<String>,
+    Vec<crate::commands::CommandKind>,
+)>;
 
 /// Root application state.
 #[derive(Default)]
@@ -2178,20 +2192,23 @@ pub struct ValenxApp {
     pub landing_inline_message: Option<String>,
 
     /// Memoised command-palette entry list, keyed by
-    /// `(registry.len(), library.content_rev(), show_non_oss_adapters)`.
+    /// `(registry.len(), library.content_rev(), show_non_oss_adapters,
+    /// focus_category)`.
     /// `build_visible_commands` allocates ~360 `String`s per call and used
     /// to run every frame; the cache invalidates when the registry grows
     /// (rare — re-probe / load), when the saved-project list changes (the
     /// launcher lists one entry per saved project, so add/remove/**rename**
-    /// must rebuild), or when the OSS-only toggle flips in Settings. `None`
-    /// until the first palette render fills it.
+    /// must rebuild), when the OSS-only toggle flips in Settings, or when the
+    /// **domain-focus filter** changes (it narrows the launcher's workbench-tab
+    /// entries). `None` until the first palette render fills it.
     ///
     /// The second key is [`crate::project_library::ProjectLibrary::content_rev`],
     /// a content fingerprint over each project's `(id, name)` — so an in-place
     /// rename (which leaves `projects.len()` unchanged) now flips the key and
-    /// the launcher shows the new name on the next frame. See the cache-build
-    /// site in `update.rs`.
-    pub palette_cache: Option<(usize, u64, bool, Vec<crate::commands::CommandKind>)>,
+    /// the launcher shows the new name on the next frame. The fourth key is
+    /// [`ValenxApp::focus_category`] so flipping the focus rebuilds immediately.
+    /// See the cache-build site in `update.rs`. Type aliased as [`PaletteCache`].
+    pub palette_cache: PaletteCache,
 
     // ── Swappable viewport system (cloud/viewport) ────────────────────────
     /// Which viewport implementation is rendered in the central panel.
@@ -2252,6 +2269,19 @@ pub struct ValenxApp {
     /// viewport-kind switches so pan, zoom, and sub-view selection are
     /// remembered when the user returns to the 2D view.
     pub viewport_2d: crate::viewport_2d::Viewport2dState,
+
+    /// **Domain-focus filter** — the working domain the workbench surfaces are
+    /// narrowed to, or [`None`] for "All" (show everything, the default).
+    ///
+    /// A pure-UI focus layer: when `Some(category)`, the Ctrl+P launcher's
+    /// `OpenWorkbenchTab` entries, the tab strip's "From template" menu, and the
+    /// View menu's primary-workbench toggles show only workbenches whose
+    /// [`crate::project_tabs::TabKind::group`] category equals it; "All"
+    /// ([`None`]) shows everything. Nothing is removed or feature-gated — see
+    /// [`crate::workbench_focus`]. **In-session only** (transient view
+    /// preference, not written to the settings file), so it resets to "All" on
+    /// relaunch.
+    pub focus_category: Option<String>,
 }
 
 impl ValenxApp {
