@@ -221,9 +221,15 @@ pub fn monte_carlo(scenario: &Scenario, runs: usize) -> Result<OutcomeStats, Mis
         red_samples.push(sr as f64);
 
         // Exchange ratio: red losses per blue loss (guarded to stay finite).
+        // With no blue force at all, report 0 (per the OutcomeStats::exchange_ratio
+        // doc) rather than the raw red-loss count the max(.,1) guard would yield.
         let blue_losses = initial_blue.saturating_sub(sb);
         let red_losses = initial_red.saturating_sub(sr);
-        let exch = red_losses as f64 / (blue_losses.max(1)) as f64;
+        let exch = if initial_blue == 0 {
+            0.0
+        } else {
+            red_losses as f64 / (blue_losses.max(1)) as f64
+        };
         exch_samples.push(exch);
 
         // Histogram bin (sb is in 0..=initial_blue by construction).
