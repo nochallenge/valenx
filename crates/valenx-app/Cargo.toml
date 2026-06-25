@@ -465,6 +465,12 @@ valenx-adapter-meep        = { path = "../valenx-adapters/em/valenx-adapter-meep
 valenx-adapter-pybamm      = { path = "../valenx-adapters/battery/valenx-adapter-pybamm" }
 valenx-adapter-mujoco      = { path = "../valenx-adapters/dynamics/valenx-adapter-mujoco" }
 valenx-adapter-precice     = { path = "../valenx-adapters/coupling/valenx-adapter-precice" }
+# The in-house FMI / HELICS co-simulation coupling engine — surfaced by the
+# Co-Simulation workbench (src/cosim_workbench.rs). Native co-sim master
+# (Jacobi / Gauss-Seidel over a Subsystem graph) + a strongly-coupled
+# fixed-point implicit coupler; the workbench calls its real API directly
+# (no subprocess, default features only — no binary FMU).
+valenx-adapter-fmi         = { path = "../valenx-adapters/coupling/valenx-adapter-fmi" }
 
 # Biology (Phase 17) — text-driven subprocess adapters covering the
 # common biomolecular workflows (sequence / cheminformatics / MD /

@@ -242,6 +242,8 @@ pub enum TabKind {
     Uq,
     // -- Photogrammetry / structure-from-motion --
     Photogrammetry,
+    // -- Co-simulation (FMI / HELICS coupling) --
+    Cosim,
     // -- Autonomy --
     Autonomy,
 }
@@ -249,7 +251,7 @@ pub enum TabKind {
 impl TabKind {
     /// Every *template* kind (i.e. excluding [`TabKind::Blank`]), in
     /// `＋ from template`-menu order (grouped via [`Self::group`]).
-    pub const TEMPLATES: [TabKind; 38] = [
+    pub const TEMPLATES: [TabKind; 39] = [
         TabKind::Rocket,
         TabKind::Engine,
         TabKind::Astro,
@@ -287,6 +289,7 @@ impl TabKind {
         TabKind::Rom,
         TabKind::Uq,
         TabKind::Photogrammetry,
+        TabKind::Cosim,
         TabKind::Autonomy,
     ];
 
@@ -328,6 +331,7 @@ impl TabKind {
             TabKind::Ocean => "Simulation",
             TabKind::Rom => "Simulation",
             TabKind::Uq => "Simulation",
+            TabKind::Cosim => "Simulation",
         }
     }
 
@@ -373,6 +377,7 @@ impl TabKind {
             TabKind::Rom => "Reduced-order model (POD)",
             TabKind::Uq => "Uncertainty quantification",
             TabKind::Photogrammetry => "Photogrammetry / SfM scan",
+            TabKind::Cosim => "Co-Simulation (FMI / HELICS)",
         }
     }
 
@@ -420,6 +425,7 @@ impl TabKind {
             TabKind::Rom => app.show_rom_workbench = true,
             TabKind::Uq => app.show_uq_workbench = true,
             TabKind::Photogrammetry => app.show_photogrammetry_workbench = true,
+            TabKind::Cosim => app.show_cosim_workbench = true,
         }
     }
 
@@ -473,6 +479,7 @@ impl TabKind {
             "rom" | "pod" => Some(TabKind::Rom),
             "uq" | "uncertainty" => Some(TabKind::Uq),
             "photogrammetry" | "sfm" | "scan" => Some(TabKind::Photogrammetry),
+            "cosim" | "co-simulation" | "cosimulation" | "fmi" => Some(TabKind::Cosim),
             _ => None,
         }
     }
@@ -1226,6 +1233,8 @@ pub const ALL_WORKBENCH_KINDS: &[&str] = &[
     "uq",
     // Native structure-from-motion / photogrammetry (COLMAP-style SfM) — surfaced by the Photogrammetry workbench.
     "photogrammetry",
+    // In-house FMI / HELICS co-simulation coupling — surfaced by the Co-Simulation workbench.
+    "cosim",
     // The Mesh Toolbox is gated on `show_mesh_toolbox` (a `_toolbox`, not a
     // `_workbench`, field) but behaves like a per-tab workbench, so it is
     // mappable here under the same id the agent registry / `TabKind::from_id`
@@ -1390,6 +1399,7 @@ pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
         "rom" | "pod" => app.show_rom_workbench = on,
         "uq" | "uncertainty" => app.show_uq_workbench = on,
         "photogrammetry" | "sfm" | "scan" => app.show_photogrammetry_workbench = on,
+        "cosim" | "co-simulation" | "cosimulation" | "fmi" => app.show_cosim_workbench = on,
         // Mesh Toolbox (a `_toolbox` flag, mapped here for parity).
         "mesh" | "meshtoolbox" => app.show_mesh_toolbox = on,
         // Unknown kind: no-op — a stale/hostile registry string is ignored.
@@ -1449,6 +1459,7 @@ fn clear_all_workbenches(app: &mut ValenxApp) {
     app.show_rom_workbench = false;
     app.show_uq_workbench = false;
     app.show_photogrammetry_workbench = false;
+    app.show_cosim_workbench = false;
 }
 
 /// Reconcile the visible workbench + central viewport with the active
@@ -2944,6 +2955,7 @@ mod tests {
             ("rom", TabKind::Rom),
             ("uq", TabKind::Uq),
             ("photogrammetry", TabKind::Photogrammetry),
+            ("cosim", TabKind::Cosim),
         ];
         // Every TEMPLATES kind is covered by the canonical table above.
         assert_eq!(canonical.len(), TabKind::TEMPLATES.len());
@@ -2958,6 +2970,8 @@ mod tests {
         assert_eq!(TabKind::from_id("variant"), Some(TabKind::VariantEffect));
         assert_eq!(TabKind::from_id("sfm"), Some(TabKind::Photogrammetry));
         assert_eq!(TabKind::from_id("scan"), Some(TabKind::Photogrammetry));
+        assert_eq!(TabKind::from_id("co-simulation"), Some(TabKind::Cosim));
+        assert_eq!(TabKind::from_id("fmi"), Some(TabKind::Cosim));
         // Unknown ids (and Blank, which has no id) map to None.
         assert_eq!(TabKind::from_id("blank"), None);
         assert_eq!(TabKind::from_id("nope"), None);
@@ -4362,6 +4376,7 @@ mod tests {
             app.show_rom_workbench,
             app.show_uq_workbench,
             app.show_photogrammetry_workbench,
+            app.show_cosim_workbench,
         ]
         .into_iter()
         .filter(|&b| b)
@@ -4420,6 +4435,7 @@ mod tests {
             TabKind::Photogrammetry => {
                 crate::photogrammetry_workbench::draw_photogrammetry_workbench(app, ctx)
             }
+            TabKind::Cosim => crate::cosim_workbench::draw_cosim_workbench(app, ctx),
         });
     }
 
@@ -4714,8 +4730,8 @@ mod headless_ui_tests {
         }
         assert_eq!(
             ALL_WORKBENCH_KINDS.len(),
-            141,
-            "140 `show_*_workbench` fields + the meshtoolbox alias"
+            142,
+            "141 `show_*_workbench` fields + the meshtoolbox alias"
         );
         assert!(ALL_WORKBENCH_KINDS.contains(&"meshtoolbox"));
         // A couple of representative kinds are present.

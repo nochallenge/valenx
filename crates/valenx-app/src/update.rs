@@ -1613,6 +1613,26 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Co-Simulation workbench
+                    // (valenx-adapter-fmi).
+                    if ui
+                        .checkbox(
+                            &mut self.show_cosim_workbench,
+                            "Co-Simulation (FMI / HELICS)",
+                        )
+                        .on_hover_text(
+                            "Show / hide the Co-Simulation Workbench — two coupled \
+                             mass-spring-dampers advanced through the in-house \
+                             valenx-adapter-fmi coordinator (Jacobi / Gauss-Seidel explicit \
+                             coupling, or a strongly-coupled fixed-point implicit coupler), \
+                             plotting the exchanged interface signals and the coupling error \
+                             vs a monolithic reference. Research / educational — native co-sim \
+                             master; FMI import only.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Autonomy V&V workbench (valenx-autonomy-vnv).
                     if ui
                         .checkbox(&mut self.show_autonomy_workbench, "Autonomy V&V")
@@ -3382,6 +3402,13 @@ impl eframe::App for ValenxApp {
             // mapper + bundle adjustment) on valenx-photogrammetry. A no-op unless
             // toggled on via View → Photogrammetry.
             crate::photogrammetry_workbench::draw_photogrammetry_workbench(self, ctx);
+
+            // Co-Simulation Workbench (right) — native FMI / HELICS co-sim
+            // coupling (two coupled mass-spring-dampers advanced through the
+            // valenx-adapter-fmi master: Jacobi / Gauss-Seidel explicit or
+            // fixed-point implicit coupling). A no-op unless toggled on via
+            // View → Co-Simulation.
+            crate::cosim_workbench::draw_cosim_workbench(self, ctx);
 
             // Autonomy V&V Workbench (right) — native scenario-based verification of
             // an autonomous vehicle + simulated sensors on valenx-autonomy-vnv. A
