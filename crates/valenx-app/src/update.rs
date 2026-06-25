@@ -1698,6 +1698,23 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Morphogenesis workbench — an in-house
+                    // Turing reaction–diffusion (Gray–Scott) sandbox that grows
+                    // organic biological patterns live on a 3-D surface.
+                    if ui
+                        .checkbox(&mut self.show_morphogenesis_workbench, "Morphogenesis")
+                        .on_hover_text(
+                            "Show / hide the Morphogenesis Workbench — an in-house Turing \
+                             reaction–diffusion (Gray–Scott) sandbox. Two virtual morphogens U,V \
+                             diffuse + react on a toroidal grid and self-organise into organic \
+                             patterns (spots / coral / mitosis / mazes), rendered as a live, \
+                             shaded 3-D surface that grows in real time (Play / Pause + steps per \
+                             frame). Computed in-process by valenx-app::morphogenesis.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Survivability / protection workbench
                     // (valenx-survivability) — the DEFENSIVE / protective side of
                     // the shared blast/impact physics; no penetration / lethality.
@@ -3610,6 +3627,12 @@ impl eframe::App for ValenxApp {
             // Movement + routes only. A no-op unless toggled on via
             // View → Mission Planner.
             crate::mission_planner_workbench::draw_mission_planner_workbench(self, ctx);
+
+            // Morphogenesis Workbench (right) — an in-house Turing reaction–
+            // diffusion (Gray–Scott) sandbox growing organic patterns live on a
+            // 3-D surface (valenx-app::morphogenesis). A no-op unless toggled on
+            // via View → Morphogenesis.
+            crate::morphogenesis_workbench::draw_morphogenesis_workbench(self, ctx);
 
             // Survivability / protection Workbench (right) — the DEFENSIVE /
             // protective side of the shared blast/impact physics (free-field
