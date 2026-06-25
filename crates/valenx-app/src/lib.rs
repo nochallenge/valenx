@@ -144,6 +144,7 @@ pub mod leverage_workbench;
 pub mod log_panel;
 pub mod marine_workbench;
 pub mod materials;
+pub mod mbd_workbench;
 pub mod mesh_prims;
 pub mod mesh_toolbox;
 pub mod mohr_workbench;
@@ -2060,6 +2061,20 @@ pub struct ValenxApp {
     /// engine: the real scored interaction network + degree / betweenness
     /// centrality + BFS shortest path computed over it).
     pub ppi: crate::ppi_workbench::PpiWorkbenchState,
+
+    /// Whether the right-side Multibody-dynamics (robot / contact) workbench
+    /// panel is visible. Defaults to `false`; toggled from the View menu or
+    /// opened by the agent bridge under the id `"mbd"` (aliases `"multibody"` /
+    /// `"robot"`). Wraps `valenx-mbd` (the in-house planar constrained-DAE
+    /// multibody solver, its Featherstone articulated-body algorithm, and its
+    /// penalty-contact + Coulomb-friction model). See [`crate::mbd_workbench`].
+    pub show_mbd_workbench: bool,
+    /// Form + result state for the Multibody-dynamics workbench (an
+    /// energy-conserving articulated rod pendulum advanced by the real
+    /// constrained-DAE `System`, and a body dropped onto a plane through the
+    /// real penalty-contact + Coulomb-friction path — trajectory + contact-force
+    /// history + energy / penetration diagnostics).
+    pub mbd: crate::mbd_workbench::MbdWorkbenchState,
 
     /// Whether the right-side Autonomy V&V workbench panel is visible. Defaults
     /// to `false`; toggled from the View menu or opened by the agent bridge

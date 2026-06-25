@@ -1655,6 +1655,26 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Multibody-dynamics (robot / contact)
+                    // workbench (valenx-mbd).
+                    if ui
+                        .checkbox(
+                            &mut self.show_mbd_workbench,
+                            "Multibody dynamics (robot / contact)",
+                        )
+                        .on_hover_text(
+                            "Show / hide the Multibody-dynamics Workbench — two native demos on \
+                             the in-house valenx-mbd solver: an energy-conserving articulated rod \
+                             pendulum advanced by the constrained-DAE System (KKT + Baumgarte + \
+                             symplectic Euler), and a rigid body dropped onto a ground plane \
+                             through the penalty-contact path (spring-damper normal force + \
+                             regularized Coulomb friction). Research / preliminary-design grade — \
+                             2-D rigid bodies, compliant (penalty) contact.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Autonomy V&V workbench (valenx-autonomy-vnv).
                     if ui
                         .checkbox(&mut self.show_autonomy_workbench, "Autonomy V&V")
@@ -3438,6 +3458,13 @@ impl eframe::App for ValenxApp {
             // shortest path). A no-op unless toggled on via View → Protein
             // interaction (PPI).
             crate::ppi_workbench::draw_ppi_workbench(self, ctx);
+
+            // Multibody-dynamics Workbench (right) — native planar multibody
+            // dynamics on valenx-mbd: an energy-conserving articulated rod
+            // pendulum (constrained-DAE System) and a body dropped onto a plane
+            // through the penalty-contact + Coulomb-friction path. A no-op unless
+            // toggled on via View → Multibody dynamics (robot / contact).
+            crate::mbd_workbench::draw_mbd_workbench(self, ctx);
 
             // Autonomy V&V Workbench (right) — native scenario-based verification of
             // an autonomous vehicle + simulated sensors on valenx-autonomy-vnv. A
