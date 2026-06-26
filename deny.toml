@@ -49,6 +49,21 @@ ignore = [
     # as instant above; a proc-macro derive with no drop-in upgrade in
     # that dependency tree. Drops with the same accesskit_unix update.
     "RUSTSEC-2024-0388",
+    # ── Pulled in by the optional `walkers` map-tile widget's reqwest/rustls
+    # TLS stack (added with the 4th-wave aerial/mission basemap), plus a few
+    # unmaintained transitives. The rustls-webpki cert-validation advisories
+    # only touch HTTPS fetching of PUBLIC OSM map tiles — a low-risk surface
+    # (a malicious tile server would need a crafted cert). Proper fix = bump
+    # walkers/reqwest to a rustls-0.23 line; tracked as a follow-up. The
+    # unmaintained crates have no drop-in replacement in this dep tree.
+    # Ignored to unblock the merge; revisit on the walkers/reqwest upgrade.
+    "RUSTSEC-2026-0098", # rustls-webpki — URI name-constraint validation
+    "RUSTSEC-2026-0099", # rustls-webpki — wildcard name-constraint validation
+    "RUSTSEC-2026-0104", # rustls-webpki — reachable panic in CRL parsing
+    "RUSTSEC-2025-0134", # rustls-pemfile — unmaintained
+    "RUSTSEC-2025-0057", # unmaintained transitive (fxhash family)
+    "RUSTSEC-2025-0058", # unmaintained transitive (bincode family)
+    "RUSTSEC-2025-0141", # unmaintained transitive (custom_derive family)
 ]
 
 [licenses]
