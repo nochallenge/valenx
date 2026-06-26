@@ -174,8 +174,20 @@ fn send_to_assistant(inbox: &Path, feed: &Path, msg: &str) {
 /// agent-drives-valenx bridge's `Note` command
 /// ([`crate::agent_commands`]) to post a visible summary into the panel.
 /// Best-effort (a write failure is swallowed, like the rest of the feed I/O).
+///
+/// **Channel `0` is the GLOBAL feed** (`valenx_chat_feed.jsonl`, the base
+/// [`AssistantWorkbenchState::feed_path`] with **no** `_u{n}` suffix), not a
+/// unit feed. Real Workbench+Agent units are always `1..=wb_agent_counter`, so
+/// `0` is free as the sentinel the agent-bridge's `apply_global` uses to ack
+/// global-channel commands into the global feed an agent reading the global
+/// channel watches. Any `n >= 1` resolves to that unit's [`unit_feed_path`] as
+/// before.
 pub(crate) fn append_feed_note(app: &ValenxApp, n: usize, title: &str, detail: &str, kind: &str) {
-    let feed = unit_feed_path(app, n);
+    let feed = if n == 0 {
+        app.assistant.feed_path.clone()
+    } else {
+        unit_feed_path(app, n)
+    };
     append_line(
         &feed,
         &serde_json::json!({ "title": title, "detail": detail, "kind": kind }).to_string(),
