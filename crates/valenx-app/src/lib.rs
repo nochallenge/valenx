@@ -44,6 +44,7 @@ pub(crate) mod background;
 pub mod batterypack_workbench;
 pub mod beam_workbench;
 pub mod blackhole_workbench;
+pub mod bondgraph_workbench;
 pub mod cad_workbench;
 pub mod car_workbench;
 pub mod cfd_workbench;
@@ -2112,6 +2113,18 @@ pub struct ValenxApp {
     pub show_nodegraph_workbench: bool,
     /// The edited graph + canvas interaction state for the Node Graph workbench.
     pub nodegraph: crate::nodegraph_workbench::NodeGraphWorkbenchState,
+
+    /// Whether the right-side **Bond Graph** workbench panel is visible.
+    /// Defaults to `false`; toggled from the View menu or opened by the agent
+    /// bridge under the id `"bondgraph"`. An in-house multi-domain systems
+    /// modeller: standard bond-graph elements (R / C / I / Se / Sf / TF / GY /
+    /// junctions) on a canvas, with three canonical presets whose linear
+    /// state-space `dx/dt = A·x + B·u` is derived from the bond graph and
+    /// integrated (RK4). See [`crate::bondgraph_workbench`].
+    pub show_bondgraph_workbench: bool,
+    /// The chosen preset + element parameters + latest solution for the Bond
+    /// Graph workbench.
+    pub bondgraph: crate::bondgraph_workbench::BondGraphWorkbenchState,
 
     /// Whether the right-side Survivability / protection workbench panel is
     /// visible. Defaults to `false`; toggled from the View menu or opened by the

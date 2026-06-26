@@ -272,12 +272,17 @@ pub enum TabKind {
     //    wiring, topological evaluation; the foundation for bond graphs and
     //    CAD->FEA pipelines) --
     NodeGraph,
+    // -- Bond Graph (in-house multi-domain systems modeller: standard bond-graph
+    //    elements R/C/I/Se/Sf/TF/GY/junctions on a canvas, with canonical presets
+    //    whose linear state-space dx/dt = A x + B u is derived from the bond graph
+    //    and integrated with RK4) --
+    BondGraph,
 }
 
 impl TabKind {
     /// Every *template* kind (i.e. excluding [`TabKind::Blank`]), in
     /// `＋ from template`-menu order (grouped via [`Self::group`]).
-    pub const TEMPLATES: [TabKind; 48] = [
+    pub const TEMPLATES: [TabKind; 49] = [
         TabKind::Rocket,
         TabKind::Engine,
         TabKind::Astro,
@@ -289,6 +294,7 @@ impl TabKind {
         TabKind::Fem,
         TabKind::TopOpt,
         TabKind::NodeGraph,
+        TabKind::BondGraph,
         TabKind::Reactdyn,
         TabKind::Fields,
         TabKind::Cad,
@@ -344,6 +350,7 @@ impl TabKind {
             | TabKind::Fem
             | TabKind::TopOpt
             | TabKind::NodeGraph
+            | TabKind::BondGraph
             | TabKind::Reactdyn
             | TabKind::Fields => "Simulation",
             TabKind::Cad
@@ -436,6 +443,7 @@ impl TabKind {
             TabKind::Mbd => "Multibody dynamics (robot / contact)",
             TabKind::TopOpt => "Topology optimization (SIMP)",
             TabKind::NodeGraph => "Node graph (visual node editor)",
+            TabKind::BondGraph => "Bond graph (multi-domain systems)",
         }
     }
 
@@ -493,6 +501,7 @@ impl TabKind {
             TabKind::Mbd => app.show_mbd_workbench = true,
             TabKind::TopOpt => app.show_topopt_workbench = true,
             TabKind::NodeGraph => app.show_nodegraph_workbench = true,
+            TabKind::BondGraph => app.show_bondgraph_workbench = true,
         }
     }
 
@@ -556,6 +565,7 @@ impl TabKind {
             "mbd" | "multibody" | "robot" => Some(TabKind::Mbd),
             "topopt" | "topology" | "simp" | "generative" => Some(TabKind::TopOpt),
             "nodegraph" | "nodes" | "graph" | "pipeline" => Some(TabKind::NodeGraph),
+            "bondgraph" | "bond" | "bonds" => Some(TabKind::BondGraph),
             _ => None,
         }
     }
@@ -1526,6 +1536,7 @@ pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
         "morphogenesis" | "turing" | "reactiondiffusion" => app.show_morphogenesis_workbench = on,
         "mbd" | "multibody" | "robot" => app.show_mbd_workbench = on,
         "topopt" | "topology" | "simp" | "generative" => app.show_topopt_workbench = on,
+        "bondgraph" | "bond" | "bonds" => app.show_bondgraph_workbench = on,
         // Mesh Toolbox (a `_toolbox` flag, mapped here for parity).
         "mesh" | "meshtoolbox" => app.show_mesh_toolbox = on,
         // Unknown kind: no-op — a stale/hostile registry string is ignored.
@@ -1593,6 +1604,8 @@ fn clear_all_workbenches(app: &mut ValenxApp) {
     app.show_ppi_workbench = false;
     app.show_mbd_workbench = false;
     app.show_topopt_workbench = false;
+    app.show_nodegraph_workbench = false;
+    app.show_bondgraph_workbench = false;
 }
 
 /// Reconcile the visible workbench + central viewport with the active
@@ -3117,6 +3130,7 @@ mod tests {
             ("mbd", TabKind::Mbd),
             ("topopt", TabKind::TopOpt),
             ("nodegraph", TabKind::NodeGraph),
+            ("bondgraph", TabKind::BondGraph),
         ];
         // Every TEMPLATES kind is covered by the canonical table above.
         assert_eq!(canonical.len(), TabKind::TEMPLATES.len());
@@ -4556,6 +4570,8 @@ mod tests {
             app.show_morphogenesis_workbench,
             app.show_mbd_workbench,
             app.show_topopt_workbench,
+            app.show_nodegraph_workbench,
+            app.show_bondgraph_workbench,
         ]
         .into_iter()
         .filter(|&b| b)
@@ -4630,6 +4646,7 @@ mod tests {
             TabKind::Mbd => crate::mbd_workbench::draw_mbd_workbench(app, ctx),
             TabKind::TopOpt => crate::topopt_workbench::draw_topopt_workbench(app, ctx),
             TabKind::NodeGraph => crate::nodegraph_workbench::draw_nodegraph_workbench(app, ctx),
+            TabKind::BondGraph => crate::bondgraph_workbench::draw_bondgraph_workbench(app, ctx),
         });
     }
 
