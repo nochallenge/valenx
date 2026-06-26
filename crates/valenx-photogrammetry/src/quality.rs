@@ -614,7 +614,11 @@ pub fn write_ply(
     path: impl AsRef<Path>,
 ) -> Result<()> {
     let body = point_cloud_ply(recon, colors)?;
-    std::fs::write(path, body).map_err(|e| PhotogrammetryError::Io(e.to_string()))
+    // Durable full-file persistence: route through the crash-safe atomic
+    // writer (unique sidecar → fsync → rename) so a torn/concurrent write
+    // can never leave a truncated PLY on disk.
+    valenx_core::io_caps::atomic_write_str(path.as_ref(), &body)
+        .map_err(|e| PhotogrammetryError::Io(e.to_string()))
 }
 
 /// Serialize the registered camera poses to a plain-text string.
@@ -662,7 +666,11 @@ pub fn camera_poses_text(recon: &Reconstruction) -> Result<String> {
 /// or [`PhotogrammetryError::Io`] if the file cannot be written.
 pub fn write_camera_poses(recon: &Reconstruction, path: impl AsRef<Path>) -> Result<()> {
     let body = camera_poses_text(recon)?;
-    std::fs::write(path, body).map_err(|e| PhotogrammetryError::Io(e.to_string()))
+    // Durable full-file persistence: route through the crash-safe atomic
+    // writer (unique sidecar → fsync → rename) so a torn/concurrent write
+    // can never leave a truncated pose dump on disk.
+    valenx_core::io_caps::atomic_write_str(path.as_ref(), &body)
+        .map_err(|e| PhotogrammetryError::Io(e.to_string()))
 }
 
 #[cfg(test)]

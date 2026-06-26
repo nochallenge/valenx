@@ -13,6 +13,11 @@ repository.workspace   = true
 thiserror = { workspace = true }
 nalgebra  = { workspace = true }
 
+# Crash-safe durable writes: `write_ply` / `write_camera_poses` persist via
+# `valenx_core::io_caps::atomic_write_str` (sidecar → fsync → rename) so a
+# torn/concurrent write can never leave a truncated export on disk.
+valenx-core = { path = "../valenx-core" }
+
 [lints.rust]
 unused_imports = "warn"
 missing_docs   = "warn"
