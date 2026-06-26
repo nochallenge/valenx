@@ -237,8 +237,8 @@ pub use plasticity::{
     PlasticState, ReturnResult,
 };
 pub use porous_flow::{
-    solve_richards_step, solve_richards_transient, solve_saturated_darcy, DarcySolution, FluxSource,
-    PorousFlowError, PrescribedHead, RichardsState, VanGenuchten,
+    solve_richards_step, solve_richards_transient, solve_saturated_darcy, DarcySolution,
+    FluxSource, PorousFlowError, PrescribedHead, RichardsState, VanGenuchten,
 };
 pub use principal_stress::PrincipalStress;
 pub use rayleigh::{RayleighDamping, RayleighError};
