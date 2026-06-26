@@ -52,6 +52,9 @@ members = [
     # Part B-Rep (TabKind::BrepCad) workbench. Reuses valenx-cad's
     # panic-guarded boolean path.
     "crates/valenx-truck-cad",
+    "crates/valenx-thermo",
+    "crates/valenx-waveform",
+    "crates/valenx-quantum",
     "crates/valenx-step-iges",
     "crates/valenx-surface",
     "crates/valenx-cam",
