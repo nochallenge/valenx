@@ -59,10 +59,12 @@ pub mod inductionmotor_workbench;
 pub mod interior_workbench;
 pub mod neuro_workbench;
 pub mod nodegraph_workbench;
+pub mod quantum_workbench;
 pub mod reinforcement_workbench;
 pub mod render_workbench;
 pub mod reverse_workbench;
 pub mod surrogate_workbench;
+pub mod thermo_workbench;
 pub mod variant_effect_workbench;
 pub mod windturbine_workbench;
 
@@ -2116,6 +2118,27 @@ pub struct ValenxApp {
     /// Primitive selectors + sizes + boolean op + latest build result for
     /// the Part B-Rep workbench.
     pub brep: crate::brep_workbench::BrepWorkbenchState,
+
+    /// Whether the right-side **Thermodynamics (EoS)** workbench panel is
+    /// visible. Defaults to `false`; toggled from the View menu or opened by
+    /// the agent bridge under the id `"thermo"`. An in-house industrial
+    /// fluid-thermodynamics panel (cubic equations of state + vapor–liquid
+    /// phase behavior, via valenx-thermo). See [`crate::thermo_workbench`].
+    pub show_thermo_workbench: bool,
+    /// Fluid + EoS-model selectors + (T, P) state + latest compute result
+    /// for the Thermodynamics workbench.
+    pub thermo: crate::thermo_workbench::ThermoWorkbenchState,
+
+    /// Whether the right-side **Quantum circuit** workbench panel is
+    /// visible. Defaults to `false`; toggled from the View menu or opened by
+    /// the agent bridge under the id `"quantum"`. An in-house state-vector
+    /// quantum-circuit simulator (build a gate circuit, run it, read the
+    /// basis-state probabilities, via valenx-quantum). See
+    /// [`crate::quantum_workbench`].
+    pub show_quantum_workbench: bool,
+    /// Qubit count + gate-edit selectors + recorded op list + latest run
+    /// result for the Quantum circuit workbench.
+    pub quantum: crate::quantum_workbench::QuantumWorkbenchState,
 
     /// Whether the right-side **Node Graph** workbench panel is visible.
     /// Defaults to `false`; toggled from the View menu or opened by the agent

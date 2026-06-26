@@ -206,6 +206,11 @@ pub enum TabKind {
     Fem,
     Reactdyn,
     Fields,
+    // -- Thermodynamics (in-house cubic equation of state + vapor–liquid
+    //    phase behavior over valenx-thermo) --
+    Thermo,
+    // -- Quantum circuit (in-house state-vector simulator over valenx-quantum) --
+    Quantum,
     // -- CAD & mesh --
     Cad,
     BrepCad,
@@ -288,7 +293,7 @@ pub enum TabKind {
 impl TabKind {
     /// Every *template* kind (i.e. excluding [`TabKind::Blank`]), in
     /// `＋ from template`-menu order (grouped via [`Self::group`]).
-    pub const TEMPLATES: [TabKind; 51] = [
+    pub const TEMPLATES: [TabKind; 53] = [
         TabKind::Rocket,
         TabKind::Engine,
         TabKind::Astro,
@@ -304,6 +309,8 @@ impl TabKind {
         TabKind::Surrogate,
         TabKind::Reactdyn,
         TabKind::Fields,
+        TabKind::Thermo,
+        TabKind::Quantum,
         TabKind::Cad,
         TabKind::BrepCad,
         TabKind::MeshToolbox,
@@ -361,6 +368,8 @@ impl TabKind {
             | TabKind::BondGraph
             | TabKind::Surrogate
             | TabKind::Reactdyn
+            | TabKind::Thermo
+            | TabKind::Quantum
             | TabKind::Fields => "Simulation",
             TabKind::Cad
             | TabKind::BrepCad
@@ -416,6 +425,8 @@ impl TabKind {
             TabKind::Fem => "FEM",
             TabKind::Reactdyn => "Reaction dynamics",
             TabKind::Fields => "Field statistics",
+            TabKind::Thermo => "Thermodynamics (EoS)",
+            TabKind::Quantum => "Quantum circuit",
             TabKind::Cad => "Parametric CAD",
             TabKind::BrepCad => "Part B-Rep (truck)",
             TabKind::MeshToolbox => "Mesh toolbox",
@@ -476,6 +487,8 @@ impl TabKind {
             TabKind::Fem => app.show_fem_workbench = true,
             TabKind::Reactdyn => app.show_reactdyn_workbench = true,
             TabKind::Fields => app.show_fields_workbench = true,
+            TabKind::Thermo => app.show_thermo_workbench = true,
+            TabKind::Quantum => app.show_quantum_workbench = true,
             TabKind::Cad => app.show_cad_workbench = true,
             TabKind::BrepCad => app.show_brep_workbench = true,
             TabKind::MeshToolbox => app.show_mesh_toolbox = true,
@@ -542,6 +555,8 @@ impl TabKind {
             "fem" => Some(TabKind::Fem),
             "reactdyn" => Some(TabKind::Reactdyn),
             "fields" => Some(TabKind::Fields),
+            "thermo" | "thermodynamics" | "eos" => Some(TabKind::Thermo),
+            "quantum" | "qcircuit" | "qubit" => Some(TabKind::Quantum),
             "cad" => Some(TabKind::Cad),
             "brep" | "brepcad" | "partbrep" | "solid" => Some(TabKind::BrepCad),
             "mesh" | "meshtoolbox" => Some(TabKind::MeshToolbox),
@@ -1381,6 +1396,12 @@ pub const ALL_WORKBENCH_KINDS: &[&str] = &[
     // primitives + boolean set-ops + tessellation, valenx-truck-cad) —
     // surfaced by the Part B-Rep (CAD) workbench.
     "brep",
+    // In-house industrial fluid thermodynamics (cubic EoS + vapor–liquid
+    // phase behavior, valenx-thermo) — surfaced by the Thermodynamics workbench.
+    "thermo",
+    // In-house state-vector quantum-circuit simulator (valenx-quantum) —
+    // surfaced by the Quantum circuit workbench.
+    "quantum",
     // The Mesh Toolbox is gated on `show_mesh_toolbox` (a `_toolbox`, not a
     // `_workbench`, field) but behaves like a per-tab workbench, so it is
     // mappable here under the same id the agent registry / `TabKind::from_id`
@@ -1557,6 +1578,8 @@ pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
         "mbd" | "multibody" | "robot" => app.show_mbd_workbench = on,
         "topopt" | "topology" | "simp" | "generative" => app.show_topopt_workbench = on,
         "brep" | "brepcad" | "partbrep" | "solid" => app.show_brep_workbench = on,
+        "thermo" | "thermodynamics" | "eos" => app.show_thermo_workbench = on,
+        "quantum" | "qcircuit" | "qubit" => app.show_quantum_workbench = on,
         "bondgraph" | "bond" | "bonds" => app.show_bondgraph_workbench = on,
         // Mesh Toolbox (a `_toolbox` flag, mapped here for parity).
         "mesh" | "meshtoolbox" => app.show_mesh_toolbox = on,
@@ -1592,6 +1615,8 @@ fn clear_all_workbenches(app: &mut ValenxApp) {
     app.show_fields_workbench = false;
     app.show_cad_workbench = false;
     app.show_brep_workbench = false;
+    app.show_thermo_workbench = false;
+    app.show_quantum_workbench = false;
     app.show_mesh_toolbox = false;
     app.show_sheetmetal_workbench = false;
     app.show_reverse_workbench = false;
@@ -3115,6 +3140,8 @@ mod tests {
             ("fem", TabKind::Fem),
             ("reactdyn", TabKind::Reactdyn),
             ("fields", TabKind::Fields),
+            ("thermo", TabKind::Thermo),
+            ("quantum", TabKind::Quantum),
             ("cad", TabKind::Cad),
             ("brep", TabKind::BrepCad),
             ("meshtoolbox", TabKind::MeshToolbox),
@@ -4560,6 +4587,8 @@ mod tests {
             app.show_fields_workbench,
             app.show_cad_workbench,
             app.show_brep_workbench,
+            app.show_thermo_workbench,
+            app.show_quantum_workbench,
             app.show_mesh_toolbox,
             app.show_sheetmetal_workbench,
             app.show_reverse_workbench,
@@ -4624,6 +4653,8 @@ mod tests {
             TabKind::Fields => crate::fields_workbench::draw_fields_workbench(app, ctx),
             TabKind::Cad => crate::cad_workbench::draw_cad_workbench(app, ctx),
             TabKind::BrepCad => crate::brep_workbench::draw_brep_workbench(app, ctx),
+            TabKind::Thermo => crate::thermo_workbench::draw_thermo_workbench(app, ctx),
+            TabKind::Quantum => crate::quantum_workbench::draw_quantum_workbench(app, ctx),
             TabKind::MeshToolbox => crate::mesh_toolbox::draw_mesh_toolbox(app, ctx),
             TabKind::Sheetmetal => crate::sheetmetal_workbench::draw_sheetmetal_workbench(app, ctx),
             TabKind::Reverse => crate::reverse_workbench::draw_reverse_workbench(app, ctx),

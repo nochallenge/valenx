@@ -1299,6 +1299,10 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
                 run_topopt_bridge(app, ch, &id);
             } else if id.as_str() == "brep.build" {
                 run_brep_bridge(app, ch, &id);
+            } else if id.as_str() == "thermo.compute" {
+                run_thermo_bridge(app, ch, &id);
+            } else if id.as_str() == "quantum.run" {
+                run_quantum_bridge(app, ch, &id);
             } else if id.as_str() == "nodegraph.eval" {
                 run_nodegraph_bridge(app, ch, &id);
             } else if id.as_str() == "bondgraph.solve" {
@@ -1821,6 +1825,70 @@ fn run_brep_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
     );
 }
 
+/// Fire the Thermodynamics compute from the bridge. The **Compute** action
+/// exists only as an in-panel button; this routes the bridge id
+/// `thermo.compute` to the SAME `run` function the button calls.
+///
+/// The active tab must be a [`TabKind::Thermo`]; otherwise this posts a
+/// fail-loud `warn` note and changes nothing. After computing it acks with
+/// the thermo readout (fluid + model + state + Z roots + Psat).
+fn run_thermo_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::Thermo) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Thermodynamics workbench"),
+            "warn",
+        );
+        return;
+    }
+    crate::thermo_workbench::run(app);
+    let readout = app
+        .thermo
+        .agent_readout()
+        .unwrap_or_else(|| "(no readout)".to_string());
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {readout}"),
+        "result",
+    );
+}
+
+/// Fire the Quantum circuit run from the bridge. The **Run** action exists
+/// only as an in-panel button; this routes the bridge id `quantum.run` to
+/// the SAME `run` function the button calls.
+///
+/// The active tab must be a [`TabKind::Quantum`]; otherwise this posts a
+/// fail-loud `warn` note and changes nothing. After running it acks with
+/// the quantum readout (qubit count + gate count + basis-state probs).
+fn run_quantum_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::Quantum) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Quantum circuit workbench"),
+            "warn",
+        );
+        return;
+    }
+    crate::quantum_workbench::run(app);
+    let readout = app
+        .quantum
+        .agent_readout()
+        .unwrap_or_else(|| "(no readout)".to_string());
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {readout}"),
+        "result",
+    );
+}
+
 /// Fire the Node Graph topological evaluation from the bridge. The **Evaluate**
 /// action exists only as an in-panel button; this routes the bridge id
 /// `nodegraph.eval` to the SAME `run` function the button calls, so a
@@ -2009,6 +2077,8 @@ fn set_control(
         TabKind::Engine => app.engine.agent_set(name, value),
         TabKind::Cad => app.cad.agent_set(name, value),
         TabKind::BrepCad => app.brep.agent_set(name, value),
+        TabKind::Thermo => app.thermo.agent_set(name, value),
+        TabKind::Quantum => app.quantum.agent_set(name, value),
         TabKind::TopOpt => app.topopt.agent_set(name, value),
         TabKind::NodeGraph => app.nodegraph.agent_set(name, value),
         TabKind::BondGraph => app.bondgraph.agent_set(name, value),
@@ -2132,6 +2202,8 @@ fn list_controls(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
         TabKind::Engine => crate::engine_workbench::EngineWorkbenchState::agent_control_names(),
         TabKind::Cad => crate::cad_workbench::CadWorkbenchState::agent_control_names(),
         TabKind::BrepCad => crate::brep_workbench::BrepWorkbenchState::agent_control_names(),
+        TabKind::Thermo => crate::thermo_workbench::ThermoWorkbenchState::agent_control_names(),
+        TabKind::Quantum => crate::quantum_workbench::QuantumWorkbenchState::agent_control_names(),
         TabKind::TopOpt => crate::topopt_workbench::TopOptWorkbenchState::agent_control_names(),
         TabKind::NodeGraph => {
             crate::nodegraph_workbench::NodeGraphWorkbenchState::agent_control_names()
@@ -2202,6 +2274,8 @@ fn read_readout(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
         TabKind::Genetics => Some(app.genetics.agent_readout()),
         TabKind::TopOpt => Some(app.topopt.agent_readout()),
         TabKind::BrepCad => Some(app.brep.agent_readout()),
+        TabKind::Thermo => Some(app.thermo.agent_readout()),
+        TabKind::Quantum => Some(app.quantum.agent_readout()),
         TabKind::NodeGraph => Some(app.nodegraph.agent_readout()),
         TabKind::BondGraph => Some(app.bondgraph.agent_readout()),
         TabKind::Surrogate => Some(app.surrogate.agent_readout()),
