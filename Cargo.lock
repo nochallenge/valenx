@@ -261,8 +261,8 @@ version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ae92a5119aa49cdbcf6b9f893fe4e1d98b04ccbf82ee0584ad948a44a734dea"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -513,8 +513,8 @@ version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b43422f69d8ff38f95f1b2bb76517c91589a924d1559a0e935d7c8ce0274c11"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -548,8 +548,8 @@ version = "0.1.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9035ad2d096bed7955a320ee7e2230574d28fd3c3a0f186cbea1ff3c7eed5dbb"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -688,12 +688,63 @@ dependencies = [
  "cexpr",
  "clang-sys",
  "itertools 0.13.0",
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "regex",
  "rustc-hash 2.1.2",
  "shlex 1.3.0",
  "syn 2.0.118",
+]
+
+[[package]]
+name = "bio"
+version = "4.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f190fb013f81cc8abf5e5a663e1e96bdb87a7b3dfe908900860fe1f6ae0ecd0"
+dependencies = [
+ "approx 0.5.1",
+ "bio-types",
+ "bit-set 0.10.0",
+ "bv",
+ "bytecount",
+ "csv",
+ "custom_derive",
+ "derefable",
+ "editdistancek",
+ "enum-map",
+ "fxhash",
+ "getset",
+ "itertools 0.14.0",
+ "itertools-num",
+ "multimap",
+ "ndarray 0.17.2",
+ "newtype_derive",
+ "num-integer",
+ "num-traits",
+ "ordered-float",
+ "petgraph",
+ "regex",
+ "serde",
+ "serde_derive",
+ "statrs",
+ "strum",
+ "strum_macros 0.28.0",
+ "thiserror 2.0.18",
+ "triple_accel",
+ "vec_map",
+]
+
+[[package]]
+name = "bio-types"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f4dcf54f8b7f51450207d54780bab09c05f30b8b0caa991545082842e466ad7e"
+dependencies = [
+ "derive-new 0.6.0",
+ "lazy_static",
+ "regex",
+ "strum_macros 0.26.4",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -702,7 +753,16 @@ version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0700ddab506f33b20a03b13996eccd309a48e5ff77d0d95926aa0210fb4e95f1"
 dependencies = [
- "bit-vec",
+ "bit-vec 0.6.3",
+]
+
+[[package]]
+name = "bit-set"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09ec2f926cc3060f09db9ebc5b52823d85268d24bb917e472c0c4bea35780a7d"
+dependencies = [
+ "bit-vec 0.9.1",
 ]
 
 [[package]]
@@ -710,6 +770,15 @@ name = "bit-vec"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "349f9b6a179ed607305526ca489b34ad0a41aed5f7980fa90eb03160b69598fb"
+
+[[package]]
+name = "bit-vec"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b71798fca2c1fe1086445a7258a4bc81e6e49dcd24c8d0dd9a1e57395b603f51"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "bit_field"
@@ -831,7 +900,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f11502672c5570f77f6bdf573332483f8475bab6a7fda00f1fae8ddb5a6245c0"
 dependencies = [
- "rustc_version",
+ "rustc_version 0.4.1",
 ]
 
 [[package]]
@@ -858,6 +927,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 
 [[package]]
+name = "bv"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8834bb1d8ee5dc048ee3124f2c7c1afcc6bc9aed03f11e9dfd8c69470a5db340"
+dependencies = [
+ "feature-probe",
+ "serde",
+]
+
+[[package]]
+name = "bytecount"
+version = "0.6.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "175812e0be2bccb6abe50bb8d566126198344f707e304f45c648fd8f2cc0365e"
+
+[[package]]
 name = "bytemuck"
 version = "1.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -872,8 +957,8 @@ version = "1.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9abbd1bc6865053c427f7198e6af43bfdedc55ab791faed4fbd361d789575ff"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -1104,7 +1189,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d375883580a668c7481ea6631fc1a8863e33cc335bf56bfad8d7e6d4b04b13a5"
 dependencies = [
  "com_macros_support",
- "proc-macro2",
+ "proc-macro2 1.0.106",
  "syn 1.0.109",
 ]
 
@@ -1114,8 +1199,8 @@ version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ad899a1087a9296d5644792d7cb72b8e34c1bec8e7d4fbc002230169a6e8710c"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 1.0.109",
 ]
 
@@ -1252,6 +1337,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossbeam-channel"
+version = "0.5.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "82b8f8f868b36967f9606790d1903570de9ceaf870a7bf9fbbd3016d636a2cb2"
+dependencies = [
+ "crossbeam-utils",
+]
+
+[[package]]
 name = "crossbeam-deque"
 version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1293,10 +1387,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "csv"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52cd9d68cf7efc6ddfaaee42e7288d3a99d613d4b50f76ce9827ae0c6e14f938"
+dependencies = [
+ "csv-core",
+ "itoa",
+ "ryu",
+ "serde_core",
+]
+
+[[package]]
+name = "csv-core"
+version = "0.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "704a3c26996a80471189265814dbc2c257598b96b8a7feae2d31ace646bb9782"
+dependencies = [
+ "memchr 2.8.2",
+]
+
+[[package]]
 name = "cursor-icon"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
+
+[[package]]
+name = "custom_derive"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef8ae57c4978a2acd8b869ce6b9ca1dfe817bff704c220209fdef2c0b75a01b9"
 
 [[package]]
 name = "data-url"
@@ -1317,13 +1438,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7cd812cc2bc1d69d4764bd80df88b4317eaef9e773c75226407d9bc0876b211c"
 
 [[package]]
+name = "derefable"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e519abf1289075763071c981958e89948b079fc54962617a0e6413d9ce44cbe7"
+dependencies = [
+ "proc-macro2 0.4.30",
+ "quote 0.6.13",
+ "syn 0.15.44",
+]
+
+[[package]]
 name = "derivative"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fcc3dd5e9e9c0b295d6e1e4d811fb6f157d5ffd784b8d202fc62eac8035a770b"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 1.0.109",
 ]
 
@@ -1333,9 +1465,20 @@ version = "0.5.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3418329ca0ad70234b9735dc4ceed10af4df60eff9c8e7b06cb5e520d92c3535"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "derive-new"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d150dea618e920167e5973d70ae6ece4385b7164e0d799fe7c122dd0a5d912ad"
+dependencies = [
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -1345,9 +1488,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6edb4b64a43d977b8e99788fe3a04d483834fba1215a7e02caa415b626497f7f"
 dependencies = [
  "convert_case 0.4.0",
- "proc-macro2",
- "quote",
- "rustc_version",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
+ "rustc_version 0.4.1",
  "syn 2.0.118",
 ]
 
@@ -1385,8 +1528,8 @@ version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ac70aa55017e108007fbaf5aa0f54b021c98f92ff8af59d42eda9da96e3dd4f"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -1482,6 +1625,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "editdistancek"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e02df23d5b1c6f9e69fa603b890378123b93073df998a21e6e33b9db0a32613"
+
+[[package]]
 name = "eframe"
 version = "0.28.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1508,7 +1657,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "web-time",
+ "web-time 0.2.4",
  "wgpu",
  "winapi",
  "winit",
@@ -1543,7 +1692,7 @@ dependencies = [
  "log",
  "thiserror 1.0.69",
  "type-map",
- "web-time",
+ "web-time 0.2.4",
  "wgpu",
  "winit",
 ]
@@ -1561,7 +1710,7 @@ dependencies = [
  "log",
  "raw-window-handle",
  "smithay-clipboard",
- "web-time",
+ "web-time 0.2.4",
  "webbrowser",
  "winit",
 ]
@@ -1646,7 +1795,7 @@ checksum = "c31a88c8d26de40ed18fe748c547845aa39de1db3afd958f8cb91579f3644bcb"
 dependencies = [
  "cc",
  "memchr 2.8.2",
- "rustc_version",
+ "rustc_version 0.4.1",
  "toml 1.1.2+spec-1.1.0",
  "vswhom",
  "winreg 0.55.0",
@@ -1695,8 +1844,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1e6a265c649f3f5979b601d26f1d05ada116434c87741c9493cb56218f76cbc"
 dependencies = [
  "heck",
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -1716,8 +1865,8 @@ version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f282cfdfe92516eb26c2af8589c274c7c17681f5ecc03c18255fe741c6aa64eb"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -1737,8 +1886,8 @@ version = "0.7.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67c78a4d8fdf9953a5c9d458f9efe940fd97a0cab0941c075a813ac594733827"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -1748,8 +1897,8 @@ version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2f9ed6b3789237c8a0c1c505af1c7eb2c560df6186f01b098c3a1064ea532f38"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -1803,8 +1952,8 @@ version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3bf679796c0322556351f287a51b49e48f7c4986e727b5dd78c972d30e2e16cc"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -1814,8 +1963,8 @@ version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44f23cf4b44bfce11a86ace86f8a73ffdec849c9fd00a386a53d278bd9e81fb3"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -1969,10 +2118,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "feature-probe"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "835a3dc7d1ec9e75e2b5fb4ba75396837112d2060b03f7d43bc1897c7f7211da"
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
+
+[[package]]
+name = "fixedbitset"
+version = "0.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99"
 
 [[package]]
 name = "flate2"
@@ -1982,6 +2143,7 @@ checksum = "843fba2746e448b37e26a819579957415c8cef339bf08564fe8b7ddbd959573c"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
+ "zlib-rs",
 ]
 
 [[package]]
@@ -1989,6 +2151,15 @@ name = "float-cmp"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "98de4bbd547a563b716d8dfa9aad1cb19bfab00f4fa09a6a4ed21dbcf44ce9c4"
+
+[[package]]
+name = "float-cmp"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b09cf3155332e944990140d967ff5eceb70df778b34f77d8075db46e4704e6d8"
+dependencies = [
+ "num-traits",
+]
 
 [[package]]
 name = "fnv"
@@ -2024,8 +2195,8 @@ version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1a5c6c585bc94aaf2c7b51dd4c2ba22680844aba4c687be581871a6f518c5742"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -2136,8 +2307,8 @@ version = "0.3.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e835b70203e41293343137df5c0664546da5745f82ec9b84d40be8336958447b"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -2168,6 +2339,15 @@ dependencies = [
  "memchr 2.8.2",
  "pin-project-lite",
  "slab",
+]
+
+[[package]]
+name = "fxhash"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c31b6d751ae2c7f11320402d34e41349dd1016f8d5d45e48c4312bc8625af50c"
+dependencies = [
+ "byteorder",
 ]
 
 [[package]]
@@ -2385,6 +2565,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "getset"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6cf442baaabe4213ce7d1239afc26c039180b6456da2cededa316ae2c8a77a77"
+dependencies = [
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
+ "syn 2.0.118",
+]
+
+[[package]]
 name = "gif"
 version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2595,6 +2786,23 @@ name = "hexf-parse"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
+
+[[package]]
+name = "hifitime"
+version = "4.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a978b79fb40cea4c6592890ffe0021dfea5c51a107fbac565abae82fd24a15af"
+dependencies = [
+ "js-sys",
+ "lexical-core",
+ "num-traits",
+ "serde",
+ "serde_derive",
+ "snafu",
+ "wasm-bindgen",
+ "web-sys",
+ "web-time 1.1.0",
+]
 
 [[package]]
 name = "http"
@@ -2942,8 +3150,8 @@ version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eb58032ba748f4010d15912a1855a8a0b1ba9eaad3395b0c171c09b3b356ae50"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 1.0.109",
 ]
 
@@ -2953,8 +3161,8 @@ version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c34819042dc3d3971c46c2190835914dfbe0c3c13f61449b2997f4e9722dfa60"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -3003,6 +3211,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools-num"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a872a22f9e6f7521ca557660adb96dd830e54f0f490fa115bb55dd69d38b27e7"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3047,9 +3264,9 @@ version = "0.22.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a00109accc170f0bdb141fed3e393c565b6f5e072365c3bd58f5b062591560a3"
 dependencies = [
- "proc-macro2",
- "quote",
- "rustc_version",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
+ "rustc_version 0.4.1",
  "simd_cesu8",
  "syn 2.0.118",
 ]
@@ -3078,7 +3295,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "38c0b942f458fe50cdac086d2f946512305e5631e720728f2a61aabcd47a6264"
 dependencies = [
- "quote",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -3109,8 +3326,8 @@ version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ccfb0b7ce7938f84a5ecbdca5d0a991e46bc9d6d078934ad5e92c5270fe547db"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -3151,6 +3368,63 @@ name = "lebe"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a79a3332a6609480d7d0c9eab957bca6b455b91bb84e66d19f5ff66294b85b8"
+
+[[package]]
+name = "lexical-core"
+version = "1.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d8d125a277f807e55a77304455eb7b1cb52f2b18c143b60e766c120bd64a594"
+dependencies = [
+ "lexical-parse-float",
+ "lexical-parse-integer",
+ "lexical-util",
+ "lexical-write-float",
+ "lexical-write-integer",
+]
+
+[[package]]
+name = "lexical-parse-float"
+version = "1.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52a9f232fbd6f550bc0137dcb5f99ab674071ac2d690ac69704593cb4abbea56"
+dependencies = [
+ "lexical-parse-integer",
+ "lexical-util",
+]
+
+[[package]]
+name = "lexical-parse-integer"
+version = "1.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9a7a039f8fb9c19c996cd7b2fcce303c1b2874fe1aca544edc85c4a5f8489b34"
+dependencies = [
+ "lexical-util",
+]
+
+[[package]]
+name = "lexical-util"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2604dd126bb14f13fb5d1bd6a66155079cb9fa655b37f875b3a742c705dbed17"
+
+[[package]]
+name = "lexical-write-float"
+version = "1.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50c438c87c013188d415fbabbb1dceb44249ab81664efbd31b14ae55dabb6361"
+dependencies = [
+ "lexical-util",
+ "lexical-write-integer",
+]
+
+[[package]]
+name = "lexical-write-integer"
+version = "1.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "409851a618475d2d5796377cad353802345cba92c867d9fbcde9cf4eac4e14df"
+dependencies = [
+ "lexical-util",
+]
 
 [[package]]
 name = "libc"
@@ -3436,6 +3710,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "meshopt"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e01e77ead21976b3a9f01ec1724f766923da74f0726364e2b0f425658935d71a"
+dependencies = [
+ "bitflags 2.13.0",
+ "cc",
+ "float-cmp 0.10.0",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "metal"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3468,8 +3754,8 @@ version = "5.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49e7bc1560b95a3c4a25d03de42fe76ca718ab92d1a22a55b9b4cf67b3ae635c"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -3539,13 +3825,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "multimap"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d87ecb2933e8aeadb3e3a02b828fed80a7528047e68b4f424523a0981a3a084"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "naga"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e536ae46fcab0876853bd4a632ede5df4b1c2527a58f6c5a4150fe86be858231"
 dependencies = [
  "arrayvec",
- "bit-set",
+ "bit-set 0.5.3",
  "bitflags 2.13.0",
  "codespan-reporting",
  "hexf-parse",
@@ -3556,7 +3851,7 @@ dependencies = [
  "spirv",
  "termcolor",
  "thiserror 1.0.69",
- "unicode-xid",
+ "unicode-xid 0.2.6",
 ]
 
 [[package]]
@@ -3571,6 +3866,8 @@ dependencies = [
  "num-complex",
  "num-rational",
  "num-traits",
+ "rand 0.8.6",
+ "rand_distr",
  "serde",
  "simba",
  "typenum",
@@ -3582,8 +3879,8 @@ version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "254a5372af8fc138e36684761d3c0cdb758a4410e938babcff1c860ce14ddbfc"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -3681,6 +3978,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ndarray"
+version = "0.17.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "520080814a7a6b4a6e9070823bb24b4531daac8c4627e08ba5de8c5ef2f2752d"
+dependencies = [
+ "matrixmultiply",
+ "num-complex",
+ "num-integer",
+ "num-traits",
+ "portable-atomic",
+ "portable-atomic-util",
+ "rawpointer",
+]
+
+[[package]]
 name = "ndk"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3715,6 +4027,15 @@ name = "new_debug_unreachable"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
+
+[[package]]
+name = "newtype_derive"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac8cd24d9f185bb7223958d8c1ff7a961b74b1953fd05dba7cc568a63b3861ec"
+dependencies = [
+ "rustc_version 0.1.7",
+]
 
 [[package]]
 name = "nix"
@@ -3797,6 +4118,83 @@ dependencies = [
 ]
 
 [[package]]
+name = "noodles-bgzf"
+version = "0.46.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "37290f565045fd2775b549e62dffca7e1afadc70d8d5a3a2ef19609eb3d8193b"
+dependencies = [
+ "bytes",
+ "crossbeam-channel",
+ "flate2",
+]
+
+[[package]]
+name = "noodles-core"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "53e1e8a419dbba0e4000b0e60830b124138c7f2277ad556463506f1a81d32d17"
+dependencies = [
+ "bstr",
+]
+
+[[package]]
+name = "noodles-csi"
+version = "0.55.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c9c846d8128bd80b18d891b13cb9e0bc1d364429d6ab3ec3c83939f3d32ba105"
+dependencies = [
+ "bit-vec 0.9.1",
+ "bstr",
+ "indexmap",
+ "noodles-bgzf",
+ "noodles-core",
+]
+
+[[package]]
+name = "noodles-sam"
+version = "0.84.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "baa5367d794dd6b766b7e9fe7ae93accfc9288f590ac61a881c29b7b307dbad2"
+dependencies = [
+ "bitflags 2.13.0",
+ "bstr",
+ "indexmap",
+ "lexical-core",
+ "memchr 2.8.2",
+ "noodles-bgzf",
+ "noodles-core",
+ "noodles-csi",
+]
+
+[[package]]
+name = "noodles-tabix"
+version = "0.61.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2443d0852c9618cd4aa8d11bc7c1884285e46aa4466cf5c1e49f3d9756ca7ced"
+dependencies = [
+ "bstr",
+ "indexmap",
+ "noodles-bgzf",
+ "noodles-core",
+ "noodles-csi",
+]
+
+[[package]]
+name = "noodles-vcf"
+version = "0.87.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12b339e85269ab7689661c690f9108dceb606bf3d230e1768799ae107d505e76"
+dependencies = [
+ "indexmap",
+ "memchr 2.8.2",
+ "noodles-bgzf",
+ "noodles-core",
+ "noodles-csi",
+ "noodles-tabix",
+ "percent-encoding",
+]
+
+[[package]]
 name = "noop_proc_macro"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3853,8 +4251,8 @@ version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "876a53fff98e03a936a674b29568b0e605f06b29372c2489ff4de23f1949743d"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 1.0.109",
 ]
 
@@ -3864,8 +4262,8 @@ version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed3955f1a9c7c0c15e092f9c887db08b1fc683305fdf6eb6684f22555355e202"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -3926,8 +4324,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "680998035259dcfcafe653688bf2aa6d3e2dc05e98be6ab46afb089dc84f1df8"
 dependencies = [
  "proc-macro-crate 3.5.0",
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -4395,6 +4793,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ordered-float"
+version = "5.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b7d950ca161dc355eaf28f82b11345ed76c6e1f6eb1f4f4479e0323b9e2fbd0e"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "ordered-stream"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4461,6 +4868,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
+name = "petgraph"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8701b58ea97060d5e5b155d383a69952a60943f0e6dfe30b04c287beb0b27455"
+dependencies = [
+ "fixedbitset",
+ "hashbrown 0.15.5",
+ "indexmap",
+ "serde",
+]
+
+[[package]]
 name = "phf"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4488,8 +4907,8 @@ checksum = "f84ac04429c13a7ff43785d75ad27569f2951ce0ffd30a3321230db2fc727216"
 dependencies = [
  "phf_generator",
  "phf_shared",
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
  "unicase",
 ]
@@ -4642,6 +5061,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c33a9471896f1c69cecef8d20cbe2f7accd12527ce60845ff44c153bb2a21b49"
 
 [[package]]
+name = "portable-atomic-util"
+version = "0.2.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2a106d1259c23fac8e543272398ae0e3c0b8d33c88ed73d0cc71b0f1d902618"
+dependencies = [
+ "portable-atomic",
+]
+
+[[package]]
 name = "potential_utf"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4709,8 +5137,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da25490ff9892aab3fcf7c36f08cfb902dd3e71ca0f9f9517bea02a73a5ce38c"
 dependencies = [
  "proc-macro-error-attr",
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 1.0.109",
  "version_check",
 ]
@@ -4721,9 +5149,18 @@ version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1be40180e52ecc98ad80b184934baf3d0d29f979574e439af5a55274b35f869"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "version_check",
+]
+
+[[package]]
+name = "proc-macro2"
+version = "0.4.30"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf3d2011ab5c909338f7887f4fc896d35932e29146c12c8d01da6b22a80ba759"
+dependencies = [
+ "unicode-xid 0.1.0",
 ]
 
 [[package]]
@@ -4750,7 +5187,7 @@ version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4488a4a36b9a4ba6b9334a32a39971f77c1436ec82c38707bce707699cc3bbcb"
 dependencies = [
- "quote",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -4827,9 +5264,9 @@ version = "0.24.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b999cb1a6ce21f9a6b147dcf1be9ffedf02e0043aec74dc390f3007047cecd9"
 dependencies = [
- "proc-macro2",
+ "proc-macro2 1.0.106",
  "pyo3-macros-backend",
- "quote",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -4840,9 +5277,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "822ece1c7e1012745607d5cf0bcb2874769f0f7cb34c4cde03b9358eb9ef911a"
 dependencies = [
  "heck",
- "proc-macro2",
+ "proc-macro2 1.0.106",
  "pyo3-build-config",
- "quote",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -4903,11 +5340,20 @@ dependencies = [
 
 [[package]]
 name = "quote"
+version = "0.6.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ce23b6b870e8f94f81fb0a363d65d86675884b34a09043c81e5562f11c1f8e1"
+dependencies = [
+ "proc-macro2 0.4.30",
+]
+
+[[package]]
+name = "quote"
 version = "1.0.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dfbc457d0c7a0759a614551b11a6409e5951f6c7537be1f1b7682b9ae9230368"
 dependencies = [
- "proc-macro2",
+ "proc-macro2 1.0.106",
 ]
 
 [[package]]
@@ -4979,6 +5425,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76afc826de14238e6e8c374ddcc1fa19e374fd8dd986b0d2af0d02377261d83c"
 dependencies = [
  "getrandom 0.3.4",
+]
+
+[[package]]
+name = "rand_distr"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32cb0b9bc82b0a0876c2dd994a7e7a2683d3e7390ca40e6886785ef0c7e3ee31"
+dependencies = [
+ "num-traits",
+ "rand 0.8.6",
 ]
 
 [[package]]
@@ -5322,11 +5778,20 @@ checksum = "94300abf3f1ae2e2b8ffb7b58043de3d399c73fa6f4b73826402a5c457614dbe"
 
 [[package]]
 name = "rustc_version"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c5f5376ea5e30ce23c03eb77cbe4962b988deead10910c372b226388b594c084"
+dependencies = [
+ "semver 0.1.20",
+]
+
+[[package]]
+name = "rustc_version"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92"
 dependencies = [
- "semver",
+ "semver 1.0.28",
 ]
 
 [[package]]
@@ -5407,7 +5872,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5df866eb24b48dd4bb8a3cb0dfeb3a25ff2c251ed93aae1cbfc03eb8ee3c7dcc"
 dependencies = [
  "Inflector",
- "derive-new",
+ "derive-new 0.5.9",
  "derive_more",
  "itertools 0.10.5",
  "nom 7.1.3",
@@ -5425,8 +5890,8 @@ dependencies = [
  "Inflector",
  "proc-macro-crate 1.3.1",
  "proc-macro-error",
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -5484,6 +5949,12 @@ dependencies = [
 
 [[package]]
 name = "semver"
+version = "0.1.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d4f410fedcf71af0345d7607d246e7ad15faaadd49d240ee3b24e5dc21a820ac"
+
+[[package]]
+name = "semver"
 version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
@@ -5519,8 +5990,8 @@ version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d540f220d3187173da220f885ab66608367b6574e925011a9353e4badda91d79"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -5543,8 +6014,8 @@ version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "175ee3e80ae9982737ca543e96133087cbd9a485eecc3bc4de9c1a37b47ea59c"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -5667,7 +6138,7 @@ version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94f90157bb87cddf702797c5dadfa0be7d266cdf49e22da2fcaa32eff75b2c33"
 dependencies = [
- "rustc_version",
+ "rustc_version 0.4.1",
  "simdutf8",
 ]
 
@@ -5677,7 +6148,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95890f873bec569a0362c235787f3aca6e1e887302ba4840839bcc6459c42da6"
 dependencies = [
- "quote",
+ "quote 1.0.46",
 ]
 
 [[package]]
@@ -5801,6 +6272,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "snafu"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1a012328be2e3f5d5f6f3218147ca02588cea4cb865e876849ab6debcf36522"
+dependencies = [
+ "snafu-derive",
+]
+
+[[package]]
+name = "snafu-derive"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f103c50866b8743da9429b8a581d81a27c2d3a9c4ac7df8f8571c1dd7896eda"
+dependencies = [
+ "heck",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
+ "syn 2.0.118",
+]
+
+[[package]]
 name = "socket2"
 version = "0.4.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5881,12 +6373,55 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
+name = "statrs"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a3fe7c28c6512e766b0874335db33c94ad7b8f9054228ae1c2abd47ce7d335e"
+dependencies = [
+ "approx 0.5.1",
+ "nalgebra",
+ "num-traits",
+ "rand 0.8.6",
+]
+
+[[package]]
 name = "strict-num"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6637bab7722d379c8b41ba849228d680cc12d0a45ba1fa2b48f2a30577a06731"
 dependencies = [
- "float-cmp",
+ "float-cmp 0.9.0",
+]
+
+[[package]]
+name = "strum"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9628de9b8791db39ceda2b119bbe13134770b56c138ec1d3af810d045c04f9bd"
+
+[[package]]
+name = "strum_macros"
+version = "0.26.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
+dependencies = [
+ "heck",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
+ "rustversion",
+ "syn 2.0.118",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab85eea0270ee17587ed4156089e10b9e6880ee688791d45a905f5b1ca36f664"
+dependencies = [
+ "heck",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -5901,12 +6436,23 @@ dependencies = [
 
 [[package]]
 name = "syn"
+version = "0.15.44"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ca4b3b69a77cbe1ffc9e198781b7acb0c7365a883670e8f1c1bc66fba79a5c5"
+dependencies = [
+ "proc-macro2 0.4.30",
+ "quote 0.6.13",
+ "unicode-xid 0.1.0",
+]
+
+[[package]]
+name = "syn"
 version = "1.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b64191b275b66ffe2469e8af2c1cfe3bafa67b529ead792a6d0160888b4237"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "unicode-ident",
 ]
 
@@ -5916,8 +6462,8 @@ version = "2.0.118"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b9ae57f904213ebb649ce6895b8a66c66f0203b9319718f69a5612a065b1422"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "unicode-ident",
 ]
 
@@ -5933,8 +6479,8 @@ version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "728a70f3dbaf5bab7f0c4b1ac8d7ae5ea60a4b5549c8a5914361c99147a709d2"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -6047,8 +6593,8 @@ version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -6058,8 +6604,8 @@ version = "2.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc4ee7f67670e9b64d05fa4253e753e016c6c95ff35b89b7941d6b856dec1d5"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -6174,8 +6720,8 @@ version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "385a6cb71ab9ab790c5fe8d67f1645e6c450a7ce006a33de03daa956cf70a496"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -6340,8 +6886,8 @@ version = "0.1.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7490cfa5ec963746568740651ac6781f701c9c5ea257c58e057f3ba8cf69e8da"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -6385,6 +6931,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "triple_accel"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22048bc95dfb2ffd05b1ff9a756290a009224b60b2f0e7525faeee7603851e63"
+
+[[package]]
 name = "truck-base"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6403,8 +6955,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "421ff1c5a303aed64e295d9b30e8424ee7a2fa251617a59ae4acfd078496009f"
 dependencies = [
  "proc-macro-error",
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -6611,6 +7163,12 @@ checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
 
 [[package]]
 name = "unicode-xid"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc72304796d0818e357ead4e000d19c9c174ab23dc11093ac919054d20a6a7fc"
+
+[[package]]
+name = "unicode-xid"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
@@ -6749,7 +7307,7 @@ name = "valenx-adapter-alphafold2"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -6765,7 +7323,7 @@ name = "valenx-adapter-alphafold3"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -6780,7 +7338,7 @@ name = "valenx-adapter-alphamissense"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -6795,7 +7353,7 @@ name = "valenx-adapter-amber-sander"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -6810,7 +7368,7 @@ name = "valenx-adapter-anndata"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -6825,7 +7383,7 @@ name = "valenx-adapter-art"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -6841,7 +7399,7 @@ name = "valenx-adapter-autodock4"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -6857,7 +7415,7 @@ name = "valenx-adapter-avogadro"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -6873,7 +7431,7 @@ name = "valenx-adapter-badread"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -6889,7 +7447,7 @@ name = "valenx-adapter-bcftools"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -6905,7 +7463,7 @@ name = "valenx-adapter-be-designer"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -6920,7 +7478,7 @@ name = "valenx-adapter-be-hive"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -6935,7 +7493,7 @@ name = "valenx-adapter-beast2"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -6951,7 +7509,7 @@ name = "valenx-adapter-bionetgen"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -6967,7 +7525,7 @@ name = "valenx-adapter-biopython"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -6983,7 +7541,7 @@ name = "valenx-adapter-blast"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7000,7 +7558,7 @@ name = "valenx-adapter-bowtie2"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7016,7 +7574,7 @@ name = "valenx-adapter-bwa"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7033,7 +7591,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
  "nalgebra",
- "semver",
+ "semver 1.0.28",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -7049,7 +7607,7 @@ name = "valenx-adapter-cantera"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -7064,7 +7622,7 @@ name = "valenx-adapter-cas-offinder"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7080,7 +7638,7 @@ name = "valenx-adapter-cello"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7096,7 +7654,7 @@ name = "valenx-adapter-cellprofiler"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7111,7 +7669,7 @@ name = "valenx-adapter-chimerax"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7127,7 +7685,7 @@ name = "valenx-adapter-chopchop"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7143,7 +7701,7 @@ name = "valenx-adapter-chroma"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7159,7 +7717,7 @@ name = "valenx-adapter-clustalo"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7176,7 +7734,7 @@ name = "valenx-adapter-code-aster"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7191,7 +7749,7 @@ name = "valenx-adapter-colabfold"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7207,7 +7765,7 @@ name = "valenx-adapter-copasi"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7223,7 +7781,7 @@ name = "valenx-adapter-cpptraj"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7239,7 +7797,7 @@ name = "valenx-adapter-crispor"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7255,7 +7813,7 @@ name = "valenx-adapter-crispritz"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7270,7 +7828,7 @@ name = "valenx-adapter-cromwell"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7285,7 +7843,7 @@ name = "valenx-adapter-ctffind"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7301,7 +7859,7 @@ name = "valenx-adapter-curves"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7317,7 +7875,7 @@ name = "valenx-adapter-cwltool"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7333,7 +7891,7 @@ name = "valenx-adapter-deepchem"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7349,7 +7907,7 @@ name = "valenx-adapter-deepvariant"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7365,7 +7923,7 @@ name = "valenx-adapter-diamond"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7381,7 +7939,7 @@ name = "valenx-adapter-dnachisel"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7396,7 +7954,7 @@ name = "valenx-adapter-dssr"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7412,7 +7970,7 @@ name = "valenx-adapter-elmer"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7426,7 +7984,7 @@ name = "valenx-adapter-eman2"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7442,7 +8000,7 @@ name = "valenx-adapter-esm-if"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7458,7 +8016,7 @@ name = "valenx-adapter-esm3"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7474,7 +8032,7 @@ name = "valenx-adapter-esmc"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7490,7 +8048,7 @@ name = "valenx-adapter-esmfold"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7506,7 +8064,7 @@ name = "valenx-adapter-eternafold"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7521,7 +8079,7 @@ name = "valenx-adapter-fasttree"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7539,7 +8097,7 @@ name = "valenx-adapter-fiji"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7563,7 +8121,7 @@ name = "valenx-adapter-foldseek"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7579,7 +8137,7 @@ name = "valenx-adapter-forecast"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7594,7 +8152,7 @@ name = "valenx-adapter-freecad"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -7610,7 +8168,7 @@ name = "valenx-adapter-gatk"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7627,7 +8185,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
  "nalgebra",
- "semver",
+ "semver 1.0.28",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -7643,7 +8201,7 @@ name = "valenx-adapter-gromacs"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7658,7 +8216,7 @@ name = "valenx-adapter-hisat2"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7674,7 +8232,7 @@ name = "valenx-adapter-hmmer"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7691,7 +8249,7 @@ name = "valenx-adapter-hoomd"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7706,7 +8264,7 @@ name = "valenx-adapter-icodon"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7721,7 +8279,7 @@ name = "valenx-adapter-igv"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7736,7 +8294,7 @@ name = "valenx-adapter-ilastik"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7751,7 +8309,7 @@ name = "valenx-adapter-indelphi"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7766,7 +8324,7 @@ name = "valenx-adapter-iqtree"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7782,7 +8340,7 @@ name = "valenx-adapter-j5"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7798,7 +8356,7 @@ name = "valenx-adapter-jalview"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7813,7 +8371,7 @@ name = "valenx-adapter-kallisto"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7829,7 +8387,7 @@ name = "valenx-adapter-lammps"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7844,7 +8402,7 @@ name = "valenx-adapter-lineardesign"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7859,7 +8417,7 @@ name = "valenx-adapter-linearfold"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7874,7 +8432,7 @@ name = "valenx-adapter-mafft"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7891,7 +8449,7 @@ name = "valenx-adapter-mcell"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7907,7 +8465,7 @@ name = "valenx-adapter-mdanalysis"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7923,7 +8481,7 @@ name = "valenx-adapter-mdtraj"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7938,7 +8496,7 @@ name = "valenx-adapter-meep"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7953,7 +8511,7 @@ name = "valenx-adapter-mfold"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7968,7 +8526,7 @@ name = "valenx-adapter-minimap2"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -7984,7 +8542,7 @@ name = "valenx-adapter-mmseqs2"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8000,7 +8558,7 @@ name = "valenx-adapter-molstar"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8015,7 +8573,7 @@ name = "valenx-adapter-mrbayes"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8031,7 +8589,7 @@ name = "valenx-adapter-msprime"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8047,7 +8605,7 @@ name = "valenx-adapter-mujoco"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -8063,7 +8621,7 @@ name = "valenx-adapter-muscle"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8080,7 +8638,7 @@ name = "valenx-adapter-namd"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8096,7 +8654,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
  "nalgebra",
- "semver",
+ "semver 1.0.28",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -8113,7 +8671,7 @@ name = "valenx-adapter-nextflow"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8129,7 +8687,7 @@ name = "valenx-adapter-ngl"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8144,7 +8702,7 @@ name = "valenx-adapter-nupack"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8160,7 +8718,7 @@ name = "valenx-adapter-nwchem"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8176,7 +8734,7 @@ name = "valenx-adapter-occt"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "thiserror 2.0.18",
  "toml 0.8.23",
  "tracing",
@@ -8190,7 +8748,7 @@ name = "valenx-adapter-omegafold"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8205,7 +8763,7 @@ name = "valenx-adapter-openbabel"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8221,7 +8779,7 @@ name = "valenx-adapter-openems"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8236,7 +8794,7 @@ name = "valenx-adapter-openfoam"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "tokio",
@@ -8254,7 +8812,7 @@ name = "valenx-adapter-openfold"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8270,7 +8828,7 @@ name = "valenx-adapter-openmm"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8286,7 +8844,7 @@ name = "valenx-adapter-openradioss"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8301,7 +8859,7 @@ name = "valenx-adapter-oxdna"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8317,7 +8875,7 @@ name = "valenx-adapter-pegfinder"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8332,7 +8890,7 @@ name = "valenx-adapter-physicell"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8348,7 +8906,7 @@ name = "valenx-adapter-pksim"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8364,7 +8922,7 @@ name = "valenx-adapter-planemo"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8379,7 +8937,7 @@ name = "valenx-adapter-plumed"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8395,7 +8953,7 @@ name = "valenx-adapter-precice"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -8411,7 +8969,7 @@ name = "valenx-adapter-primedesign"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8426,7 +8984,7 @@ name = "valenx-adapter-prody"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8442,7 +9000,7 @@ name = "valenx-adapter-proteinmpnn"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8458,7 +9016,7 @@ name = "valenx-adapter-psi4"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8474,7 +9032,7 @@ name = "valenx-adapter-pybamm"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -8490,7 +9048,7 @@ name = "valenx-adapter-pydna"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8505,7 +9063,7 @@ name = "valenx-adapter-pymol"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8520,7 +9078,7 @@ name = "valenx-adapter-pyrosetta"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8536,7 +9094,7 @@ name = "valenx-adapter-pysbol"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8552,7 +9110,7 @@ name = "valenx-adapter-raxml-ng"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8568,7 +9126,7 @@ name = "valenx-adapter-rdkit"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8584,7 +9142,7 @@ name = "valenx-adapter-relion"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8600,7 +9158,7 @@ name = "valenx-adapter-rfantibody"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8616,7 +9174,7 @@ name = "valenx-adapter-rfdiffusion"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8632,7 +9190,7 @@ name = "valenx-adapter-rnastructure"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8648,7 +9206,7 @@ name = "valenx-adapter-rosetta"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8664,7 +9222,7 @@ name = "valenx-adapter-rosettafold"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8679,7 +9237,7 @@ name = "valenx-adapter-salmon"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8695,7 +9253,7 @@ name = "valenx-adapter-samtools"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8711,7 +9269,7 @@ name = "valenx-adapter-scanpy"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8727,7 +9285,7 @@ name = "valenx-adapter-scvi"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8743,7 +9301,7 @@ name = "valenx-adapter-seurat"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8758,7 +9316,7 @@ name = "valenx-adapter-simrna"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8774,7 +9332,7 @@ name = "valenx-adapter-slim"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8790,7 +9348,7 @@ name = "valenx-adapter-smoldyn"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8806,7 +9364,7 @@ name = "valenx-adapter-snakemake"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8822,7 +9380,7 @@ name = "valenx-adapter-star"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8838,7 +9396,7 @@ name = "valenx-adapter-su2"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8853,7 +9411,7 @@ name = "valenx-adapter-tcoffee"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8869,7 +9427,7 @@ name = "valenx-adapter-tskit"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8885,7 +9443,7 @@ name = "valenx-adapter-viennarna"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8903,7 +9461,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
  "nalgebra",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8920,7 +9478,7 @@ name = "valenx-adapter-vmd"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8935,7 +9493,7 @@ name = "valenx-adapter-wgsim"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8951,7 +9509,7 @@ name = "valenx-adapter-x3dna"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -8967,7 +9525,7 @@ name = "valenx-adapter-xtb"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "semver",
+ "semver 1.0.28",
  "serde",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -9008,6 +9566,7 @@ dependencies = [
 name = "valenx-align"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "bio",
  "serde",
  "valenx-bioseq",
 ]
@@ -9050,7 +9609,7 @@ dependencies = [
  "png 0.18.1",
  "pollster",
  "rfd",
- "semver",
+ "semver 1.0.28",
  "serde",
  "serde_json",
  "tempfile",
@@ -9443,6 +10002,7 @@ dependencies = [
 name = "valenx-astro"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "hifitime",
  "nalgebra",
  "serde",
  "serde_json",
@@ -9542,6 +10102,8 @@ dependencies = [
 name = "valenx-bioseq"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "noodles-sam",
+ "noodles-vcf",
  "serde",
 ]
 
@@ -9802,8 +10364,8 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
  "libc",
- "proc-macro2",
- "semver",
+ "proc-macro2 1.0.106",
+ "semver 1.0.28",
  "serde",
  "serde_json",
  "sha2",
@@ -10154,8 +10716,8 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
  "nalgebra",
- "ndarray",
- "semver",
+ "ndarray 0.15.6",
+ "semver 1.0.28",
  "serde",
  "serde_json",
  "sha2",
@@ -10690,8 +11252,9 @@ name = "valenx-mesh"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
+ "meshopt",
  "nalgebra",
- "ndarray",
+ "ndarray 0.15.6",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -11102,7 +11665,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
  "libloading 0.8.9",
- "semver",
+ "semver 1.0.28",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -11471,7 +12034,7 @@ name = "valenx-rom"
 version = "0.1.0-alpha.1"
 dependencies = [
  "nalgebra",
- "ndarray",
+ "ndarray 0.15.6",
  "num-complex",
  "thiserror 2.0.18",
 ]
@@ -12024,6 +12587,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
+name = "vec_map"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f1bddf1187be692e79c5ffeab891132dfb0f236ed36a43c7ed39f1165ee20191"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "version-compare"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12179,7 +12751,7 @@ version = "0.2.126"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "167ce5e579f6bcf889c4f7175a8a5a585de84e8ff93976ce393efa5f2837aab1"
 dependencies = [
- "quote",
+ "quote 1.0.46",
  "wasm-bindgen-macro-support",
 ]
 
@@ -12190,8 +12762,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3997c7839262f4ef12cf90b818d6340c18e80f263f1a94bf157d0ec4420380e"
 dependencies = [
  "bumpalo",
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
  "wasm-bindgen-shared",
 ]
@@ -12348,9 +12920,9 @@ version = "0.31.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c324a910fd86ebdc364a3e61ec1f11737d3b1d6c273c0239ee8ff4bc0d24b4a"
 dependencies = [
- "proc-macro2",
+ "proc-macro2 1.0.106",
  "quick-xml 0.39.4",
- "quote",
+ "quote 1.0.46",
 ]
 
 [[package]]
@@ -12395,6 +12967,16 @@ name = "web-time"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa30049b1c872b72c89866d458eae9f20380ab280ffd1b1e18df2d3e2d98cfe0"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "web-time"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
@@ -12461,7 +13043,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d50819ab545b867d8a454d1d756b90cd5f15da1f2943334ca314af10583c9d39"
 dependencies = [
  "arrayvec",
- "bit-vec",
+ "bit-vec 0.6.3",
  "bitflags 2.13.0",
  "cfg_aliases 0.1.1",
  "codespan-reporting",
@@ -12721,8 +13303,8 @@ version = "0.48.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e2ee588991b9e7e6c8338edf3333fbe4da35dc72092643958ebb43f0ab2c49c"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 1.0.109",
 ]
 
@@ -12732,8 +13314,8 @@ version = "0.60.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "053e2e040ab57b9dc951b72c264860db7eb3b0200ba345b4e4c3b14f67855ddf"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -12743,8 +13325,8 @@ version = "0.48.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6fb8df20c9bcaa8ad6ab513f7b40104840c8867d5751126e4df3b08388d0cc7"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 1.0.109",
 ]
 
@@ -12754,8 +13336,8 @@ version = "0.59.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f316c4a2570ba26bbec722032c4099d8c8bc095efccdc15688708623367e358"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -13182,7 +13764,7 @@ dependencies = [
  "wayland-protocols 0.31.2",
  "wayland-protocols-plasma",
  "web-sys",
- "web-time",
+ "web-time 0.2.4",
  "windows-sys 0.48.0",
  "x11-dl",
  "x11rb",
@@ -13418,8 +14000,8 @@ version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de844c262c8848816172cef550288e7dc6c7b7814b4ee56b3e1553f275f1858e"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
  "synstructure",
 ]
@@ -13545,8 +14127,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7131497b0f887e8061b430c530240063d33bf9455fa34438f388a245da69e0a5"
 dependencies = [
  "proc-macro-crate 1.3.1",
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "regex",
  "syn 1.0.109",
  "zvariant_utils 1.0.1",
@@ -13559,8 +14141,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "267db9407081e90bbfa46d841d3cbc60f59c0351838c4bc65199ecd79ab1983e"
 dependencies = [
  "proc-macro-crate 3.5.0",
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
  "zvariant_utils 2.1.0",
 ]
@@ -13572,8 +14154,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "adf1bd45a81a103745b1757754762a26e8cd01e4532e4d6c8ec431624b80d1d6"
 dependencies = [
  "proc-macro-crate 3.5.0",
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
  "zbus_names 4.3.2",
  "zvariant 5.12.0",
@@ -13628,8 +14210,8 @@ version = "0.8.52"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ae7f38b72ec2a254e2b87ef277cf2cd4fb97cbebf944faa6f33354da0867930"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -13648,8 +14230,8 @@ version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "11532158c46691caf0f2593ea8358fed6bbf68a0315e80aae9bd41fbade684a1"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
  "synstructure",
 ]
@@ -13682,10 +14264,16 @@ version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "625dc425cab0dca6dc3c3319506e6593dcb08a9f387ea3b284dbd52a92c40555"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
+
+[[package]]
+name = "zlib-rs"
+version = "0.6.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "977347db8caa080403f6b6b7c1cda9479a8e869316f7e13a59b19076a40f94e3"
 
 [[package]]
 name = "zmij"
@@ -13766,8 +14354,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37c24dc0bed72f5f90d1f8bb5b07228cbf63b3c6e9f82d82559d4bae666e7ed9"
 dependencies = [
  "proc-macro-crate 1.3.1",
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 1.0.109",
  "zvariant_utils 1.0.1",
 ]
@@ -13779,8 +14367,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73e2ba546bda683a90652bac4a279bc146adad1386f25379cf73200d2002c449"
 dependencies = [
  "proc-macro-crate 3.5.0",
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
  "zvariant_utils 2.1.0",
 ]
@@ -13792,8 +14380,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90bc6cde9c01c511074be97f7ccb6c19d0da89e3f8662e812e999dcfd4638737"
 dependencies = [
  "proc-macro-crate 3.5.0",
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
  "zvariant_utils 3.4.0",
 ]
@@ -13804,8 +14392,8 @@ version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7234f0d811589db492d16893e3f21e8e2fd282e6d01b0cddee310322062cc200"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 1.0.109",
 ]
 
@@ -13815,8 +14403,8 @@ version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c51bcff7cc3dbb5055396bcf774748c3dab426b4b8659046963523cee4808340"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "syn 2.0.118",
 ]
 
@@ -13826,8 +14414,8 @@ version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e8535915cfa75547e559d8c68e8139909a4aeee076831e4ef7fc59d8172c4d6"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.106",
+ "quote 1.0.46",
  "serde",
  "syn 2.0.118",
  "winnow 1.0.3",
