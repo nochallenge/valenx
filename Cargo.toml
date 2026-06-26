@@ -47,6 +47,11 @@ members = [
     "crates/valenx-a11y",
     "crates/valenx-bio",
     "crates/valenx-cad",
+    # Focused B-Rep solid-modeling V1 facade built DIRECTLY on the truck
+    # CAD kernel (primitives / boolean / tessellation), surfaced by the
+    # Part B-Rep (TabKind::BrepCad) workbench. Reuses valenx-cad's
+    # panic-guarded boolean path.
+    "crates/valenx-truck-cad",
     "crates/valenx-step-iges",
     "crates/valenx-surface",
     "crates/valenx-cam",

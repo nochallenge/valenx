@@ -1,0 +1,38 @@
+[package]
+name = "valenx-truck-cad"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+description = "Focused B-Rep solid-modeling V1 for Valenx, built directly on the `truck` Rust CAD kernel (RICOS, Apache-2.0): NURBS-backed primitives (box / cylinder / sphere), boolean set-ops (union / difference / intersection), and tessellation to a renderable triangle mesh. The thin `BrepKernel` facade re-exports the truck `Solid` and reuses the hardened panic-guarded boolean path from `valenx-cad`."
+
+publish.workspace = true
+
+[dependencies]
+# The truck B-Rep CAD kernel — depended on DIRECTLY (this crate IS the
+# truck integration). truck-modeling gives the builder/sweep primitive
+# API + the concrete `Solid<Point3, Curve, Surface>`; truck-meshalgo
+# tessellates a Solid to a `PolygonMesh`; truck-shapeops provides the
+# `and` / `or` boolean set-ops. Versions are pinned at the workspace
+# level (already present for `valenx-cad`).
+truck-modeling = { workspace = true }
+truck-meshalgo = { workspace = true }
+truck-shapeops = { workspace = true }
+
+# The validated in-house kernel — `valenx-truck-cad` builds its public
+# API on `valenx-cad`'s proven primitive builders + the panic-guarded
+# boolean wrappers (truck-shapeops can `panic!` on degenerate input;
+# valenx-cad contains that in `catch_unwind` and rejects phantom
+# shell-less results). Reusing it keeps this V1 robust rather than
+# re-implementing the same guards. `valenx-cad` itself depends on truck,
+# so the dependency graph stays consistent.
+valenx-cad = { path = "../valenx-cad" }
+
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

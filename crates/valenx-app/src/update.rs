@@ -1731,6 +1731,22 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Part B-Rep workbench — an in-house
+                    // boundary-representation solid modeler on the truck CAD
+                    // kernel (NURBS primitives + boolean set-ops + tessellation).
+                    if ui
+                        .checkbox(&mut self.show_brep_workbench, "Part B-Rep (CAD)")
+                        .on_hover_text(
+                            "Show / hide the Part B-Rep Workbench — in-house solid modeling on the \
+                             truck CAD kernel. Pick two primitives (box / cylinder / sphere) and a \
+                             boolean op (union / difference / intersection); Build creates closed \
+                             BRep solids, combines them, and tessellates the result to a triangle \
+                             mesh (valenx-truck-cad).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Node Graph workbench — an in-house
                     // visual node editor (draggable nodes, output->input wiring,
                     // a topological evaluation pass).
@@ -3712,6 +3728,12 @@ impl eframe::App for ValenxApp {
             // sparse backend. A no-op unless toggled on via
             // View → Topology Optimization.
             crate::topopt_workbench::draw_topopt_workbench(self, ctx);
+
+            // Part B-Rep Workbench (right) — in-house boundary-representation
+            // solid modeling on the truck CAD kernel (NURBS primitives +
+            // boolean set-ops + tessellation, valenx-truck-cad). A no-op
+            // unless toggled on via View → Part B-Rep (CAD).
+            crate::brep_workbench::draw_brep_workbench(self, ctx);
 
             // Survivability / protection Workbench (right) — the DEFENSIVE /
             // protective side of the shared blast/impact physics (free-field

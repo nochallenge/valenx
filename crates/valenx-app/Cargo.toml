@@ -87,6 +87,7 @@ valenx-export        = { path = "../valenx-export" }
 valenx-fonts         = { path = "../valenx-fonts" }
 valenx-design-tokens = { path = "../valenx-design-tokens" }
 valenx-cad           = { path = "../valenx-cad" }
+valenx-truck-cad     = { path = "../valenx-truck-cad" }
 valenx-dock          = { path = "../valenx-dock" }
 valenx-bio           = { path = "../valenx-bio" }
 valenx-sketch        = { path = "../valenx-sketch" }

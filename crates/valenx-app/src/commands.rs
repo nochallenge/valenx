@@ -246,6 +246,7 @@ fn tab_kind_id(kind: TabKind) -> String {
         TabKind::Reactdyn => "reactdyn",
         TabKind::Fields => "fields",
         TabKind::Cad => "cad",
+        TabKind::BrepCad => "brep",
         TabKind::MeshToolbox => "meshtoolbox",
         TabKind::Sheetmetal => "sheetmetal",
         TabKind::Reverse => "reverse",
