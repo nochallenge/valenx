@@ -13,7 +13,9 @@ pub mod bounding_box;
 pub mod geometry;
 pub mod polyline;
 pub mod source;
+pub mod spatial_index;
 
 pub use bounding_box::BoundingBox;
 pub use geometry::{BRepHandle, Geometry};
 pub use source::SourceFormat;
+pub use spatial_index::{SpatialIndex, SpatialPoint};
