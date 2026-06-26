@@ -20,6 +20,7 @@
 
 pub mod adapter;
 pub mod adapter_helpers;
+pub mod db;
 pub mod error;
 pub mod executor;
 pub mod init_templates;
@@ -36,6 +37,7 @@ pub use adapter::{
     Adapter, AdapterInfo, CancellationToken, Capabilities, Case, LogLevel, LogSink, PreparedJob,
     ProbeReport, ProgressSink, ResidualSample, RunContext, RunReport, VersionRange,
 };
+pub use db::{FileValidationRecord, MaterialRecord, ProjectDb, ProjectRecord, RunRecord};
 pub use error::{AdapterError, RunPhase, TranslateError};
 pub use executor::{Executor, ExecutorError, ExecutorHandle, LocalExecutor, RunStatus};
 pub use license::{assert_spawn_allowed, LicenseMode, LicenseModeViolation};
