@@ -21,6 +21,7 @@ pub mod decimate;
 pub mod element;
 pub mod format;
 pub mod mesh;
+pub mod meshopt;
 pub mod quality;
 pub mod region;
 pub mod remesh;
@@ -39,6 +40,14 @@ pub use cut::{intersect_plane, slice, LineSegment};
 pub use decimate::quadric_error_decimate;
 pub use element::{ElementBlock, ElementType};
 pub use mesh::Mesh;
+// GPU-render-oriented optimization + LOD over `Mesh`. `optimize` /
+// `simplify` are aliased to mesh-specific names at the crate root
+// (their bare names are too generic to flatten); the vertex-cache
+// pass and the overdraw default are re-exported directly.
+pub use meshopt::{
+    optimize as optimize_render_mesh, optimize_vertex_cache, simplify as simplify_lod,
+    DEFAULT_OVERDRAW_THRESHOLD,
+};
 pub use quality::{
     aspect_ratio, aspect_ratio_histogram, equiangle_skewness, min_orthogonality,
     report as quality_report, signed_size, skewness_histogram, AspectRatioHistogram, QualityReport,
