@@ -146,6 +146,7 @@ pub mod native_solver;
 pub mod nonlinear_solver;
 pub mod ordering;
 pub mod plasticity;
+pub mod porous_flow;
 pub mod principal_stress;
 pub mod rayleigh;
 pub mod result;
@@ -234,6 +235,10 @@ pub use nonlinear_solver::{
 pub use plasticity::{
     consistent_tangent, radial_return, solve_plastic, PlasticControls, PlasticSolution,
     PlasticState, ReturnResult,
+};
+pub use porous_flow::{
+    solve_richards_step, solve_richards_transient, solve_saturated_darcy, DarcySolution, FluxSource,
+    PorousFlowError, PrescribedHead, RichardsState, VanGenuchten,
 };
 pub use principal_stress::PrincipalStress;
 pub use rayleigh::{RayleighDamping, RayleighError};
