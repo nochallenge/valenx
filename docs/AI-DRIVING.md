@@ -131,6 +131,9 @@ Each line is a flat JSON object internally tagged on `"cmd"`. Fields marked
 | `list_controls` | `workbench` *(opt)* | Post the settable control captions of a workbench to the feed. |
 | `list_commands` | -- | Post every runnable `run_command` id to the feed. |
 | `read_readout` | `workbench` *(opt)* | Post a workbench's **computed result** text back to the feed. |
+| `list_buttons` | -- | Post every **clickable button caption** in the **active** workbench's panel to the feed (the `invoke_named` name space). Generic; no per-workbench wiring. |
+| `invoke_named` | `name` | **Click the active workbench's in-panel button whose accessible name == `name`** (exact, then case-insensitive). The generic "press the Run/Compute/Analyze button" action for the ~40 workbenches with no bridge run-id. |
+| `read_text` | -- | Post the **active** workbench panel's visible text (labels + control values) back to the feed — the generic, no-per-workbench-wiring counterpart to `read_readout`. |
 | `set_view` | `dir` | Snap the central camera: `front`/`back`/`left`/`right`/`top`/`bottom`/`iso`. |
 | `orbit` | `dx_deg`, `dy_deg` | Orbit the central camera by a degree delta (elevation clamped to +-89.9). |
 | `zoom` | `factor` | Dolly the central camera (positive = in, negative = out). |
@@ -192,7 +195,51 @@ Each feed line is `{"title": "...", "detail": "...", "kind": "..."}`. The
 
 ---
 
-## 5. `valenx-drive.ps1` reference
+## 5. Generic drive (any workbench, no run-id)
+
+`run_command` only fires actions that have a registered command id. Most
+workbenches instead expose their action as an **in-panel button** (`▶ Compute`,
+`Run`, `Analyze`, …) with no bridge run-id. Three **generic** commands close
+that gap by driving the active workbench's accessibility tree directly — the
+exact same path a UI-Automation client or screen reader takes — so an agent can
+**run and read back ANY workbench with no per-workbench wiring**:
+
+- `list_buttons` — discover the clickable button captions in the active panel.
+- `invoke_named {name}` — click the button whose accessible name == `name`
+  (exact match first, then case-insensitive).
+- `read_text` — read the active panel's visible text (labels + control values)
+  back to the feed, to self-verify the result.
+
+The generic loop is **open → set inputs → list_buttons → invoke_named → read_text**:
+
+```powershell
+./scripts/valenx-drive.ps1 new_tab gears gears          # open the workbench
+./scripts/valenx-drive.ps1 list_controls gears          # (optional) discover inputs
+./scripts/valenx-drive.ps1 set_control "Module [mm]" 2  # write inputs by caption
+./scripts/valenx-drive.ps1 list_buttons                 # -> "buttons (N): ▶ Analyze, Show 3-D…, …"
+./scripts/valenx-drive.ps1 -Raw '{"cmd":"invoke_named","name":"▶ Analyze"}'  # click the action button
+./scripts/valenx-drive.ps1 read_text                    # -> "text: …" the computed result
+```
+
+Notes:
+
+- **Pick the action button, not a view button.** From the `list_buttons`
+  captions choose the one whose caption matches a *run verb* — in priority order
+  **Analyze, Compute, Run, Solve, Calculate, Simulate, Build, Generate, Eval,
+  Train, Route, Play, Apply** — and skip pure-view buttons like `Show 3-D…`,
+  `Preview`, `Reset`. (This is exactly what `scripts/valenx-screen.ps1` does to
+  screen every product generically.)
+- **Use the caption verbatim.** `invoke_named` matches on the exact string
+  `list_buttons` returned, which often carries a leading `▶ ` (U+25B6) — pass it
+  through unchanged (BOM-free UTF-8). The case-insensitive fallback only folds
+  ASCII case, not the prefix.
+- All three are **read-only on app state except** the click `invoke_named`
+  queues; an unknown name / empty panel / closed workbench is a `warn`, never a
+  crash, so you can probe and self-correct.
+
+---
+
+## 6. `valenx-drive.ps1` reference
 
 ```
 valenx-drive.ps1 <command> [args...]   # shorthand

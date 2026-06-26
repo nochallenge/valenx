@@ -7,19 +7,35 @@
     Drives a LIVE, already-running valenx instance through the GLOBAL command
     bridge documented in docs/AI-DRIVING.md + crates/valenx-app/src/agent_commands.rs.
     For each of the 56 products in docs/PRODUCTS.md it appends a sequence of
-    BOM-free JSON-line commands to `<base>/valenx_chat_cmd.jsonl`:
+    BOM-free JSON-line commands to `<base>/valenx_chat_cmd.jsonl`. There are TWO
+    drive paths:
 
+      MAPPED (the 13 products with a registered bridge run-id):
         new_tab{name,workbench}  ->  open the product on a fresh tab
         list_controls{workbench} ->  enumerate its settable control captions
-        run_command{id}          ->  (only if a run-id is mapped) fire the solve
+        run_command{id}          ->  fire the solve via its bridge run-id
         read_readout{workbench}  ->  read the computed result back
+        close_tab{name}          ->  close the product tab
+
+      GENERIC (the ~43 products with NO mapped run-id — uses the new generic
+      accessibility-name bridge commands so ANY workbench can be run + read with
+      no per-workbench wiring; see crates/valenx-app/src/agent_commands.rs
+      InvokeNamed / ListButtons / ReadText):
+        new_tab{name,workbench}  ->  open the product on a fresh tab
+        list_controls{workbench} ->  enumerate its settable control captions
+        list_buttons{}           ->  enumerate the active panel's clickable
+                                     button captions
+        invoke_named{name}       ->  click the PRIMARY ACTION button (the one
+                                     whose caption matches a run-verb, in the
+                                     priority order documented at $RunVerbs)
+        read_text{}              ->  read the active panel's visible text back
         close_tab{name}          ->  close the product tab
 
     and harvests the NEW lines valenx appends to the GLOBAL feed
     (`<base>/valenx_chat_feed.jsonl`). Every command's ack/warn/result lands in
     the global feed (channel 0) per `apply_global`, so no per-unit bootstrap is
     needed. The harness classifies each product PASS / PARTIAL / FAIL and writes
-    a markdown report.
+    a markdown report (noting the action button used for the generic path).
 
     This script ONLY drives the bridge — it does NOT launch valenx. Start valenx
     first (ideally with $env:VALENX_ASSISTANT_INBOX / $env:VALENX_ASSISTANT_FEED
@@ -139,6 +155,94 @@ function ConvertFrom-FeedLine {
 }
 
 # ---------------------------------------------------------------------------
+# 2b. Open-settle + ack-polling helpers.
+#
+#     Heavy workbenches (fem / cfd / genetics / uq / reactdyn ...) take longer
+#     than $Wait to finish loading; the FIRST screen FALSE-FAILed several of
+#     them purely because `list_controls` fired before the panel existed. So
+#     after opening a tab we POLL the feed for the matching command's ack rather
+#     than guessing a fixed sleep: append the command, then watch for the new
+#     feed line whose detail matches an expected pattern, up to a timeout.
+#
+#     Wait-ForAck returns $true once a NEW feed line (appended after $FromCount)
+#     matches $Pattern, else $false on timeout. It never throws.
+# ---------------------------------------------------------------------------
+function Wait-ForAck {
+    param(
+        [int]$FromCount,           # feed line count BEFORE the command was sent
+        [string]$Pattern,          # regex the awaited ack's detail must match
+        [int]$TimeoutMs = 2500,    # give heavy workbenches time to load
+        [int]$PollMs = 150
+    )
+    $deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMs)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        $lines = @(Get-FeedLines)
+        if ($lines.Count -gt $FromCount) {
+            for ($i = $FromCount; $i -lt $lines.Count; $i++) {
+                $e = ConvertFrom-FeedLine $lines[$i]
+                if ($null -ne $e -and $e.detail -match $Pattern) { return $true }
+            }
+        }
+        Start-Sleep -Milliseconds $PollMs
+    }
+    return $false
+}
+
+# Run-verb priority list: when a product has no mapped run-id we pick its
+# PRIMARY ACTION button from the list_buttons captions by matching these verbs
+# (case-insensitive substring), in THIS priority order. The first verb that
+# matches any caption wins; among captions matching the same verb the first as
+# returned by list_buttons wins. Pure-view buttons (below) are skipped first so
+# e.g. "Show 3-D…" never out-ranks a real action.
+$RunVerbs = @(
+    'Analyze', 'Compute', 'Run', 'Solve', 'Calculate', 'Simulate',
+    'Build', 'Generate', 'Eval', 'Train', 'Route', 'Play', 'Apply'
+)
+# Pure-view / non-action captions to exclude from action-button selection.
+$ViewVerbs = @('Show', 'Preview', 'Reset', 'View', 'Frame', 'Zoom', 'Orbit',
+    'Export', 'Save', 'Load', 'Open', 'Close', 'Clear', 'Copy', 'Help', 'About')
+
+function Select-ActionButton {
+    # From the list_buttons captions of one product, return the caption of the
+    # primary action button (verbatim, INCLUDING any leading "▶ " U+25B6), or
+    # $null if none matches a run-verb. View-only captions are excluded first.
+    param([string[]]$Captions)
+    $caps = @($Captions | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($caps.Count -eq 0) { return $null }
+    # Drop pure-view buttons so they never win.
+    $actionable = @($caps | Where-Object {
+        $c = $_
+        $isView = $false
+        foreach ($v in $ViewVerbs) {
+            if ($c -match [regex]::Escape($v)) { $isView = $true; break }
+        }
+        -not $isView
+    })
+    if ($actionable.Count -eq 0) { $actionable = $caps }
+    foreach ($verb in $RunVerbs) {
+        foreach ($c in $actionable) {
+            if ($c -match [regex]::Escape($verb)) { return $c }
+        }
+    }
+    return $null
+}
+
+function Get-ButtonCaptions {
+    # Pull the captions list out of a "buttons (N): a, b, c" feed result line.
+    # Returns @() when none / the "(none …)" form.
+    param([object[]]$Entries)
+    foreach ($e in $Entries) {
+        if ($null -eq $e) { continue }
+        if ($e.detail -match '^buttons \(\d+\):\s*(.*)$') {
+            $rest = $Matches[1].Trim()
+            if ($rest -eq '' -or $rest -like '(none*') { return @() }
+            return @($rest -split ',\s*' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
+        }
+    }
+    return @()
+}
+
+# ---------------------------------------------------------------------------
 # 3. The product list (docs/PRODUCTS.md 'id' column, all 56) with group, and
 #    the best-effort id -> RunCommand-id MAP.
 #
@@ -225,7 +329,9 @@ $Products = @(
 )
 
 $runIdCount = @($Products | Where-Object { $null -ne $_[2] }).Count
-Write-Host ("Screening {0} products; {1} have a mapped run-id." -f $Products.Count, $runIdCount)
+$genericCount = $Products.Count - $runIdCount
+Write-Host ("Screening {0} products; {1} via mapped run-id, {2} via the generic list_buttons/invoke_named/read_text path." -f `
+    $Products.Count, $runIdCount, $genericCount)
 Write-Host ""
 
 # ---------------------------------------------------------------------------
@@ -234,13 +340,20 @@ Write-Host ""
 #    Feed lines are {title,detail,kind} (assistant_workbench::append_feed_note).
 #    Result lines carry kind="result"; failures carry kind="warn".
 #
-#    PASS    : a non-error 'result' line that looks like a readout / run result
-#              ("<wb> readout:" or "ran <id>") is present.
-#    PARTIAL : opened + has controls (a "controls (N):" result) but no
-#              readout/run-result line — a viewer / not-run / AI-drive gap.
-#    FAIL    : no new feed lines at all, OR an error ack
-#              ("unknown command id" / "unknown workbench id" / "not run yet"
-#              / "no readout" / "is not the ... workbench"), OR valenx died.
+#    MAPPED path (a run-id fired) — same as before:
+#      PASS    : a non-error 'result' readout/run-result line
+#                ("<wb> readout:" or "ran <id>") is present.
+#      PARTIAL : opened + has controls but no readout/run-result line.
+#      FAIL    : no new feed lines, an error ack, or valenx died.
+#
+#    GENERIC path (no run-id; list_buttons -> invoke_named -> read_text):
+#      PASS    : invoke_named queued a click AND read_text returned substantive
+#                non-error content (a "text: …" result with real characters).
+#      PARTIAL : opened + has controls/buttons but either no action button
+#                matched a run-verb, or read_text came back empty / "(no
+#                readable text…)".
+#      FAIL    : no new feed lines at all, an invoke_named/command error ack, or
+#                valenx died.
 # ---------------------------------------------------------------------------
 function Get-ControlCount {
     param([object[]]$Entries)
@@ -265,6 +378,31 @@ function Test-IsReadout {
     return $false
 }
 
+function Test-IsSubstantiveText {
+    # True if a read_text 'result' line returned real, non-empty panel text
+    # (the "text: …" form with substantive content), false for the empty
+    # "read_text: (no readable text…)" sentinel or a too-short payload.
+    param([object]$Entry)
+    if ($null -eq $Entry) { return $false }
+    if ($Entry.kind -ne 'result') { return $false }
+    $d = $Entry.detail
+    if ([string]::IsNullOrWhiteSpace($d)) { return $false }
+    if ($d -like '*no readable text*') { return $false }
+    if ($d -notmatch '^text:\s*(.+)$') { return $false }
+    $body = $Matches[1].Trim()
+    # Require some real content beyond a stray bullet/space.
+    return ($body.Length -ge 3)
+}
+
+function Test-IsQueuedClick {
+    # True if invoke_named acked that it queued a click (the generic-path action
+    # fired successfully).
+    param([object]$Entry)
+    if ($null -eq $Entry) { return $false }
+    if ($Entry.kind -ne 'result') { return $false }
+    return ([string]$Entry.detail -match '^invoke_named: queued click')
+}
+
 function Test-IsError {
     param([object]$Entry)
     if ($null -eq $Entry) { return $false }
@@ -284,7 +422,20 @@ function Test-IsError {
     return $false
 }
 
-function Get-Verdict {
+# Count buttons enumerated by a list_buttons "buttons (N): …" feed line (-1 if
+# the line was never seen).
+function Get-ButtonCount {
+    param([object[]]$Entries)
+    foreach ($e in $Entries) {
+        if ($null -eq $e) { continue }
+        if ($e.detail -match '^buttons \((\d+)\):') { return [int]$Matches[1] }
+    }
+    return -1
+}
+
+# Verdict for the MAPPED path (a bridge run-id fired): PASS on a readout/run
+# result, else PARTIAL if it opened with controls, else FAIL.
+function Get-VerdictMapped {
     param([object[]]$Entries)
     $entries = @($Entries)
     if ($entries.Count -eq 0) {
@@ -314,13 +465,55 @@ function Get-Verdict {
 
     # No readout. If we at least opened and saw controls, it's PARTIAL
     # (viewer / not-run / AI-drive gap). Otherwise FAIL.
-    if ($ctrl -ge 1) {
+    if ($ctrl -ge 0) {
         return @{ Verdict = 'PARTIAL'; Snippet = $snippet }
     }
-    if ($ctrl -eq 0) {
-        # Opened, enumerated, but the workbench advertises no settable controls
-        # and produced no readout — a viewer-style PARTIAL, still better than no
-        # response at all.
+
+    return @{ Verdict = 'FAIL'; Snippet = $snippet }
+}
+
+# Verdict for the GENERIC path (no run-id): list_buttons -> invoke_named ->
+# read_text. PASS when a click was queued AND read_text returned substantive
+# content; PARTIAL when it opened (controls/buttons) but no action button
+# matched or read_text was empty; FAIL on no response / an error ack.
+function Get-VerdictGeneric {
+    param(
+        [object[]]$Entries,
+        [string]$ActionButton   # caption we invoked, or '' if none matched
+    )
+    $entries = @($Entries)
+    if ($entries.Count -eq 0) {
+        return @{ Verdict = 'FAIL'; Snippet = '(no feed response)' }
+    }
+
+    $clicked  = $false
+    $textOk   = $false
+    foreach ($e in $entries) {
+        if (Test-IsQueuedClick $e)     { $clicked = $true }
+        if (Test-IsSubstantiveText $e) { $textOk  = $true }
+    }
+    $ctrl = Get-ControlCount -Entries $entries
+    $btn  = Get-ButtonCount  -Entries $entries
+
+    # Snippet: prefer the read_text content, else the last error, else last line.
+    $snipEntry = $null
+    foreach ($e in $entries) { if (Test-IsSubstantiveText $e) { $snipEntry = $e } }
+    if ($null -eq $snipEntry) {
+        for ($i = $entries.Count - 1; $i -ge 0; $i--) {
+            if ((Test-IsError $entries[$i])) { $snipEntry = $entries[$i]; break }
+        }
+    }
+    if ($null -eq $snipEntry) { $snipEntry = $entries[$entries.Count - 1] }
+    $snippet = if ($null -ne $snipEntry) { [string]$snipEntry.detail } else { '' }
+
+    # PASS: the action button fired and the panel read back real text.
+    if ($clicked -and $textOk) {
+        return @{ Verdict = 'PASS'; Snippet = $snippet }
+    }
+
+    # PARTIAL: opened (saw controls or buttons) but either no action button
+    # matched a run-verb, or read_text came back empty.
+    if ($ctrl -ge 0 -or $btn -ge 0) {
         return @{ Verdict = 'PARTIAL'; Snippet = $snippet }
     }
 
@@ -350,7 +543,7 @@ foreach ($p in $Products) {
         Write-Host "  -> FAIL (valenx process gone)"
         $Results.Add([pscustomobject]@{
             Id = $id; Group = $group; Controls = '-'; RunId = $runIdLabel;
-            Verdict = 'FAIL'; Snippet = 'valenx process exited mid-run'
+            Action = '-'; Verdict = 'FAIL'; Snippet = 'valenx process exited mid-run'
         })
         continue
     }
@@ -359,18 +552,55 @@ foreach ($p in $Products) {
     $controlCount = '-'
     $verdict = 'FAIL'
     $snippet = ''
+    $actionBtn = ''   # caption invoked on the generic path ('-' for mapped)
 
     try {
-        # open the product on a fresh tab named after the id
+        # open the product on a fresh tab named after the id, then WAIT for the
+        # tab to settle. Heavy workbenches (fem/cfd/genetics/uq…) take longer
+        # than $Wait to load; poll for the list_controls ack rather than guess.
+        $preList = Get-FeedCount
         Send-Cmd @{ cmd = 'new_tab'; name = $id; workbench = $id }
         # enumerate its settable control captions
         Send-Cmd @{ cmd = 'list_controls'; workbench = $id }
-        # fire the solve if a run-id is mapped
+        # Block (up to ~2.5s) until the controls ack lands — the real settle.
+        [void](Wait-ForAck -FromCount $preList `
+            -Pattern '(controls \(\d+\):|no settable controls for workbench)' `
+            -TimeoutMs ([Math]::Max(2500, 2 * $Wait)))
+
         if ($null -ne $runId) {
+            # ---- MAPPED path: fire the registered bridge run-id. ----
             Send-Cmd @{ cmd = 'run_command'; id = $runId }
+            Send-Cmd @{ cmd = 'read_readout'; workbench = $id }
+            $actionBtn = '-'   # ran by run-id, not a named button
+        } else {
+            # ---- GENERIC path: list_buttons -> invoke_named -> read_text. ----
+            # 1. Enumerate clickable button captions and wait for that ack so we
+            #    can read them back BEFORE choosing the action button.
+            $preBtns = Get-FeedCount
+            Send-Cmd @{ cmd = 'list_buttons' }
+            [void](Wait-ForAck -FromCount $preBtns -Pattern '^buttons \(\d+\):' `
+                -TimeoutMs ([Math]::Max(2500, 2 * $Wait)))
+            $btnLines = @(Get-FeedLines)
+            $btnEntries = @()
+            if ($btnLines.Count -gt $preBtns) {
+                foreach ($l in $btnLines[$preBtns..($btnLines.Count - 1)]) {
+                    $e = ConvertFrom-FeedLine $l
+                    if ($null -ne $e) { $btnEntries += $e }
+                }
+            }
+            $captions = Get-ButtonCaptions -Entries $btnEntries
+            # 2. Pick the primary action button by run-verb priority and click it
+            #    by its VERBATIM caption (keeps any leading "▶ " U+25B6).
+            $pick = Select-ActionButton -Captions $captions
+            if ($null -ne $pick) {
+                $actionBtn = [string]$pick
+                Send-Cmd @{ cmd = 'invoke_named'; name = $actionBtn }
+            } else {
+                $actionBtn = '(none matched)'
+            }
+            # 3. Read the panel text back to self-verify the result.
+            Send-Cmd @{ cmd = 'read_text' }
         }
-        # read the computed result back
-        Send-Cmd @{ cmd = 'read_readout'; workbench = $id }
 
         # Harvest the NEW feed lines for this product (everything appended since
         # 'before'). One extra settle in case the last ack is still flushing.
@@ -387,7 +617,11 @@ foreach ($p in $Products) {
         }
 
         $controlCount = Get-ControlCount -Entries $entries
-        $vc = Get-Verdict -Entries $entries
+        if ($null -ne $runId) {
+            $vc = Get-VerdictMapped -Entries $entries
+        } else {
+            $vc = Get-VerdictGeneric -Entries $entries -ActionButton $actionBtn
+        }
         $verdict = $vc.Verdict
         $snippet = $vc.Snippet
 
@@ -400,11 +634,12 @@ foreach ($p in $Products) {
     }
 
     $ctrlDisplay = if ($controlCount -ge 0) { [string]$controlCount } else { 'n/a' }
-    Write-Host ("  -> {0} (controls {1})" -f $verdict, $ctrlDisplay)
+    if ([string]::IsNullOrEmpty($actionBtn)) { $actionBtn = '-' }
+    Write-Host ("  -> {0} (controls {1}; action {2})" -f $verdict, $ctrlDisplay, $actionBtn)
 
     $Results.Add([pscustomobject]@{
         Id = $id; Group = $group; Controls = $ctrlDisplay; RunId = $runIdLabel;
-        Verdict = $verdict; Snippet = $snippet
+        Action = $actionBtn; Verdict = $verdict; Snippet = $snippet
     })
 }
 
@@ -433,13 +668,17 @@ $sb = New-Object System.Text.StringBuilder
 [void]$sb.AppendLine(('Generated: {0}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')))
 [void]$sb.AppendLine(('Bridge base: `{0}`' -f $Base))
 [void]$sb.AppendLine(('Feed: `{0}`' -f $FeedFile))
-[void]$sb.AppendLine(('Products screened: {0} (run-ids mapped: {1})' -f $Results.Count, $runIdCount))
+[void]$sb.AppendLine(('Products screened: {0} (run-id mapped: {1}, generic drive: {2})' -f $Results.Count, $runIdCount, $genericCount))
 [void]$sb.AppendLine('')
-[void]$sb.AppendLine('| id | group | controls# | run-id | verdict | snippet |')
-[void]$sb.AppendLine('|---|---|---|---|---|---|')
+[void]$sb.AppendLine('Action column = the in-panel button invoked via the generic')
+[void]$sb.AppendLine('`invoke_named` path (`-` for the run-id-mapped products).')
+[void]$sb.AppendLine('')
+[void]$sb.AppendLine('| id | group | controls# | run-id | action button | verdict | snippet |')
+[void]$sb.AppendLine('|---|---|---|---|---|---|---|')
 foreach ($r in $Results) {
-    [void]$sb.AppendLine(('| {0} | {1} | {2} | {3} | {4} | {5} |' -f `
-        $r.Id, $r.Group, $r.Controls, $r.RunId, $r.Verdict, (Format-Cell $r.Snippet)))
+    [void]$sb.AppendLine(('| {0} | {1} | {2} | {3} | {4} | {5} | {6} |' -f `
+        $r.Id, $r.Group, $r.Controls, $r.RunId, (Format-Cell $r.Action), `
+        $r.Verdict, (Format-Cell $r.Snippet)))
 }
 [void]$sb.AppendLine('')
 [void]$sb.AppendLine('## Summary')
