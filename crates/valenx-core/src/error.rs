@@ -86,6 +86,12 @@ pub enum AdapterError {
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 
+    /// The embedded project/simulation database (see [`crate::db`])
+    /// returned an error — a failed query, a violated constraint, a
+    /// corrupt `.db` file, etc.
+    #[error("database error: {0}")]
+    Db(#[from] rusqlite::Error),
+
     /// Anything else — kept out of the taxonomy.
     #[error(transparent)]
     Other(#[from] anyhow::Error),
