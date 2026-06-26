@@ -164,7 +164,7 @@ jobs:
             libocct-foundation-dev libocct-modeling-algorithms-dev \
             libocct-modeling-data-dev libocct-ocaf-dev \
             libgl1-mesa-dev libegl-dev libwayland-dev libxkbcommon-dev \
-            libasound2-dev
+            libasound2-dev libpipewire-0.3-dev libdbus-1-dev libudev-dev
       # Scoped to the changed crates on a PR (see the `changes` job);
       # `--workspace` on push-to-master and nightly.
       - run: cargo clippy ${{ needs.changes.outputs.build_scope }} --all-targets --all-features -- -D warnings
@@ -288,7 +288,7 @@ jobs:
             libocct-foundation-dev libocct-modeling-algorithms-dev \
             libocct-modeling-data-dev libocct-ocaf-dev \
             libgl1-mesa-dev libegl-dev libwayland-dev libxkbcommon-dev \
-            libasound2-dev
+            libasound2-dev libpipewire-0.3-dev libdbus-1-dev libudev-dev
       # Scoped to the changed crates on a PR (see the `changes` job);
       # `--workspace` on push-to-master and nightly.
       - run: cargo doc ${{ needs.changes.outputs.build_scope }} --no-deps --all-features
