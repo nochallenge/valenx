@@ -147,6 +147,7 @@ pub mod mass;
 pub mod mission;
 pub mod orbit;
 pub mod orbit3d;
+pub mod precise_time;
 pub mod presets;
 pub mod propulsion;
 pub mod radec;
@@ -189,6 +190,10 @@ pub use orbit::{elements, OrbitElements};
 pub use orbit3d::{
     atmosphere_velocity_eci, drag_accel as orbit_drag_accel, propagate_with_drag, BallisticTerm,
     ClassicalElements, StateVector,
+};
+pub use precise_time::{
+    from_jde_utc as epoch_from_jde_utc, tai as tai_epoch, utc as utc_epoch, Epoch,
+    TT_MINUS_TAI_SECONDS,
 };
 pub use propulsion::{
     optimize_engine, CoolingInputs, CoolingPerformance, EngineDesign, EngineOptimum,

@@ -15,6 +15,10 @@ publish.workspace = true
 thiserror = { workspace = true }
 nalgebra  = { workspace = true }
 serde     = { workspace = true }
+# Precise, leap-second-aware multi-timescale epochs (TAI/UTC/TT/TDB) for the
+# `precise_time` bridge. Pure-Rust, lightweight; default features off keeps out
+# the python/ut1/tabled extras (we only need std + serde).
+hifitime = { version = "4.3", default-features = false, features = ["std", "serde"] }
 
 [dev-dependencies]
 # Round-trip serialization tests for the public config / result structs.
