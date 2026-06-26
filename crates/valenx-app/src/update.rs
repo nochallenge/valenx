@@ -516,6 +516,36 @@ impl eframe::App for ValenxApp {
                         self.open_six_workbench_agents();
                         ui.close_menu();
                     }
+                    // Auto-tile: organize the open central-workspace panels into
+                    // a balanced grid so they're all visible (no crushed
+                    // Assistant). A "do it now" action plus a toggle for the
+                    // automatic-on-tab-open behaviour. Mirrors the tab-strip
+                    // "Tile (N)" button.
+                    if ui
+                        .button(format!("Tile panels now ({})", self.open_tileable_count()))
+                        .on_hover_text(
+                            "Arrange every open workspace panel (workbenches, \
+                             Assistant, agent units) into a balanced grid so all \
+                             of them are visible and legible at once. Same as the \
+                             tab-strip \"Tile\" button.",
+                        )
+                        .clicked()
+                    {
+                        self.auto_tile_dock();
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.auto_tile_on_open, "Auto-tile panels on open")
+                        .on_hover_text(
+                            "When on, opening or switching to a tab with two or \
+                             more open panels auto-organizes them into a balanced \
+                             grid. Turn off to keep the classic layout; you can \
+                             still tile on demand with the \"Tile\" button.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     ui.checkbox(&mut self.snap_to_grid, "Snap to grid")
                         .on_hover_text(
                             "Snap the viewport cursor to the nearest ground-grid \

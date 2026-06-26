@@ -832,6 +832,16 @@ pub struct ValenxApp {
     /// [`Self::dock_enabled`] via [`project_tabs::WorkspaceDoc`]; a
     /// newly-opened tab installs a default document → this is `false`.
     pub dock_agent_only: bool,
+    /// When `true` (the default), opening or switching to a tab that has **two
+    /// or more** central-workspace panels open auto-organises them into a
+    /// balanced grid (via [`dock_layout::ValenxApp::auto_tile_dock`]) so every
+    /// panel stays visible and legible instead of the Assistant being crushed
+    /// to a sliver beside a wide workbench. The user can turn this off
+    /// (View → "Auto-tile panels on open") and still tile on demand with the
+    /// tab-strip **⊞ Tile** button. Cleared for a clean agent product tab
+    /// ([`Self::dock_agent_only`]) so that single-pair layout is never
+    /// re-gridded. Global (not per-tab) — a UI preference, not scene state.
+    pub auto_tile_on_open: bool,
     /// Per-channel **cursor** for the agent-drives-valenx command bridge: how
     /// many lines of channel `n`'s command file
     /// ([`crate::agent_commands::cmd_path`]) have already been applied. On the
@@ -2447,6 +2457,11 @@ impl ValenxApp {
         // optimize → export an engine, visible at launch.
         app.show_engine_workbench = true;
         app.snap_to_grid = true;
+        // Auto-organise the open central-workspace panels into a balanced grid
+        // when a tab is opened/switched (so the Assistant is never crushed to a
+        // sliver beside a wide workbench). On by default; toggle in View, or
+        // tile on demand with the tab-strip "⊞ Tile" button.
+        app.auto_tile_on_open = true;
         app.init_registry();
         // Restore the per-case run-history map from disk so the
         // browser's ✓/✗ badges survive app restarts. A missing /

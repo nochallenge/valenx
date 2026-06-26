@@ -1719,6 +1719,12 @@ pub fn sync_active(app: &mut ValenxApp) {
     if let Some(wk) = workbench_kind {
         set_workbench_flag(app, &wk, true);
     }
+    // Now that this tab's panels are reconciled, auto-organise them into a
+    // balanced grid if two or more are open (so an AI-set-up / multi-panel tab
+    // tidies itself instead of crushing the Assistant). Gated on
+    // `auto_tile_on_open` and a no-op for clean agent product tabs — see
+    // [`crate::dock_layout::ValenxApp::maybe_auto_tile_on_open`].
+    app.maybe_auto_tile_on_open();
 }
 
 /// Switch the active tab to `new_idx`, swapping the per-tab workspace
@@ -1883,6 +1889,10 @@ struct StripIntent {
     /// picked from the tab-strip "+ Workbench+Agent" placement dropdown.
     /// Routed to [`ValenxApp::add_workbench_agent_pair_at`].
     add_wb_agent_at: Option<crate::dock_layout::UnitAddTarget>,
+    /// Auto-tile: reflow the open central-workspace panels into a balanced grid
+    /// (the tab-strip **Tile** button). Routed to
+    /// [`ValenxApp::auto_tile_dock`].
+    auto_tile: bool,
 
     // -- Tab groups (Chrome-style coloured bands over the strip) --
     /// Create a fresh group around the tab at this index (auto-named, next
@@ -1933,6 +1943,30 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
                 .clicked()
             {
                 intent.open_blank = true;
+            }
+
+            // Auto-tile / organize: lay every open central-workspace panel
+            // (workbenches + the Assistant + any Workbench+Agent tiles) out as
+            // a balanced grid so they're ALL visible at once instead of the
+            // Assistant being crushed to a sliver. The count in the label tells
+            // the user how many panels are currently open. Plain-ASCII label
+            // (no glyph) so it never renders as a "tofu" box; a named button so
+            // the AI bridge can drive it too. Disabled when nothing is open.
+            let panel_count = app.open_tileable_count();
+            let tile_btn = ui.add_enabled(
+                panel_count >= 1,
+                egui::Button::new(format!("Tile ({panel_count})")),
+            );
+            if tile_btn
+                .on_hover_text(
+                    "Organize panels: arrange the open workspace panels \
+                     (workbenches, Assistant, agent units) into a balanced \
+                     grid so all of them are visible and legible at once. The \
+                     number is how many panels are open.",
+                )
+                .clicked()
+            {
+                intent.auto_tile = true;
             }
 
             // Paired "Workbench + Agent" unit — an empty workspace tile + a
@@ -3071,6 +3105,11 @@ fn apply_intent(app: &mut ValenxApp, intent: StripIntent) {
         // the new unit (new top/bottom row, or into an existing row's
         // left/right end). Also turns the dockable layout on.
         app.add_workbench_agent_pair_at(target);
+    }
+    if intent.auto_tile {
+        // The toolbar "Tile" button: reflow the open central-workspace panels
+        // into a balanced grid (turns the dockable layout on, full-width).
+        app.auto_tile_dock();
     }
 
     // -- Tab-group mutations. Each is a pure presentation-layer change over

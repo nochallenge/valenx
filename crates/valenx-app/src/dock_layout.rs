@@ -2045,6 +2045,141 @@ impl ValenxApp {
             close_panel(self, id);
         }
     }
+
+    /// The panel ids that the **auto-tile** action lays out, in a stable order:
+    /// every open [`DOCKABLE_PANELS`] entry (workbenches + the Assistant)
+    /// followed by any **"Workbench + Agent"** panes (`workspace:`/`agent:`)
+    /// already present in the dock tree. The wb-agent panes are carried over so
+    /// a manually-opened unit grid isn't dropped when we re-grid.
+    ///
+    /// This is the set of "open central-workspace panels" the user sees crushed
+    /// together in the classic layout; [`Self::auto_tile_dock`] reflows exactly
+    /// these into a balanced grid.
+    pub(crate) fn open_tileable_panels(&self) -> Vec<String> {
+        let mut ids: Vec<String> = DOCKABLE_PANELS
+            .iter()
+            .filter(|(id, _)| is_panel_open(self, id))
+            .map(|(id, _)| (*id).to_string())
+            .collect();
+        if let Some(tree) = self.dock_tree.as_ref() {
+            for tile in tree.tiles.tiles() {
+                if let egui_tiles::Tile::Pane(pid) = tile {
+                    if is_wb_agent_pane(pid) && !ids.contains(pid) {
+                        ids.push(pid.clone());
+                    }
+                }
+            }
+        }
+        ids
+    }
+
+    /// How many central-workspace panels are currently open — the number the
+    /// **⊞ Tile (N)** button shows so the user always knows how many panels are
+    /// in play (the screenshot complaint was "no idea how many are even open").
+    pub(crate) fn open_tileable_count(&self) -> usize {
+        self.open_tileable_panels().len()
+    }
+
+    /// **Auto-tile / organize:** reflow every open central-workspace panel into
+    /// a **balanced grid** so all of them are visible and legible at once,
+    /// instead of the Assistant being squished to a sliver beside a wide
+    /// workbench. Wired to the tab-strip **⊞ Tile** button and (when
+    /// [`Self::auto_tile_on_open`] is on) to opening / switching a tab.
+    ///
+    /// Layout: for `N` panels it uses `cols = ceil(sqrt(N))` columns ×
+    /// `ceil(N / cols)` rows — e.g. 1→1×1, 2→2×1, 3→2×2, 4→2×2, 5→3×2, 6→3×2,
+    /// 9→3×3 — each cell an equal share (`egui_tiles` splits a `Linear`
+    /// container's children evenly, so no cell collapses to a sliver). The grid
+    /// is hosted **full-width** in the central panel (dock on + 3-D viewport
+    /// hidden), matching the existing "Workbench+Agent grid" path; the user
+    /// restores the viewport from the workspace bar's **Show 3D viewport** or
+    /// re-tiles after opening more panels.
+    ///
+    /// No-op for a clean agent product tab ([`Self::dock_agent_only`]) — that
+    /// single `[workspace | agent]` pair is intentionally fixed — and a no-op
+    /// when fewer than one panel is open.
+    pub(crate) fn auto_tile_dock(&mut self) {
+        if self.dock_agent_only {
+            return;
+        }
+        let ids = self.open_tileable_panels();
+        if ids.is_empty() {
+            return;
+        }
+        // Build a fresh balanced grid from scratch so the result is crisp and
+        // deterministic regardless of any prior hand-dragged layout. The user
+        // can still drag tiles around afterwards; `sync_tree` then leaves the
+        // structure alone (it only adds/removes panes to match the open set,
+        // which already matches exactly here).
+        let mut tree = egui_tiles::Tree::empty("valenx_dock_tree");
+        let grid_root = build_balanced_grid(&mut tree, &ids);
+        tree.root = Some(grid_root);
+        self.dock_tree = Some(tree);
+        // Show the grid full-width in the central panel (like the launcher).
+        self.dock_enabled = true;
+        self.viewport_hidden = true;
+    }
+
+    /// Auto-trigger for [`Self::auto_tile_dock`] on tab open / switch, called
+    /// from [`crate::project_tabs::sync_active`] (the universal post-tab-change
+    /// reconcile). Gated so it only fires when it actually helps and never
+    /// surprises the user:
+    ///
+    /// - off unless [`Self::auto_tile_on_open`] (View toggle, default on);
+    /// - skips clean agent product tabs ([`Self::dock_agent_only`]);
+    /// - only acts when **two or more** panels are open — the exact "crushed
+    ///   panel" condition. With 0–1 open panels it does nothing, so a plain
+    ///   single-viewport tab keeps the classic layout and the 3-D viewport.
+    pub(crate) fn maybe_auto_tile_on_open(&mut self) {
+        if !self.auto_tile_on_open || self.dock_agent_only {
+            return;
+        }
+        if self.open_tileable_count() >= 2 {
+            self.auto_tile_dock();
+        }
+    }
+}
+
+/// Build a **balanced grid** of `ids` as panes into `tree` and return the root
+/// container's [`egui_tiles::TileId`] (caller assigns it to `tree.root`).
+///
+/// Shape: `cols = ceil(sqrt(N))` columns, filled row-major into
+/// `rows = ceil(N / cols)` rows. Each row is a horizontal `Linear` of its
+/// panes and the root is a vertical `Linear` of the rows; `egui_tiles` gives
+/// every child of a `Linear` an equal share by default, so all cells are about
+/// the same size. A final short row simply holds fewer panes (each still
+/// sized to its row), which keeps the whole set visible — the user explicitly
+/// wants "show them all", rows + columns.
+///
+/// `N == 1` returns a lone pane (no wrapper); `N == 0` returns an empty
+/// vertical container (the caller guards against the empty case anyway).
+fn build_balanced_grid(tree: &mut egui_tiles::Tree<String>, ids: &[String]) -> egui_tiles::TileId {
+    let n = ids.len();
+    if n == 1 {
+        return tree.tiles.insert_pane(ids[0].clone());
+    }
+    // ceil(sqrt(n)) columns without floating-point rounding surprises.
+    let cols = (1..=n).find(|c| c * c >= n).unwrap_or(1).max(1);
+    let rows: Vec<egui_tiles::TileId> = ids
+        .chunks(cols)
+        .map(|chunk| {
+            let panes: Vec<egui_tiles::TileId> = chunk
+                .iter()
+                .map(|id| tree.tiles.insert_pane(id.clone()))
+                .collect();
+            // A single-pane final row is just that pane (no 1-child container).
+            if panes.len() == 1 {
+                panes[0]
+            } else {
+                tree.tiles.insert_horizontal_tile(panes)
+            }
+        })
+        .collect();
+    if rows.len() == 1 {
+        rows[0]
+    } else {
+        tree.tiles.insert_vertical_tile(rows)
+    }
 }
 
 /// Insert one "Workbench + Agent" unit's two panes (`workspace:n`, `agent:n`)
@@ -2976,5 +3111,142 @@ mod tests {
 
         // Clean up the whole temp tree.
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Build a grid of `n` synthetic panes and return (column-count-per-row).
+    fn grid_row_widths(n: usize) -> Vec<usize> {
+        let ids: Vec<String> = (0..n).map(|i| format!("p{i}")).collect();
+        let mut tree = egui_tiles::Tree::empty("t");
+        let root = build_balanced_grid(&mut tree, &ids);
+        tree.root = Some(root);
+        // Read the row widths back out of the structure.
+        match tree.tiles.get(root) {
+            Some(egui_tiles::Tile::Pane(_)) => vec![1],
+            Some(egui_tiles::Tile::Container(egui_tiles::Container::Linear(v)))
+                if v.dir == egui_tiles::LinearDir::Vertical =>
+            {
+                v.children
+                    .iter()
+                    .map(|&row| match tree.tiles.get(row) {
+                        Some(egui_tiles::Tile::Container(egui_tiles::Container::Linear(h))) => {
+                            h.children.len()
+                        }
+                        _ => 1, // a single-pane row is a bare pane
+                    })
+                    .collect()
+            }
+            // A single horizontal row (rows.len() == 1, n > cols never happens
+            // for the squared col count, but a 2-pane case is one horizontal).
+            Some(egui_tiles::Tile::Container(egui_tiles::Container::Linear(h))) => {
+                vec![h.children.len()]
+            }
+            // build_balanced_grid only ever emits Pane / Linear, never
+            // Tabs / Grid containers.
+            _ => vec![],
+        }
+    }
+
+    #[test]
+    fn balanced_grid_uses_ceil_sqrt_columns() {
+        // 1 → single pane; 2 → one row of 2; 3,4 → 2 cols; 5,6 → 3 cols;
+        // 9 → 3×3; 10 → 4 cols. Every pane is placed and rows are balanced.
+        assert_eq!(grid_row_widths(1), vec![1]);
+        assert_eq!(grid_row_widths(2), vec![2]);
+        assert_eq!(grid_row_widths(3), vec![2, 1]);
+        assert_eq!(grid_row_widths(4), vec![2, 2]);
+        assert_eq!(grid_row_widths(5), vec![3, 2]);
+        assert_eq!(grid_row_widths(6), vec![3, 3]);
+        assert_eq!(grid_row_widths(9), vec![3, 3, 3]);
+        assert_eq!(grid_row_widths(10), vec![4, 4, 2]);
+        // No row ever exceeds ceil(sqrt(n)) columns, and the total is exactly n.
+        for n in 1..=20 {
+            let widths = grid_row_widths(n);
+            let cols = (1..=n).find(|c| c * c >= n).unwrap_or(1).max(1);
+            assert!(
+                widths.iter().all(|&w| w <= cols),
+                "n={n}: a row exceeded {cols} cols: {widths:?}"
+            );
+            assert_eq!(widths.iter().sum::<usize>(), n, "n={n}: lost a pane");
+        }
+    }
+
+    #[test]
+    fn auto_tile_grids_exactly_the_open_panels_and_enables_dock() {
+        // Three open dockable panels → a grid of exactly those three panes,
+        // dock turned on full-width (viewport hidden).
+        let mut app = ValenxApp::default();
+        app.show_mesh_toolbox = true;
+        app.show_fem_workbench = true;
+        app.show_assistant_panel = true;
+        assert_eq!(app.open_tileable_count(), 3);
+
+        app.auto_tile_dock();
+        assert!(app.dock_enabled, "auto-tile turns the dock on");
+        assert!(app.viewport_hidden, "auto-tile fills the workspace");
+        let tree = app.dock_tree.as_ref().expect("a grid tree was built");
+        let panes = pane_ids(tree);
+        assert_eq!(panes.len(), 3, "exactly the open panels are tiled");
+        for id in [
+            "valenx_mesh_toolbox",
+            "valenx_fem_workbench",
+            "valenx_assistant_panel",
+        ] {
+            assert!(panes.contains(id), "{id} missing from the tiled grid");
+        }
+    }
+
+    #[test]
+    fn auto_tile_is_a_noop_with_nothing_open_or_on_a_product_tab() {
+        // Nothing open → no tree, dock stays off.
+        let mut app = ValenxApp::default();
+        assert_eq!(app.open_tileable_count(), 0);
+        app.auto_tile_dock();
+        assert!(app.dock_tree.is_none());
+        assert!(!app.dock_enabled);
+
+        // A clean agent product tab is left exactly as-is even with a panel open.
+        app.show_assistant_panel = true;
+        app.dock_agent_only = true;
+        app.auto_tile_dock();
+        assert!(
+            app.dock_tree.is_none(),
+            "auto-tile must not re-grid a clean agent product tab"
+        );
+    }
+
+    #[test]
+    fn maybe_auto_tile_respects_the_toggle_and_the_two_panel_threshold() {
+        // One open panel → below threshold → no tiling even with auto-tile on.
+        let mut app = ValenxApp::default();
+        app.auto_tile_on_open = true;
+        app.show_assistant_panel = true;
+        app.maybe_auto_tile_on_open();
+        assert!(app.dock_tree.is_none(), "1 panel must not auto-tile");
+
+        // Two panels → auto-tiles.
+        app.show_mesh_toolbox = true;
+        app.maybe_auto_tile_on_open();
+        assert!(app.dock_tree.is_some(), "2 panels should auto-tile");
+
+        // With the toggle off, it never fires.
+        let mut app2 = ValenxApp::default();
+        app2.auto_tile_on_open = false;
+        app2.show_assistant_panel = true;
+        app2.show_mesh_toolbox = true;
+        app2.maybe_auto_tile_on_open();
+        assert!(app2.dock_tree.is_none(), "toggle off disables auto-tile");
+    }
+
+    #[test]
+    fn open_tileable_includes_existing_wb_agent_panes() {
+        // A manually-opened Workbench+Agent unit's panes are carried into the
+        // tileable set so re-gridding never drops them.
+        let mut app = ValenxApp::default();
+        app.add_workbench_agent_pair(); // workspace:1 + agent:1
+        app.show_assistant_panel = true;
+        let ids = app.open_tileable_panels();
+        assert!(ids.contains(&"valenx_assistant_panel".to_string()));
+        assert!(ids.contains(&"workspace:1".to_string()));
+        assert!(ids.contains(&"agent:1".to_string()));
     }
 }
