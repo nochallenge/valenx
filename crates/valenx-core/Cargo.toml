@@ -20,6 +20,11 @@ tracing     = { workspace = true }
 sha2        = { workspace = true }
 uuid        = { workspace = true }
 semver      = { workspace = true }
+# Zero-copy memory-mapped reads for very large files (multi-GB CAD
+# tessellations, FASTQ/BAM sequencing runs, telemetry captures) — see
+# `mmap.rs`. Pure-Rust, well-maintained; pinned to the 0.9 line that is
+# already in the lock graph (transitively pulled by other deps).
+memmap2     = "0.9"
 
 valenx-fields = { path = "../valenx-fields" }
 
