@@ -3222,45 +3222,102 @@ impl eframe::App for ValenxApp {
                         ui.close_menu();
                     }
                 });
+                // Width-aware ribbon: at half-screen (~960px) the left menus +
+                // centred title + right panel-cluster used to fight for one row
+                // and visually collide. We gate the optional chrome on the live
+                // window width (`ctx.screen_rect()` is stable regardless of how
+                // much width the widgets already consumed):
+                //   - wide   (≥1100): full title + inline Max/Toolbox/Browser;
+                //   - narrow (<1100): drop the title text, fold the panel
+                //                     toggles into one "⋯ Panels" overflow menu;
+                //   - tiny   (<820):  also drop the "Valenx" word entirely.
+                // The Focus picker stays inline (it is the AI-drivable domain
+                // filter) — it is compact and never the thing that overflows.
+                let bar_w = ctx.screen_rect().width();
+                let narrow = bar_w < 1100.0;
+                let tiny = bar_w < 820.0;
                 ui.separator();
-                ui.label(format!("Valenx {} — pre-alpha", env!("CARGO_PKG_VERSION")));
-                ui.separator();
+                if !tiny {
+                    if narrow {
+                        ui.label("Valenx");
+                    } else {
+                        ui.label(format!("Valenx {} — pre-alpha", env!("CARGO_PKG_VERSION")));
+                    }
+                    ui.separator();
+                }
                 // Domain-focus picker — `Focus: [All v]`. Narrows the Tools /
                 // template menus + the Ctrl+P launcher + the View-menu workbench
                 // toggles to one working domain (pure view filter, nothing
                 // removed). `labelled_by` "Focus" so it is AI-drivable.
                 crate::workbench_focus::focus_selector(self, ui);
-                // One-click panel toggles — "make space" controls pinned to
-                // the far right of the ribbon (Blender / Fusion style).
-                // A toggle is highlighted while its panel is visible.
+                // One-click panel toggles — "make space" controls pinned to the
+                // far right of the ribbon (Blender / Fusion style). A toggle is
+                // highlighted while its panel is visible. When the window is
+                // narrow they collapse into a single "⋯ Panels" overflow menu so
+                // they never overlap the centred title / left menus.
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let any_open = self.show_browser || self.show_mesh_toolbox;
-                    if ui
-                        .selectable_label(!any_open, "Max view")
-                        .on_hover_text(
-                            "Maximize viewport: hide both side panels \
-                             (click again to restore both).",
-                        )
-                        .clicked()
-                    {
-                        let new_state = !any_open;
-                        self.show_browser = new_state;
-                        self.show_mesh_toolbox = new_state;
-                    }
-                    ui.separator();
-                    if ui
-                        .selectable_label(self.show_mesh_toolbox, "Toolbox")
-                        .on_hover_text("Show / hide the right Mesh Toolbox panel.")
-                        .clicked()
-                    {
-                        self.show_mesh_toolbox = !self.show_mesh_toolbox;
-                    }
-                    if ui
-                        .selectable_label(self.show_browser, "Browser")
-                        .on_hover_text("Show / hide the left Browser panel.")
-                        .clicked()
-                    {
-                        self.show_browser = !self.show_browser;
+                    if narrow {
+                        ui.menu_button("⋯ Panels", |ui| {
+                            if ui
+                                .selectable_label(!any_open, "Max view")
+                                .on_hover_text(
+                                    "Maximize viewport: hide both side panels \
+                                     (click again to restore both).",
+                                )
+                                .clicked()
+                            {
+                                let new_state = !any_open;
+                                self.show_browser = new_state;
+                                self.show_mesh_toolbox = new_state;
+                                ui.close_menu();
+                            }
+                            ui.separator();
+                            if ui
+                                .selectable_label(self.show_mesh_toolbox, "Toolbox")
+                                .on_hover_text("Show / hide the right Mesh Toolbox panel.")
+                                .clicked()
+                            {
+                                self.show_mesh_toolbox = !self.show_mesh_toolbox;
+                            }
+                            if ui
+                                .selectable_label(self.show_browser, "Browser")
+                                .on_hover_text("Show / hide the left Browser panel.")
+                                .clicked()
+                            {
+                                self.show_browser = !self.show_browser;
+                            }
+                        })
+                        .response
+                        .on_hover_text("Panel visibility: Max view, Toolbox, Browser.");
+                    } else {
+                        if ui
+                            .selectable_label(!any_open, "Max view")
+                            .on_hover_text(
+                                "Maximize viewport: hide both side panels \
+                                 (click again to restore both).",
+                            )
+                            .clicked()
+                        {
+                            let new_state = !any_open;
+                            self.show_browser = new_state;
+                            self.show_mesh_toolbox = new_state;
+                        }
+                        ui.separator();
+                        if ui
+                            .selectable_label(self.show_mesh_toolbox, "Toolbox")
+                            .on_hover_text("Show / hide the right Mesh Toolbox panel.")
+                            .clicked()
+                        {
+                            self.show_mesh_toolbox = !self.show_mesh_toolbox;
+                        }
+                        if ui
+                            .selectable_label(self.show_browser, "Browser")
+                            .on_hover_text("Show / hide the left Browser panel.")
+                            .clicked()
+                        {
+                            self.show_browser = !self.show_browser;
+                        }
                     }
                 });
             });
