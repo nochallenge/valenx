@@ -56,6 +56,7 @@ pub mod hvac_workbench;
 pub mod inductionmotor_workbench;
 pub mod interior_workbench;
 pub mod neuro_workbench;
+pub mod nodegraph_workbench;
 pub mod reinforcement_workbench;
 pub mod render_workbench;
 pub mod reverse_workbench;
@@ -2101,6 +2102,16 @@ pub struct ValenxApp {
     /// Input parameters + latest result + animation cursor for the Topology
     /// Optimization workbench.
     pub topopt: crate::topopt_workbench::TopOptWorkbenchState,
+
+    /// Whether the right-side **Node Graph** workbench panel is visible.
+    /// Defaults to `false`; toggled from the View menu or opened by the agent
+    /// bridge under the id `"nodegraph"`. An in-house visual node-graph editor
+    /// (draggable nodes, output->input wiring, a topological evaluation pass) —
+    /// the foundation for later pipeline / systems editing. See
+    /// [`crate::nodegraph_workbench`].
+    pub show_nodegraph_workbench: bool,
+    /// The edited graph + canvas interaction state for the Node Graph workbench.
+    pub nodegraph: crate::nodegraph_workbench::NodeGraphWorkbenchState,
 
     /// Whether the right-side Survivability / protection workbench panel is
     /// visible. Defaults to `false`; toggled from the View menu or opened by the

@@ -1731,6 +1731,24 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Node Graph workbench — an in-house
+                    // visual node editor (draggable nodes, output->input wiring,
+                    // a topological evaluation pass).
+                    if ui
+                        .checkbox(&mut self.show_nodegraph_workbench, "Node Graph")
+                        .on_hover_text(
+                            "Show / hide the Node Graph Workbench — an in-house visual node \
+                             editor. Add nodes (Constant / Add / Multiply / Output), drag them \
+                             around, and wire an output port to an input port; press Evaluate to \
+                             flow values through the graph in topological order (the seeded demo \
+                             Constant(2) + Constant(2) -> Add -> Output reads 4). The extensible \
+                             node-type system is the foundation for bond graphs and CAD->FEA \
+                             pipelines.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Survivability / protection workbench
                     // (valenx-survivability) — the DEFENSIVE / protective side of
                     // the shared blast/impact physics; no penetration / lethality.

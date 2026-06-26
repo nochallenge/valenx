@@ -268,12 +268,16 @@ pub enum TabKind {
     //    minimum-compliance density optimisation over Q4 plane-stress elements,
     //    MBB-beam / cantilever load cases) --
     TopOpt,
+    // -- Node Graph (in-house visual node editor: draggable nodes, output->input
+    //    wiring, topological evaluation; the foundation for bond graphs and
+    //    CAD->FEA pipelines) --
+    NodeGraph,
 }
 
 impl TabKind {
     /// Every *template* kind (i.e. excluding [`TabKind::Blank`]), in
     /// `＋ from template`-menu order (grouped via [`Self::group`]).
-    pub const TEMPLATES: [TabKind; 47] = [
+    pub const TEMPLATES: [TabKind; 48] = [
         TabKind::Rocket,
         TabKind::Engine,
         TabKind::Astro,
@@ -284,6 +288,7 @@ impl TabKind {
         TabKind::Cfd,
         TabKind::Fem,
         TabKind::TopOpt,
+        TabKind::NodeGraph,
         TabKind::Reactdyn,
         TabKind::Fields,
         TabKind::Cad,
@@ -335,9 +340,12 @@ impl TabKind {
             | TabKind::Gasdynamics
             | TabKind::Rotor => "Aerospace",
             TabKind::BlackHole => "Astrophysics",
-            TabKind::Cfd | TabKind::Fem | TabKind::TopOpt | TabKind::Reactdyn | TabKind::Fields => {
-                "Simulation"
-            }
+            TabKind::Cfd
+            | TabKind::Fem
+            | TabKind::TopOpt
+            | TabKind::NodeGraph
+            | TabKind::Reactdyn
+            | TabKind::Fields => "Simulation",
             TabKind::Cad
             | TabKind::MeshToolbox
             | TabKind::Sheetmetal
@@ -427,6 +435,7 @@ impl TabKind {
             TabKind::Cosim => "Co-Simulation (FMI / HELICS)",
             TabKind::Mbd => "Multibody dynamics (robot / contact)",
             TabKind::TopOpt => "Topology optimization (SIMP)",
+            TabKind::NodeGraph => "Node graph (visual node editor)",
         }
     }
 
@@ -483,6 +492,7 @@ impl TabKind {
             TabKind::Cosim => app.show_cosim_workbench = true,
             TabKind::Mbd => app.show_mbd_workbench = true,
             TabKind::TopOpt => app.show_topopt_workbench = true,
+            TabKind::NodeGraph => app.show_nodegraph_workbench = true,
         }
     }
 
@@ -545,6 +555,7 @@ impl TabKind {
             "cosim" | "co-simulation" | "cosimulation" | "fmi" => Some(TabKind::Cosim),
             "mbd" | "multibody" | "robot" => Some(TabKind::Mbd),
             "topopt" | "topology" | "simp" | "generative" => Some(TabKind::TopOpt),
+            "nodegraph" | "nodes" | "graph" | "pipeline" => Some(TabKind::NodeGraph),
             _ => None,
         }
     }
@@ -3105,6 +3116,7 @@ mod tests {
             ("cosim", TabKind::Cosim),
             ("mbd", TabKind::Mbd),
             ("topopt", TabKind::TopOpt),
+            ("nodegraph", TabKind::NodeGraph),
         ];
         // Every TEMPLATES kind is covered by the canonical table above.
         assert_eq!(canonical.len(), TabKind::TEMPLATES.len());
@@ -4617,6 +4629,7 @@ mod tests {
             }
             TabKind::Mbd => crate::mbd_workbench::draw_mbd_workbench(app, ctx),
             TabKind::TopOpt => crate::topopt_workbench::draw_topopt_workbench(app, ctx),
+            TabKind::NodeGraph => crate::nodegraph_workbench::draw_nodegraph_workbench(app, ctx),
         });
     }
 
