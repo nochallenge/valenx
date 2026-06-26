@@ -281,6 +281,7 @@ fn tab_kind_id(kind: TabKind) -> String {
         TabKind::Cosim => "cosim",
         TabKind::Mbd => "mbd",
         TabKind::TopOpt => "topopt",
+        TabKind::NodeGraph => "nodegraph",
     }
     .to_string()
 }

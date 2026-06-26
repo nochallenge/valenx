@@ -1297,6 +1297,8 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
                 run_morphogenesis_bridge(app, ch, &id);
             } else if id.as_str() == "topopt.run" {
                 run_topopt_bridge(app, ch, &id);
+            } else if id.as_str() == "nodegraph.eval" {
+                run_nodegraph_bridge(app, ch, &id);
             } else {
                 // Resolve `id` against the EXISTING command-palette registry and
                 // invoke the matching command through the SAME `(cmd.invoke)(app)`
@@ -1779,6 +1781,39 @@ fn run_topopt_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
     );
 }
 
+/// Fire the Node Graph topological evaluation from the bridge. The **Evaluate**
+/// action exists only as an in-panel button; this routes the bridge id
+/// `nodegraph.eval` to the SAME `run` function the button calls, so a
+/// `RunCommand` drives the full evaluation pass.
+///
+/// The active tab must be a [`TabKind::NodeGraph`]; otherwise this posts a
+/// fail-loud `warn` note and changes nothing. After evaluating it acks with the
+/// node-graph readout (node count + edge count + Output value(s)).
+fn run_nodegraph_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::NodeGraph) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Node Graph workbench"),
+            "warn",
+        );
+        return;
+    }
+    crate::nodegraph_workbench::run(app);
+    let readout = app
+        .nodegraph
+        .agent_readout()
+        .unwrap_or_else(|| "(no readout)".to_string());
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {readout}"),
+        "result",
+    );
+}
+
 /// Apply one [`SetControl`](AgentCommand::SetControl): resolve the target
 /// workbench (explicit id or the active tab), then assign `value` to the
 /// caption-named control through that workbench's **own** validated `agent_set`.
@@ -1867,6 +1902,7 @@ fn set_control(
         TabKind::Engine => app.engine.agent_set(name, value),
         TabKind::Cad => app.cad.agent_set(name, value),
         TabKind::TopOpt => app.topopt.agent_set(name, value),
+        TabKind::NodeGraph => app.nodegraph.agent_set(name, value),
         other => Err(format!(
             "set_control: workbench {other:?} ({}) has no settable controls yet",
             kind.label()
@@ -1986,6 +2022,9 @@ fn list_controls(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
         TabKind::Engine => crate::engine_workbench::EngineWorkbenchState::agent_control_names(),
         TabKind::Cad => crate::cad_workbench::CadWorkbenchState::agent_control_names(),
         TabKind::TopOpt => crate::topopt_workbench::TopOptWorkbenchState::agent_control_names(),
+        TabKind::NodeGraph => {
+            crate::nodegraph_workbench::NodeGraphWorkbenchState::agent_control_names()
+        }
         _ => &[],
     };
 
@@ -2045,6 +2084,7 @@ fn read_readout(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
         TabKind::Survivability => Some(app.survivability.agent_readout()),
         TabKind::Genetics => Some(app.genetics.agent_readout()),
         TabKind::TopOpt => Some(app.topopt.agent_readout()),
+        TabKind::NodeGraph => Some(app.nodegraph.agent_readout()),
         _ => None,
     };
 
