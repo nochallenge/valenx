@@ -55,6 +55,7 @@ members = [
     "crates/valenx-thermo",
     "crates/valenx-waveform",
     "crates/valenx-quantum",
+    "crates/valenx-mpm",
     "crates/valenx-step-iges",
     "crates/valenx-surface",
     "crates/valenx-cam",
