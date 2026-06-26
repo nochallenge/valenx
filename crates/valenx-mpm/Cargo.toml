@@ -1,0 +1,16 @@
+[package]
+name = "valenx-mpm"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+description = "Material Point Method (MLS-MPM) for Valenx — large-deformation continuum mechanics for engineering materials, structural failure, and geotechnics."
+
+publish.workspace = true
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

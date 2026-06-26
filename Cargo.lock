@@ -9984,6 +9984,7 @@ dependencies = [
  "valenx-pulley",
  "valenx-pump",
  "valenx-qchem",
+ "valenx-quantum",
  "valenx-queueing",
  "valenx-radioactivity",
  "valenx-rail",
@@ -10027,6 +10028,7 @@ dependencies = [
  "valenx-techdraw",
  "valenx-thermalexpansion",
  "valenx-thermistor",
+ "valenx-thermo",
  "valenx-thermocouple",
  "valenx-thermocycle",
  "valenx-thermoreg",
@@ -11421,6 +11423,10 @@ dependencies = [
  "serde",
  "thiserror 2.0.18",
 ]
+
+[[package]]
+name = "valenx-mpm"
+version = "0.1.0-alpha.1"
 
 [[package]]
 name = "valenx-muscle"
