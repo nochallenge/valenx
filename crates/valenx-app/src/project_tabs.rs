@@ -277,12 +277,17 @@ pub enum TabKind {
     //    whose linear state-space dx/dt = A x + B u is derived from the bond graph
     //    and integrated with RK4) --
     BondGraph,
+    // -- Surrogate Model (in-house ML emulator: trains a tiny MLP on samples from
+    //    a closed-form solver (cantilever tip deflection delta = P L^3 / 3 E I) so
+    //    the input sliders predict the output instantly — the what-if loop — with
+    //    train/test MSE reported and validated against truth) --
+    Surrogate,
 }
 
 impl TabKind {
     /// Every *template* kind (i.e. excluding [`TabKind::Blank`]), in
     /// `＋ from template`-menu order (grouped via [`Self::group`]).
-    pub const TEMPLATES: [TabKind; 49] = [
+    pub const TEMPLATES: [TabKind; 50] = [
         TabKind::Rocket,
         TabKind::Engine,
         TabKind::Astro,
@@ -295,6 +300,7 @@ impl TabKind {
         TabKind::TopOpt,
         TabKind::NodeGraph,
         TabKind::BondGraph,
+        TabKind::Surrogate,
         TabKind::Reactdyn,
         TabKind::Fields,
         TabKind::Cad,
@@ -351,6 +357,7 @@ impl TabKind {
             | TabKind::TopOpt
             | TabKind::NodeGraph
             | TabKind::BondGraph
+            | TabKind::Surrogate
             | TabKind::Reactdyn
             | TabKind::Fields => "Simulation",
             TabKind::Cad
@@ -444,6 +451,7 @@ impl TabKind {
             TabKind::TopOpt => "Topology optimization (SIMP)",
             TabKind::NodeGraph => "Node graph (visual node editor)",
             TabKind::BondGraph => "Bond graph (multi-domain systems)",
+            TabKind::Surrogate => "Surrogate model (ML solver emulator)",
         }
     }
 
@@ -502,6 +510,7 @@ impl TabKind {
             TabKind::TopOpt => app.show_topopt_workbench = true,
             TabKind::NodeGraph => app.show_nodegraph_workbench = true,
             TabKind::BondGraph => app.show_bondgraph_workbench = true,
+            TabKind::Surrogate => app.show_surrogate_workbench = true,
         }
     }
 
@@ -566,6 +575,7 @@ impl TabKind {
             "topopt" | "topology" | "simp" | "generative" => Some(TabKind::TopOpt),
             "nodegraph" | "nodes" | "graph" | "pipeline" => Some(TabKind::NodeGraph),
             "bondgraph" | "bond" | "bonds" => Some(TabKind::BondGraph),
+            "surrogate" | "emulator" | "rsm" | "metamodel" => Some(TabKind::Surrogate),
             _ => None,
         }
     }
@@ -3131,6 +3141,7 @@ mod tests {
             ("topopt", TabKind::TopOpt),
             ("nodegraph", TabKind::NodeGraph),
             ("bondgraph", TabKind::BondGraph),
+            ("surrogate", TabKind::Surrogate),
         ];
         // Every TEMPLATES kind is covered by the canonical table above.
         assert_eq!(canonical.len(), TabKind::TEMPLATES.len());
@@ -4647,6 +4658,7 @@ mod tests {
             TabKind::TopOpt => crate::topopt_workbench::draw_topopt_workbench(app, ctx),
             TabKind::NodeGraph => crate::nodegraph_workbench::draw_nodegraph_workbench(app, ctx),
             TabKind::BondGraph => crate::bondgraph_workbench::draw_bondgraph_workbench(app, ctx),
+            TabKind::Surrogate => crate::surrogate_workbench::draw_surrogate_workbench(app, ctx),
         });
     }
 

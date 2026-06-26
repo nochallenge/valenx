@@ -1769,6 +1769,23 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Surrogate Model workbench — an in-house
+                    // ML emulator: train a tiny MLP on samples from a closed-form
+                    // solver, then predict the output instantly as inputs change.
+                    if ui
+                        .checkbox(&mut self.show_surrogate_workbench, "Surrogate Model")
+                        .on_hover_text(
+                            "Show / hide the Surrogate Model Workbench — an in-house machine-learning \
+                             emulator for an expensive solver. It samples a closed-form ground truth \
+                             (cantilever tip deflection \u{03B4} = P\u{00B7}L\u{00B3}/(3\u{00B7}E\u{00B7}I)), \
+                             trains a tiny 2\u{2192}H\u{2192}H\u{2192}1 MLP (ReLU + Adam on MSE) and \
+                             reports train / test MSE, then predicts the output INSTANTLY as the input \
+                             sliders move (the what-if loop) \u{2014} shown live next to the true value.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Survivability / protection workbench
                     // (valenx-survivability) — the DEFENSIVE / protective side of
                     // the shared blast/impact physics; no penetration / lethality.

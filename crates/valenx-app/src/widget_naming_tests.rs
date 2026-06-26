@@ -464,6 +464,10 @@ const PANELS: &[(&str, fn(&mut ValenxApp, &egui::Context))] = &[
         app.show_bondgraph_workbench = true;
         crate::bondgraph_workbench::draw_bondgraph_workbench(app, ctx);
     }),
+    ("surrogate_workbench", |app, ctx| {
+        app.show_surrogate_workbench = true;
+        crate::surrogate_workbench::draw_surrogate_workbench(app, ctx);
+    }),
     ("missionsim_workbench", |app, ctx| {
         app.show_missionsim_workbench = true;
         crate::missionsim_workbench::draw_missionsim_workbench(app, ctx);

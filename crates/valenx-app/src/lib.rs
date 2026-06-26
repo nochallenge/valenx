@@ -61,6 +61,7 @@ pub mod nodegraph_workbench;
 pub mod reinforcement_workbench;
 pub mod render_workbench;
 pub mod reverse_workbench;
+pub mod surrogate_workbench;
 pub mod variant_effect_workbench;
 pub mod windturbine_workbench;
 
@@ -2125,6 +2126,17 @@ pub struct ValenxApp {
     /// The chosen preset + element parameters + latest solution for the Bond
     /// Graph workbench.
     pub bondgraph: crate::bondgraph_workbench::BondGraphWorkbenchState,
+
+    /// Whether the right-side **Surrogate Model** workbench panel is visible.
+    /// Defaults to `false`; toggled from the View menu or opened by the agent
+    /// bridge under the id `"surrogate"`. An in-house ML surrogate: trains a tiny
+    /// MLP on samples from a closed-form solver (cantilever tip deflection) and
+    /// predicts the output instantly as the input sliders move (the what-if
+    /// loop), shown next to the true value. See [`crate::surrogate_workbench`].
+    pub show_surrogate_workbench: bool,
+    /// The training hyper-parameters + live inputs + latest trained surrogate
+    /// for the Surrogate Model workbench.
+    pub surrogate: crate::surrogate_workbench::SurrogateWorkbenchState,
 
     /// Whether the right-side Survivability / protection workbench panel is
     /// visible. Defaults to `false`; toggled from the View menu or opened by the

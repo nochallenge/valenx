@@ -283,6 +283,7 @@ fn tab_kind_id(kind: TabKind) -> String {
         TabKind::TopOpt => "topopt",
         TabKind::NodeGraph => "nodegraph",
         TabKind::BondGraph => "bondgraph",
+        TabKind::Surrogate => "surrogate",
     }
     .to_string()
 }

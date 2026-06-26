@@ -1301,6 +1301,8 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
                 run_nodegraph_bridge(app, ch, &id);
             } else if id.as_str() == "bondgraph.solve" {
                 run_bondgraph_bridge(app, ch, &id);
+            } else if id.as_str() == "surrogate.train" {
+                run_surrogate_bridge(app, ch, &id);
             } else {
                 // Resolve `id` against the EXISTING command-palette registry and
                 // invoke the matching command through the SAME `(cmd.invoke)(app)`
@@ -1850,6 +1852,39 @@ fn run_bondgraph_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
     );
 }
 
+/// Fire the Surrogate Model sample-then-train from the bridge. The **Train**
+/// action exists only as an in-panel button; this routes the bridge id
+/// `surrogate.train` to the SAME `run` function the button calls, so a
+/// `RunCommand` samples the truth and fits the MLP.
+///
+/// The active tab must be a [`TabKind::Surrogate`]; otherwise this posts a
+/// fail-loud `warn` note and changes nothing. After training it acks with the
+/// surrogate readout (train/test MSE + the live surrogate-vs-true prediction).
+fn run_surrogate_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::Surrogate) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Surrogate Model workbench"),
+            "warn",
+        );
+        return;
+    }
+    crate::surrogate_workbench::run(app);
+    let readout = app
+        .surrogate
+        .agent_readout()
+        .unwrap_or_else(|| "(no readout)".to_string());
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {readout}"),
+        "result",
+    );
+}
+
 /// Apply one [`SetControl`](AgentCommand::SetControl): resolve the target
 /// workbench (explicit id or the active tab), then assign `value` to the
 /// caption-named control through that workbench's **own** validated `agent_set`.
@@ -1940,6 +1975,7 @@ fn set_control(
         TabKind::TopOpt => app.topopt.agent_set(name, value),
         TabKind::NodeGraph => app.nodegraph.agent_set(name, value),
         TabKind::BondGraph => app.bondgraph.agent_set(name, value),
+        TabKind::Surrogate => app.surrogate.agent_set(name, value),
         other => Err(format!(
             "set_control: workbench {other:?} ({}) has no settable controls yet",
             kind.label()
@@ -2065,6 +2101,9 @@ fn list_controls(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
         TabKind::BondGraph => {
             crate::bondgraph_workbench::BondGraphWorkbenchState::agent_control_names()
         }
+        TabKind::Surrogate => {
+            crate::surrogate_workbench::SurrogateWorkbenchState::agent_control_names()
+        }
         _ => &[],
     };
 
@@ -2126,6 +2165,7 @@ fn read_readout(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
         TabKind::TopOpt => Some(app.topopt.agent_readout()),
         TabKind::NodeGraph => Some(app.nodegraph.agent_readout()),
         TabKind::BondGraph => Some(app.bondgraph.agent_readout()),
+        TabKind::Surrogate => Some(app.surrogate.agent_readout()),
         _ => None,
     };
 
