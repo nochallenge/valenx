@@ -57,9 +57,9 @@ version = 2
 # Only licenses actually present in the current dependency tree are listed.
 # Adding a new dependency that pulls in something else means a deliberate
 # review here, not a silent allow. Historical entries that no longer match
-# any crate (MIT-0, MPL-2.0, Unicode-DFS-2016, OFL-1.1) have been dropped to
+# any crate (MIT-0, Unicode-DFS-2016, OFL-1.1) have been dropped to
 # keep `cargo deny check licenses` warning-free; re-add them when an upstream
-# brings them back in. OFL-1.1 specifically is still accepted for epaint via
+# brings them back in. (MPL-2.0 was re-added below for exactly that reason.) OFL-1.1 specifically is still accepted for epaint via
 # the [[licenses.exceptions]] block below — keeping it out of the global
 # allow list means new crates carrying OFL-1.1 still trigger a review.
 allow = [
@@ -75,6 +75,12 @@ allow = [
     "Zlib",
     "Unicode-3.0",
     "BSL-1.0",
+    # MPL-2.0 — file-level (weak) copyleft. Used only by UNMODIFIED upstream deps
+    # (hifitime, resvg/usvg/usvg-*, webpki-roots — pulled via valenx-astro + the
+    # walkers map widget). We don't modify their files, so MPL stays file-scoped
+    # and does NOT relicense valenx's own dual MIT/Apache source. Re-added here
+    # after this batch reintroduced MPL deps (per the historical-entries note above).
+    "MPL-2.0",
 ]
 # Copyleft and commercial-incompatible licenses are denied by default.
 # If an LGPL crate is ever genuinely needed, add a targeted exception
@@ -103,6 +109,17 @@ confidence-threshold = 0.93
 [[licenses.exceptions]]
 allow = ["OFL-1.1", "LicenseRef-UFL-1.0"]
 crate = "epaint"
+
+# libfuzzer-sys is `(MIT OR Apache-2.0) AND NCSA` — the NCSA part covers its
+# bindings to LLVM's libFuzzer. NCSA (University of Illinois/NCSA Open Source
+# License) is a permissive, OSI-approved, FSF-Free BSD-style license. The crate
+# is a transitive *fuzzing* helper of rav1e (the AV1 encoder behind ravif/image,
+# itself pulled by eframe/xcap/walkers) and is only resolved here because
+# `[graph].all-features = true` pulls rav1e's fuzzing feature; no normal build
+# links it. Accept NCSA for this one crate rather than globally.
+[[licenses.exceptions]]
+allow = ["NCSA"]
+crate = "libfuzzer-sys"
 
 [bans]
 multiple-versions = "warn"
