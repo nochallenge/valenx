@@ -84,6 +84,11 @@ const ALLOWLIST: &[(&str, &str, &str)] = &[
         "append_line",
         "append-only .jsonl agent-chat bridge: an atomic full-file replace would truncate the prior appended lines; incremental append is the intended semantics",
     ),
+    (
+        "crates/valenx-mcp/src/bridge.rs",
+        "write_command",
+        "append-only .jsonl command queue to a LIVE valenx GUI that polls the file by byte offset each frame: an atomic temp+rename would swap the inode out from under the running reader and truncate prior queued commands; incremental append is the intended (and required) wire semantics, mirroring assistant_workbench::append_line",
+    ),
     // ── Subprocess stdout/stderr redirect sinks ────────────────────────
     // The created File handle is moved into `Stdio::from(..)` /
     // `cmd.stdout(..)`; the kernel writes the child's output to it. There

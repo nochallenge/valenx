@@ -11697,6 +11697,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "nalgebra",
  "thiserror 2.0.18",
+ "valenx-core",
 ]
 
 [[package]]
