@@ -16,6 +16,11 @@ thiserror  = { workspace = true }
 serde      = { workspace = true }
 nalgebra   = { workspace = true }
 
+# R*-tree spatial index (georust). Pure-Rust; transitive deps are only
+# heapless / num-traits / smallvec. Powers the O(log N) nearest-neighbour
+# and range/bbox queries in `spatial_index`.
+rstar      = "0.13"
+
 # Used by the polyline -> extrusion -> Mesh path. Both crates are
 # already in the workspace dep graph; including them here just
 # makes the dependency explicit.

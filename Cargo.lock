@@ -2717,6 +2717,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hash32"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "47d60b12902ba28e2730cd37e95b8c9223af2808df9e902d4df49588d1470606"
+dependencies = [
+ "byteorder",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2755,6 +2764,16 @@ dependencies = [
  "thiserror 1.0.69",
  "widestring",
  "winapi",
+]
+
+[[package]]
+name = "heapless"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0bfb9eb618601c89945a70e254898da93b13be0388091d42117462b265bb3fad"
+dependencies = [
+ "hash32",
+ "stable_deref_trait",
 ]
 
 [[package]]
@@ -5763,6 +5782,17 @@ name = "roxmltree"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3cd14fd5e3b777a7422cca79358c57a8f6e3a703d9ac187448d0daf220c2407f"
+
+[[package]]
+name = "rstar"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5912b862fa5ffb462607bfd1e35036c458c537921f508c8235a83d5f3987edfe"
+dependencies = [
+ "heapless",
+ "num-traits",
+ "smallvec",
+]
 
 [[package]]
 name = "rustc-hash"
@@ -10364,6 +10394,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
  "libc",
+ "memmap2 0.9.11",
  "proc-macro2 1.0.106",
  "semver 1.0.28",
  "serde",
@@ -10910,6 +10941,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
  "nalgebra",
+ "rstar",
  "serde",
  "thiserror 2.0.18",
  "valenx-mesh",
@@ -12465,6 +12497,17 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-truck-cad"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "thiserror 2.0.18",
+ "truck-meshalgo",
+ "truck-modeling",
+ "truck-shapeops",
+ "valenx-cad",
 ]
 
 [[package]]
