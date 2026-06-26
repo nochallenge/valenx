@@ -1299,6 +1299,8 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
                 run_topopt_bridge(app, ch, &id);
             } else if id.as_str() == "nodegraph.eval" {
                 run_nodegraph_bridge(app, ch, &id);
+            } else if id.as_str() == "bondgraph.solve" {
+                run_bondgraph_bridge(app, ch, &id);
             } else {
                 // Resolve `id` against the EXISTING command-palette registry and
                 // invoke the matching command through the SAME `(cmd.invoke)(app)`
@@ -1814,6 +1816,40 @@ fn run_nodegraph_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
     );
 }
 
+/// Fire the Bond Graph derive-then-integrate solve from the bridge. The
+/// **Solve** action exists only as an in-panel button; this routes the bridge
+/// id `bondgraph.solve` to the SAME `run` function the button calls, so a
+/// `RunCommand` derives the bond-graph state equations and integrates them.
+///
+/// The active tab must be a [`TabKind::BondGraph`]; otherwise this posts a
+/// fail-loud `warn` note and changes nothing. After solving it acks with the
+/// bond-graph readout (preset + ODE order + natural frequency / damping +
+/// final state).
+fn run_bondgraph_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::BondGraph) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Bond Graph workbench"),
+            "warn",
+        );
+        return;
+    }
+    crate::bondgraph_workbench::run(app);
+    let readout = app
+        .bondgraph
+        .agent_readout()
+        .unwrap_or_else(|| "(no readout)".to_string());
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {readout}"),
+        "result",
+    );
+}
+
 /// Apply one [`SetControl`](AgentCommand::SetControl): resolve the target
 /// workbench (explicit id or the active tab), then assign `value` to the
 /// caption-named control through that workbench's **own** validated `agent_set`.
@@ -1903,6 +1939,7 @@ fn set_control(
         TabKind::Cad => app.cad.agent_set(name, value),
         TabKind::TopOpt => app.topopt.agent_set(name, value),
         TabKind::NodeGraph => app.nodegraph.agent_set(name, value),
+        TabKind::BondGraph => app.bondgraph.agent_set(name, value),
         other => Err(format!(
             "set_control: workbench {other:?} ({}) has no settable controls yet",
             kind.label()
@@ -2025,6 +2062,9 @@ fn list_controls(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
         TabKind::NodeGraph => {
             crate::nodegraph_workbench::NodeGraphWorkbenchState::agent_control_names()
         }
+        TabKind::BondGraph => {
+            crate::bondgraph_workbench::BondGraphWorkbenchState::agent_control_names()
+        }
         _ => &[],
     };
 
@@ -2085,6 +2125,7 @@ fn read_readout(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
         TabKind::Genetics => Some(app.genetics.agent_readout()),
         TabKind::TopOpt => Some(app.topopt.agent_readout()),
         TabKind::NodeGraph => Some(app.nodegraph.agent_readout()),
+        TabKind::BondGraph => Some(app.bondgraph.agent_readout()),
         _ => None,
     };
 

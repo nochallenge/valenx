@@ -1749,6 +1749,26 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Bond Graph workbench — an in-house
+                    // multi-domain systems modeller (effort/flow power bonds; the
+                    // bond-graph state equations derived + integrated with RK4).
+                    if ui
+                        .checkbox(&mut self.show_bondgraph_workbench, "Bond Graph")
+                        .on_hover_text(
+                            "Show / hide the Bond Graph Workbench — an in-house multi-domain \
+                             systems modeller. Bond graphs model physical systems by power flow \
+                             (effort \u{00D7} flow) across mechanical / electrical / hydraulic / \
+                             thermal domains with R / C / I / Se / Sf / TF / GY / junction \
+                             elements. Pick a preset (mass-spring-damper / RLC / DC-motor), set \
+                             its element parameters, and press Solve: the standard derivation \
+                             builds the state-space dx/dt = A\u{00B7}x + B\u{00B7}u (state = the energy \
+                             variables on the I and C elements), integrates it (RK4) and plots \
+                             the response.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Survivability / protection workbench
                     // (valenx-survivability) — the DEFENSIVE / protective side of
                     // the shared blast/impact physics; no penetration / lethality.

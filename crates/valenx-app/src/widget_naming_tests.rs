@@ -460,6 +460,10 @@ const PANELS: &[(&str, fn(&mut ValenxApp, &egui::Context))] = &[
         app.show_nodegraph_workbench = true;
         crate::nodegraph_workbench::draw_nodegraph_workbench(app, ctx);
     }),
+    ("bondgraph_workbench", |app, ctx| {
+        app.show_bondgraph_workbench = true;
+        crate::bondgraph_workbench::draw_bondgraph_workbench(app, ctx);
+    }),
     ("missionsim_workbench", |app, ctx| {
         app.show_missionsim_workbench = true;
         crate::missionsim_workbench::draw_missionsim_workbench(app, ctx);
