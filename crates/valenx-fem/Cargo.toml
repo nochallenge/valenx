@@ -18,6 +18,7 @@ serde_json      = { workspace = true }
 tracing         = { workspace = true }
 nalgebra        = { workspace = true }
 nalgebra-sparse = { workspace = true }
+faer            = { workspace = true }
 
 valenx-core   = { path = "../valenx-core" }
 valenx-mesh   = { path = "../valenx-mesh" }
