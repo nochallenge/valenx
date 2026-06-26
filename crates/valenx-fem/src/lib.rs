@@ -155,6 +155,7 @@ pub mod thermal_solver;
 pub mod thermal_transient;
 pub mod transient;
 pub mod validation;
+pub mod voxel_mesh;
 
 pub use analysis::{FemAnalysis, FemAnalysisError};
 pub use assembly::{
@@ -251,3 +252,4 @@ pub use transient::{
     solve_transient_response, FriedlanderPulse, NewmarkBeta, SurvivabilityError, TransientControls,
     TransientResponse, MAX_TIME_STEPS as TRANSIENT_MAX_TIME_STEPS,
 };
+pub use voxel_mesh::{HexMesh, VoxelGrid, VoxelMeshError, MAX_VOXEL_NODES};
