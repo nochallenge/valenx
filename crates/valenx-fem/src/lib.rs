@@ -134,6 +134,7 @@ pub mod constraints;
 pub mod contact;
 pub mod dynamics;
 pub mod elements;
+pub mod faer_solver;
 pub mod harmonic;
 pub mod loads;
 pub mod material;

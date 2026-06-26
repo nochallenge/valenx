@@ -619,6 +619,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Numerics
 ndarray   = "0.15"
 nalgebra  = { version = "0.33", features = ["serde-serialize"] }
+# High-performance pure-Rust dense + sparse linear algebra. Used by
+# valenx-fem as a selectable sparse-direct (sparse Cholesky / LLT)
+# backend alongside the legacy nalgebra-sparse CscCholesky path.
+faer      = { version = "0.24", default-features = false, features = ["std", "linalg"] }
 # Complex scalars for reduced-order modelling (valenx-rom DMD spectra need
 # complex eigenvalues). Pinned to 0.4 — the version nalgebra 0.33 already
 # resolves transitively, so no new tree is pulled in.
