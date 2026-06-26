@@ -264,12 +264,16 @@ pub enum TabKind {
     Autonomy,
     // -- Multibody dynamics (robot / contact) --
     Mbd,
+    // -- Topology optimization (in-house 2-D SIMP generative structural design:
+    //    minimum-compliance density optimisation over Q4 plane-stress elements,
+    //    MBB-beam / cantilever load cases) --
+    TopOpt,
 }
 
 impl TabKind {
     /// Every *template* kind (i.e. excluding [`TabKind::Blank`]), in
     /// `＋ from template`-menu order (grouped via [`Self::group`]).
-    pub const TEMPLATES: [TabKind; 46] = [
+    pub const TEMPLATES: [TabKind; 47] = [
         TabKind::Rocket,
         TabKind::Engine,
         TabKind::Astro,
@@ -279,6 +283,7 @@ impl TabKind {
         TabKind::BlackHole,
         TabKind::Cfd,
         TabKind::Fem,
+        TabKind::TopOpt,
         TabKind::Reactdyn,
         TabKind::Fields,
         TabKind::Cad,
@@ -330,7 +335,9 @@ impl TabKind {
             | TabKind::Gasdynamics
             | TabKind::Rotor => "Aerospace",
             TabKind::BlackHole => "Astrophysics",
-            TabKind::Cfd | TabKind::Fem | TabKind::Reactdyn | TabKind::Fields => "Simulation",
+            TabKind::Cfd | TabKind::Fem | TabKind::TopOpt | TabKind::Reactdyn | TabKind::Fields => {
+                "Simulation"
+            }
             TabKind::Cad
             | TabKind::MeshToolbox
             | TabKind::Sheetmetal
@@ -419,6 +426,7 @@ impl TabKind {
             TabKind::Photogrammetry => "Photogrammetry / SfM scan",
             TabKind::Cosim => "Co-Simulation (FMI / HELICS)",
             TabKind::Mbd => "Multibody dynamics (robot / contact)",
+            TabKind::TopOpt => "Topology optimization (SIMP)",
         }
     }
 
@@ -474,6 +482,7 @@ impl TabKind {
             TabKind::Photogrammetry => app.show_photogrammetry_workbench = true,
             TabKind::Cosim => app.show_cosim_workbench = true,
             TabKind::Mbd => app.show_mbd_workbench = true,
+            TabKind::TopOpt => app.show_topopt_workbench = true,
         }
     }
 
@@ -535,6 +544,7 @@ impl TabKind {
             "photogrammetry" | "sfm" | "scan" => Some(TabKind::Photogrammetry),
             "cosim" | "co-simulation" | "cosimulation" | "fmi" => Some(TabKind::Cosim),
             "mbd" | "multibody" | "robot" => Some(TabKind::Mbd),
+            "topopt" | "topology" | "simp" | "generative" => Some(TabKind::TopOpt),
             _ => None,
         }
     }
@@ -1327,6 +1337,9 @@ pub const ALL_WORKBENCH_KINDS: &[&str] = &[
     // In-house Turing morphogenesis (Gray–Scott reaction–diffusion; live 3-D
     // organic-pattern growth) — surfaced by the Morphogenesis workbench.
     "morphogenesis",
+    // In-house 2-D SIMP generative structural design (minimum-compliance
+    // topology optimization) — surfaced by the Topology Optimization workbench.
+    "topopt",
     // The Mesh Toolbox is gated on `show_mesh_toolbox` (a `_toolbox`, not a
     // `_workbench`, field) but behaves like a per-tab workbench, so it is
     // mappable here under the same id the agent registry / `TabKind::from_id`
@@ -1501,6 +1514,7 @@ pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
         "ppi" | "interactome" | "network" => app.show_ppi_workbench = on,
         "morphogenesis" | "turing" | "reactiondiffusion" => app.show_morphogenesis_workbench = on,
         "mbd" | "multibody" | "robot" => app.show_mbd_workbench = on,
+        "topopt" | "topology" | "simp" | "generative" => app.show_topopt_workbench = on,
         // Mesh Toolbox (a `_toolbox` flag, mapped here for parity).
         "mesh" | "meshtoolbox" => app.show_mesh_toolbox = on,
         // Unknown kind: no-op — a stale/hostile registry string is ignored.
@@ -1567,6 +1581,7 @@ fn clear_all_workbenches(app: &mut ValenxApp) {
     app.show_cosim_workbench = false;
     app.show_ppi_workbench = false;
     app.show_mbd_workbench = false;
+    app.show_topopt_workbench = false;
 }
 
 /// Reconcile the visible workbench + central viewport with the active
@@ -3089,6 +3104,7 @@ mod tests {
             ("photogrammetry", TabKind::Photogrammetry),
             ("cosim", TabKind::Cosim),
             ("mbd", TabKind::Mbd),
+            ("topopt", TabKind::TopOpt),
         ];
         // Every TEMPLATES kind is covered by the canonical table above.
         assert_eq!(canonical.len(), TabKind::TEMPLATES.len());
@@ -4527,6 +4543,7 @@ mod tests {
             app.show_ppi_workbench,
             app.show_morphogenesis_workbench,
             app.show_mbd_workbench,
+            app.show_topopt_workbench,
         ]
         .into_iter()
         .filter(|&b| b)
@@ -4599,6 +4616,7 @@ mod tests {
                 crate::morphogenesis_workbench::draw_morphogenesis_workbench(app, ctx)
             }
             TabKind::Mbd => crate::mbd_workbench::draw_mbd_workbench(app, ctx),
+            TabKind::TopOpt => crate::topopt_workbench::draw_topopt_workbench(app, ctx),
         });
     }
 
@@ -4893,8 +4911,8 @@ mod headless_ui_tests {
         }
         assert_eq!(
             ALL_WORKBENCH_KINDS.len(),
-            149,
-            "148 `show_*_workbench` fields + the meshtoolbox alias"
+            150,
+            "149 `show_*_workbench` fields + the meshtoolbox alias"
         );
         assert!(ALL_WORKBENCH_KINDS.contains(&"meshtoolbox"));
         // A couple of representative kinds are present.

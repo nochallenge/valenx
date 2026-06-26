@@ -280,6 +280,7 @@ fn tab_kind_id(kind: TabKind) -> String {
         TabKind::Photogrammetry => "photogrammetry",
         TabKind::Cosim => "cosim",
         TabKind::Mbd => "mbd",
+        TabKind::TopOpt => "topopt",
     }
     .to_string()
 }

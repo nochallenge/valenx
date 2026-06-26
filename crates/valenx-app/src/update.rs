@@ -1715,6 +1715,22 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Topology Optimization workbench — an
+                    // in-house 2-D SIMP generative structural-design sandbox.
+                    if ui
+                        .checkbox(&mut self.show_topopt_workbench, "Topology Optimization")
+                        .on_hover_text(
+                            "Show / hide the Topology Optimization Workbench — in-house 2-D SIMP \
+                             generative structural design. Pick a domain (nx×ny), a load case \
+                             (MBB beam / cantilever) and a volume budget; the solver iteratively \
+                             strips material to the stiffest (minimum-compliance) truss and \
+                             animates it forming as a density heat-map. FE solves run on the \
+                             valenx-fem faer sparse backend (valenx-topopt).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Survivability / protection workbench
                     // (valenx-survivability) — the DEFENSIVE / protective side of
                     // the shared blast/impact physics; no penetration / lethality.
@@ -3633,6 +3649,14 @@ impl eframe::App for ValenxApp {
             // 3-D surface (valenx-app::morphogenesis). A no-op unless toggled on
             // via View → Morphogenesis.
             crate::morphogenesis_workbench::draw_morphogenesis_workbench(self, ctx);
+
+            // Topology Optimization Workbench (right) — in-house 2-D SIMP
+            // generative structural design (minimum-compliance density
+            // optimisation over Q4 plane-stress elements, MBB-beam / cantilever
+            // load cases) on valenx-topopt, FE solves via the valenx-fem faer
+            // sparse backend. A no-op unless toggled on via
+            // View → Topology Optimization.
+            crate::topopt_workbench::draw_topopt_workbench(self, ctx);
 
             // Survivability / protection Workbench (right) — the DEFENSIVE /
             // protective side of the shared blast/impact physics (free-field
