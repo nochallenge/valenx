@@ -26,6 +26,15 @@
 //!   that hits a target focal length). See [`lensmaker::focal_length`]
 //!   and [`lensmaker::Lens`], which can hand a [`thin_lens::ThinLens`]
 //!   straight to the imaging code.
+//! - **Ray-transfer (ABCD) matrices** ([`abcd`]) — the paraxial
+//!   ray-transfer-matrix formalism: a [`abcd::Ray`] (height, slope) pushed
+//!   through composable [`abcd::RayTransfer`] elements (free-space gaps,
+//!   thin lenses, and flat / spherical refracting surfaces via Snell in
+//!   the paraxial limit). Cascade with [`abcd::RayTransfer::then`], read
+//!   the [effective focal length](abcd::RayTransfer::effective_focal_length),
+//!   and locate conjugate images
+//!   ([`abcd::RayTransfer::image_distance`]) of multi-element systems —
+//!   the matrix companion to the closed-form thin-lens / lensmaker models.
 //!
 //! ## Model
 //!
@@ -54,11 +63,13 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod abcd;
 pub mod error;
 pub mod lensmaker;
 pub mod refraction;
 pub mod thin_lens;
 
+pub use abcd::{ImagePlane, Ray, RayTransfer};
 pub use error::{ErrorCategory, OpticsError};
 pub use lensmaker::{focal_length, radius_for_focal_length, Lens};
 pub use refraction::{classify_ray, critical_angle_deg, refract_angle, Interface, RayOutcome};
@@ -131,5 +142,46 @@ mod integration_tests {
         let into = iface.refract(40.0).unwrap();
         let back = iface.reversed().refract(into).unwrap();
         assert!((back - 40.0).abs() < 1e-7, "back = {back}");
+    }
+
+    #[test]
+    fn lensmaker_abcd_and_thin_lens_all_agree() {
+        // Build a converging lens with the lensmaker, then check the ABCD
+        // matrix path and the Gaussian thin-lens path produce the same
+        // image for the same object — three independent code paths, one
+        // ground truth.
+        let lens = Lens::new(1.5, 0.10, -0.10).unwrap();
+        let f = lens.focal_length().unwrap(); // 0.10 m
+        let object = 0.30;
+
+        // ABCD: bare thin-lens matrix of focal length f.
+        let abcd = RayTransfer::thin_lens(f)
+            .unwrap()
+            .image_distance(object)
+            .unwrap();
+        // Gaussian closed form.
+        let gauss = image(f, object).unwrap();
+
+        assert!((abcd.distance - gauss.distance).abs() < 1e-12);
+        assert!((abcd.magnification - gauss.magnification).abs() < 1e-12);
+        // And m = -v/u holds on the matrix result.
+        assert!((abcd.magnification - (-abcd.distance / object)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn abcd_two_surface_lens_matches_lensmaker_focal_length() {
+        // Compose two spherical refractions (air|glass and glass|air) at
+        // zero thickness and confirm the effective focal length equals the
+        // lensmaker's value for the same surfaces.
+        let lens = Lens::new(1.5, 0.10, -0.10).unwrap();
+        let f_lm = lens.focal_length().unwrap();
+        let sys = RayTransfer::refraction(1.0, 1.5, 0.10)
+            .unwrap()
+            .then(&RayTransfer::refraction(1.5, 1.0, -0.10).unwrap());
+        let f_abcd = sys.effective_focal_length().unwrap();
+        assert!(
+            (f_abcd - f_lm).abs() < 1e-12,
+            "abcd {f_abcd} vs lensmaker {f_lm}"
+        );
     }
 }
