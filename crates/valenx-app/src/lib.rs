@@ -854,6 +854,18 @@ pub struct ValenxApp {
     /// reads to ~1/sec. `None` until the first poll (derive default). See
     /// [`crate::agent_commands`].
     pub last_agent_poll: Option<std::time::Instant>,
+    /// **Queue of accessibility actions to self-inject next frame**, the
+    /// mechanism behind the generic
+    /// [`invoke_named`](crate::agent_commands::AgentCommand::InvokeNamed) bridge
+    /// command. Each entry is an `accesskit` node id (resolved from a widget's
+    /// accessible **name** by [`crate::agent_commands`]'s headless probe) plus
+    /// the action to fire on it (`Default` = a click). [`Self::raw_input_hook`]
+    /// drains this into the next frame's `RawInput` as
+    /// `Event::AccessKitActionRequest`, so egui treats it **exactly** like an
+    /// Invoke arriving from an external UI-Automation client — the same code
+    /// path a real "▶ Compute" click takes. Empty in the normal interactive
+    /// build (derive default); only the agent bridge ever pushes to it.
+    pub pending_accesskit_actions: Vec<(egui::accesskit::NodeId, egui::accesskit::Action)>,
     /// Per-unit chat **input buffers** for the "Workbench + Agent" `agent:<n>`
     /// tiles, keyed by unit number `n`. Each unit's chat `TextEdit` binds to its
     /// own entry here (via `unit_chat_inputs.entry(n).or_default()`) so the six

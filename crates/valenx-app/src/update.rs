@@ -4722,6 +4722,40 @@ impl eframe::App for ValenxApp {
             std::thread::sleep(std::time::Duration::from_millis(200));
         }
     }
+
+    /// **Self-inject queued accessibility actions into the frame's input.**
+    ///
+    /// eframe calls this once per frame, just *before* the platform's `RawInput`
+    /// is handed to egui (see eframe `epi_integration`), so it is the sanctioned
+    /// place for an app to add synthetic input events. It is the engine behind
+    /// the generic [`crate::agent_commands::AgentCommand::InvokeNamed`] bridge
+    /// command: [`crate::agent_commands`] resolves a widget's accessible **name**
+    /// to its `accesskit` node id and pushes `(id, Action::Default)` onto
+    /// [`Self::pending_accesskit_actions`]; here we drain that queue into
+    /// `raw_input.events` as `Event::AccessKitActionRequest`, which is **exactly**
+    /// the event eframe's own `on_accesskit_action_request` pushes when an
+    /// external UI-Automation client clicks a control by name. egui's
+    /// `interact()` then sees `has_accesskit_action_request(id, Default)` and
+    /// reports the matching button as `.clicked()` — no per-widget cooperation,
+    /// no duplicated action logic, the same code path a real click takes.
+    ///
+    /// Each queued action fires on exactly one frame (the queue is drained), and
+    /// the queue is empty in the normal interactive build, so this is a no-op
+    /// cost when the bridge is idle.
+    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        if self.pending_accesskit_actions.is_empty() {
+            return;
+        }
+        for (target, action) in self.pending_accesskit_actions.drain(..) {
+            raw_input.events.push(egui::Event::AccessKitActionRequest(
+                egui::accesskit::ActionRequest {
+                    action,
+                    target,
+                    data: None,
+                },
+            ));
+        }
+    }
 }
 
 impl ValenxApp {

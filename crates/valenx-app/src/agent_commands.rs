@@ -490,6 +490,52 @@ pub enum AgentCommand {
         #[serde(default)]
         workbench: Option<String>,
     },
+    /// **Click any button / widget in the active workbench by its accessible
+    /// name** — the generic, no-per-workbench-wiring drive command. Where
+    /// [`SetControl`](AgentCommand::SetControl) writes a tool's *inputs* and
+    /// [`RunCommand`](AgentCommand::RunCommand) fires a *registered* action,
+    /// `invoke_named` triggers the workbench's own in-panel buttons (its
+    /// "▶ Compute" / "Run" / "Apply" / "Analyze") **by the exact caption a
+    /// screen reader / UI-Automation client sees** — closing the AI-drivability
+    /// gap for the ~40 workbenches that have named controls + buttons but no
+    /// bespoke bridge run-id.
+    ///
+    /// Mechanism (identical to how an external UIA client clicks by name):
+    /// [`invoke_named`] runs a **headless probe** of the active workbench's panel
+    /// in a throwaway accesskit-enabled context, finds the node whose accessible
+    /// `name` matches `name`, and queues an `accesskit` `Default` action on that
+    /// node id ([`crate::ValenxApp::pending_accesskit_actions`]). On the **next**
+    /// frame [`crate::ValenxApp::raw_input_hook`] injects it as an
+    /// `AccessKitActionRequest`, and egui reports the matching button as
+    /// `.clicked()` — the same path a real click takes (the bridge keeps frames
+    /// alive via the unfocused `request_repaint`, so the queued action fires
+    /// promptly). The node id is a deterministic hash of the widget's egui id, so
+    /// the id resolved in the probe is the *same* id the live frame uses.
+    ///
+    /// Matching is exact, then a case-insensitive fallback. No match (or no
+    /// active workbench) posts a `warn` feed note and changes nothing (never a
+    /// panic); a match posts an ack naming the button it queued.
+    InvokeNamed {
+        /// The button/widget's accessible name (== the caption the user sees,
+        /// the same string the UI-Automation tree exposes as `Name`).
+        name: String,
+    },
+    /// **Enumerate the clickable button captions in the active workbench** into
+    /// this channel's chat feed, so an agent can *discover* what
+    /// [`InvokeNamed`](AgentCommand::InvokeNamed) accepts without hard-coding
+    /// them. Runs the same headless accesskit probe and lists every node whose
+    /// role is a button (i.e. invokable), by name. No app state changes; an
+    /// empty/closed workbench posts a note saying so.
+    ListButtons,
+    /// **Read the active workbench panel's visible text back into this channel's
+    /// chat feed**, generically — the accessibility-tree counterpart to
+    /// [`ReadReadout`](AgentCommand::ReadReadout) that needs no per-workbench
+    /// `agent_readout`. Runs the same headless accesskit probe and concatenates
+    /// the readable text nodes (labels / values) of the active workbench, so an
+    /// agent can self-verify a computed result by name even on a tool that has
+    /// no bespoke readout wired. Posted as a `result` feed note (bounded in
+    /// length). Purely read-only; a closed workbench posts a `warn`.
+    ReadText,
     /// **Snap the central 3-D viewport camera to a canonical view.** `dir` is one
     /// of `front` / `back` / `left` / `right` / `top` / `bottom` / `iso`
     /// (case-insensitive), mapped to a [`valenx_viz::ViewDirection`] and applied
@@ -1423,6 +1469,15 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
         }
         AgentCommand::ReadReadout { workbench } => {
             read_readout(app, ch, workbench.as_deref());
+        }
+        AgentCommand::InvokeNamed { name } => {
+            invoke_named(app, ch, &name);
+        }
+        AgentCommand::ListButtons => {
+            list_buttons(app, ch);
+        }
+        AgentCommand::ReadText => {
+            read_text(app, ch);
         }
         AgentCommand::SetView { dir } => {
             // Snap the central viewport camera to a canonical ViewCube
@@ -2477,6 +2532,436 @@ fn read_readout(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
             crate::assistant_workbench::append_feed_note(app, ch, "Claude", &body, "warn");
         }
     }
+}
+
+/// Draw the **active workbench's right-side panel** into a (probe) context, for
+/// the headless accessibility probe behind [`invoke_named`] / [`list_buttons`] /
+/// [`read_text`]. Dispatches the active [`TabKind`] to the SAME
+/// `draw_<wb>_workbench(app, ctx)` entry point the live `update()` loop calls, so
+/// the probe tree is byte-for-byte the panel the user sees (every `draw_*` fn
+/// self-gates on its own `show_*` flag, which the caller force-sets for the probe
+/// frame). A pure dispatch table — no per-workbench *logic* — mirroring the
+/// `set_control` / `read_readout` maps in this file; a `TabKind` not yet mapped
+/// (e.g. `Blank`) simply draws nothing, and the caller reports "no buttons".
+fn draw_active_workbench_probe(app: &mut ValenxApp, ctx: &egui::Context, kind: TabKind) {
+    match kind {
+        TabKind::Rocket => crate::rocket_workbench::draw_rocket_workbench(app, ctx),
+        TabKind::Engine => crate::engine_workbench::draw_engine_workbench(app, ctx),
+        TabKind::Astro => crate::astro_workbench::draw_astro_workbench(app, ctx),
+        TabKind::Aero => crate::aero_workbench::draw_aero_workbench(app, ctx),
+        TabKind::Gasdynamics => crate::gasdynamics_workbench::draw_gasdynamics_workbench(app, ctx),
+        TabKind::Rotor => crate::rotor_workbench::draw_rotor_workbench(app, ctx),
+        TabKind::BlackHole => crate::blackhole_workbench::draw_blackhole_workbench(app, ctx),
+        TabKind::Cfd => crate::cfd_workbench::draw_cfd_workbench(app, ctx),
+        TabKind::Fem => crate::fem_workbench::draw_fem_workbench(app, ctx),
+        TabKind::Reactdyn => crate::reactdyn_workbench::draw_reactdyn_workbench(app, ctx),
+        TabKind::Fields => crate::fields_workbench::draw_fields_workbench(app, ctx),
+        TabKind::Thermo => crate::thermo_workbench::draw_thermo_workbench(app, ctx),
+        TabKind::Quantum => crate::quantum_workbench::draw_quantum_workbench(app, ctx),
+        TabKind::Cad => crate::cad_workbench::draw_cad_workbench(app, ctx),
+        TabKind::BrepCad => crate::brep_workbench::draw_brep_workbench(app, ctx),
+        TabKind::MeshToolbox => crate::mesh_toolbox::draw_mesh_toolbox(app, ctx),
+        TabKind::Sheetmetal => crate::sheetmetal_workbench::draw_sheetmetal_workbench(app, ctx),
+        TabKind::Reverse => crate::reverse_workbench::draw_reverse_workbench(app, ctx),
+        TabKind::Draft2d => crate::draft2d_workbench::draw_draft2d_workbench(app, ctx),
+        TabKind::Render => crate::render_workbench::draw_render_workbench(app, ctx),
+        TabKind::Animate => crate::animate_workbench::draw_animate_workbench(app, ctx),
+        TabKind::Springs => crate::springs_workbench::draw_springs_workbench(app, ctx),
+        TabKind::Gears => crate::gears_workbench::draw_gears_workbench(app, ctx),
+        TabKind::Fasteners => crate::fasteners_workbench::draw_fasteners_workbench(app, ctx),
+        TabKind::Frames => crate::frames_workbench::draw_frames_workbench(app, ctx),
+        TabKind::Collision => crate::collision_workbench::draw_collision_workbench(app, ctx),
+        TabKind::Piping => crate::piping_workbench::draw_piping_workbench(app, ctx),
+        TabKind::Hvac => crate::hvac_workbench::draw_hvac_workbench(app, ctx),
+        TabKind::Reinforcement => {
+            crate::reinforcement_workbench::draw_reinforcement_workbench(app, ctx)
+        }
+        TabKind::Interior => crate::interior_workbench::draw_interior_workbench(app, ctx),
+        TabKind::Geomatics => crate::geomatics_workbench::draw_geomatics_workbench(app, ctx),
+        TabKind::Genetics => crate::genetics_workbench::draw_genetics_workbench(app, ctx),
+        TabKind::Neuro => crate::neuro_workbench::draw_neuro_workbench(app, ctx),
+        TabKind::VariantEffect => {
+            crate::variant_effect_workbench::draw_variant_effect_workbench(app, ctx)
+        }
+        TabKind::Ppi => crate::ppi_workbench::draw_ppi_workbench(app, ctx),
+        TabKind::Morphogenesis => {
+            crate::morphogenesis_workbench::draw_morphogenesis_workbench(app, ctx)
+        }
+        TabKind::Sensors => crate::sensors_workbench::draw_sensors_workbench(app, ctx),
+        TabKind::Autonomy => crate::autonomy_workbench::draw_autonomy_workbench(app, ctx),
+        TabKind::Fluids => crate::fluids_workbench::draw_fluids_workbench(app, ctx),
+        TabKind::Ocean => crate::ocean_workbench::draw_ocean_workbench(app, ctx),
+        TabKind::Rom => crate::rom_workbench::draw_rom_workbench(app, ctx),
+        TabKind::Uq => crate::uq_workbench::draw_uq_workbench(app, ctx),
+        TabKind::Uas => crate::uas_workbench::draw_uas_workbench(app, ctx),
+        TabKind::MissionSim => crate::missionsim_workbench::draw_missionsim_workbench(app, ctx),
+        TabKind::MissionPlanner => {
+            crate::mission_planner_workbench::draw_mission_planner_workbench(app, ctx)
+        }
+        TabKind::Survivability => {
+            crate::survivability_workbench::draw_survivability_workbench(app, ctx)
+        }
+        TabKind::Photogrammetry => {
+            crate::photogrammetry_workbench::draw_photogrammetry_workbench(app, ctx)
+        }
+        TabKind::Cosim => crate::cosim_workbench::draw_cosim_workbench(app, ctx),
+        TabKind::Mbd => crate::mbd_workbench::draw_mbd_workbench(app, ctx),
+        TabKind::TopOpt => crate::topopt_workbench::draw_topopt_workbench(app, ctx),
+        TabKind::NodeGraph => crate::nodegraph_workbench::draw_nodegraph_workbench(app, ctx),
+        TabKind::BondGraph => crate::bondgraph_workbench::draw_bondgraph_workbench(app, ctx),
+        TabKind::Surrogate => crate::surrogate_workbench::draw_surrogate_workbench(app, ctx),
+        TabKind::Optics => crate::optics_workbench::draw_optics_workbench(app, ctx),
+        TabKind::Acoustics => crate::acoustics_workbench::draw_acoustics_workbench(app, ctx),
+        TabKind::Waveform => crate::waveform_workbench::draw_waveform_workbench(app, ctx),
+        // No standalone right-panel to probe (an empty project tab).
+        TabKind::Blank => {}
+    }
+}
+
+/// Run a **headless accessibility probe of the active workbench** and return its
+/// emitted accesskit nodes — the SAME `(NodeId, Node)` tree a screen reader / a
+/// UI-Automation client reads. The shared engine behind the three generic,
+/// no-per-workbench-wiring commands ([`invoke_named`], [`list_buttons`],
+/// [`read_text`]).
+///
+/// Renders the active workbench's panel into a throwaway accesskit-enabled
+/// [`egui::Context`] via [`draw_active_workbench_probe`] (force-setting the
+/// panel's `show_*` flag for the probe frame, then restoring it so the probe
+/// can't leave a panel toggled on). Returns `None` when there is no active
+/// workbench to probe.
+///
+/// **Why the node ids are usable on the live frame:** an egui widget's
+/// `accesskit::NodeId` is a deterministic hash of its egui `Id` (derived from
+/// the widget's source location / label), so the id a button gets in this probe
+/// context is identical to the id it gets in the real frame — the id resolved
+/// here can be queued for [`crate::ValenxApp::raw_input_hook`] to inject.
+fn probe_active_workbench(
+    app: &mut ValenxApp,
+) -> Option<Vec<(egui::accesskit::NodeId, egui::accesskit::Node)>> {
+    let kind = app.tab_bar.active_kind()?;
+
+    // Force the active workbench's `show_*` flag on for the probe (its `draw_*`
+    // fn early-returns when hidden), remembering the prior value so we can leave
+    // app state exactly as we found it — the probe must be side-effect-free.
+    let was_shown = workbench_show_flag(app, kind);
+    set_workbench_show_flag(app, kind, true);
+
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    let out = ctx.run(egui::RawInput::default(), |ctx| {
+        draw_active_workbench_probe(app, ctx, kind);
+    });
+
+    // Restore the prior visibility so the probe leaves no trace.
+    set_workbench_show_flag(app, kind, was_shown);
+
+    out.platform_output.accesskit_update.map(|u| u.nodes)
+}
+
+/// Read the current value of the active workbench's `show_*` flag, so
+/// [`probe_active_workbench`] can restore it after the probe. Mirrors
+/// [`set_workbench_show_flag`].
+fn workbench_show_flag(app: &ValenxApp, kind: TabKind) -> bool {
+    match kind {
+        TabKind::Rocket => app.show_rocket_workbench,
+        TabKind::Engine => app.show_engine_workbench,
+        TabKind::Astro => app.show_astro_workbench,
+        TabKind::Aero => app.show_aero_workbench,
+        TabKind::Gasdynamics => app.show_gasdynamics_workbench,
+        TabKind::Rotor => app.show_rotor_workbench,
+        TabKind::BlackHole => app.show_blackhole_workbench,
+        TabKind::Cfd => app.show_cfd_workbench,
+        TabKind::Fem => app.show_fem_workbench,
+        TabKind::Reactdyn => app.show_reactdyn_workbench,
+        TabKind::Fields => app.show_fields_workbench,
+        TabKind::Thermo => app.show_thermo_workbench,
+        TabKind::Quantum => app.show_quantum_workbench,
+        TabKind::Cad => app.show_cad_workbench,
+        TabKind::BrepCad => app.show_brep_workbench,
+        TabKind::MeshToolbox => app.show_mesh_toolbox,
+        TabKind::Sheetmetal => app.show_sheetmetal_workbench,
+        TabKind::Reverse => app.show_reverse_workbench,
+        TabKind::Draft2d => app.show_draft2d_workbench,
+        TabKind::Render => app.show_render_workbench,
+        TabKind::Animate => app.show_animate_workbench,
+        TabKind::Springs => app.show_springs_workbench,
+        TabKind::Gears => app.show_gears_workbench,
+        TabKind::Fasteners => app.show_fasteners_workbench,
+        TabKind::Frames => app.show_frames_workbench,
+        TabKind::Collision => app.show_collision_workbench,
+        TabKind::Piping => app.show_piping_workbench,
+        TabKind::Hvac => app.show_hvac_workbench,
+        TabKind::Reinforcement => app.show_reinforcement_workbench,
+        TabKind::Interior => app.show_interior_workbench,
+        TabKind::Geomatics => app.show_geomatics_workbench,
+        TabKind::Genetics => app.show_genetics_workbench,
+        TabKind::Neuro => app.show_neuro_workbench,
+        TabKind::VariantEffect => app.show_variant_effect_workbench,
+        TabKind::Ppi => app.show_ppi_workbench,
+        TabKind::Morphogenesis => app.show_morphogenesis_workbench,
+        TabKind::Sensors => app.show_sensors_workbench,
+        TabKind::Autonomy => app.show_autonomy_workbench,
+        TabKind::Fluids => app.show_fluids_workbench,
+        TabKind::Ocean => app.show_ocean_workbench,
+        TabKind::Rom => app.show_rom_workbench,
+        TabKind::Uq => app.show_uq_workbench,
+        TabKind::Uas => app.show_uas_workbench,
+        TabKind::MissionSim => app.show_missionsim_workbench,
+        TabKind::MissionPlanner => app.show_mission_planner_workbench,
+        TabKind::Survivability => app.show_survivability_workbench,
+        TabKind::Photogrammetry => app.show_photogrammetry_workbench,
+        TabKind::Cosim => app.show_cosim_workbench,
+        TabKind::Mbd => app.show_mbd_workbench,
+        TabKind::TopOpt => app.show_topopt_workbench,
+        TabKind::NodeGraph => app.show_nodegraph_workbench,
+        TabKind::BondGraph => app.show_bondgraph_workbench,
+        TabKind::Surrogate => app.show_surrogate_workbench,
+        TabKind::Optics => app.show_optics_workbench,
+        TabKind::Acoustics => app.show_acoustics_workbench,
+        TabKind::Waveform => app.show_waveform_workbench,
+        TabKind::Blank => false,
+    }
+}
+
+/// Set the active workbench's `show_*` flag for the probe, then restore it.
+/// Mirrors [`crate::project_tabs`]'s `TabKind::show` (which only ever sets
+/// `true`); this variant takes the value so [`probe_active_workbench`] can both
+/// force the panel open and put the flag back exactly as it was.
+fn set_workbench_show_flag(app: &mut ValenxApp, kind: TabKind, v: bool) {
+    match kind {
+        TabKind::Rocket => app.show_rocket_workbench = v,
+        TabKind::Engine => app.show_engine_workbench = v,
+        TabKind::Astro => app.show_astro_workbench = v,
+        TabKind::Aero => app.show_aero_workbench = v,
+        TabKind::Gasdynamics => app.show_gasdynamics_workbench = v,
+        TabKind::Rotor => app.show_rotor_workbench = v,
+        TabKind::BlackHole => app.show_blackhole_workbench = v,
+        TabKind::Cfd => app.show_cfd_workbench = v,
+        TabKind::Fem => app.show_fem_workbench = v,
+        TabKind::Reactdyn => app.show_reactdyn_workbench = v,
+        TabKind::Fields => app.show_fields_workbench = v,
+        TabKind::Thermo => app.show_thermo_workbench = v,
+        TabKind::Quantum => app.show_quantum_workbench = v,
+        TabKind::Cad => app.show_cad_workbench = v,
+        TabKind::BrepCad => app.show_brep_workbench = v,
+        TabKind::MeshToolbox => app.show_mesh_toolbox = v,
+        TabKind::Sheetmetal => app.show_sheetmetal_workbench = v,
+        TabKind::Reverse => app.show_reverse_workbench = v,
+        TabKind::Draft2d => app.show_draft2d_workbench = v,
+        TabKind::Render => app.show_render_workbench = v,
+        TabKind::Animate => app.show_animate_workbench = v,
+        TabKind::Springs => app.show_springs_workbench = v,
+        TabKind::Gears => app.show_gears_workbench = v,
+        TabKind::Fasteners => app.show_fasteners_workbench = v,
+        TabKind::Frames => app.show_frames_workbench = v,
+        TabKind::Collision => app.show_collision_workbench = v,
+        TabKind::Piping => app.show_piping_workbench = v,
+        TabKind::Hvac => app.show_hvac_workbench = v,
+        TabKind::Reinforcement => app.show_reinforcement_workbench = v,
+        TabKind::Interior => app.show_interior_workbench = v,
+        TabKind::Geomatics => app.show_geomatics_workbench = v,
+        TabKind::Genetics => app.show_genetics_workbench = v,
+        TabKind::Neuro => app.show_neuro_workbench = v,
+        TabKind::VariantEffect => app.show_variant_effect_workbench = v,
+        TabKind::Ppi => app.show_ppi_workbench = v,
+        TabKind::Morphogenesis => app.show_morphogenesis_workbench = v,
+        TabKind::Sensors => app.show_sensors_workbench = v,
+        TabKind::Autonomy => app.show_autonomy_workbench = v,
+        TabKind::Fluids => app.show_fluids_workbench = v,
+        TabKind::Ocean => app.show_ocean_workbench = v,
+        TabKind::Rom => app.show_rom_workbench = v,
+        TabKind::Uq => app.show_uq_workbench = v,
+        TabKind::Uas => app.show_uas_workbench = v,
+        TabKind::MissionSim => app.show_missionsim_workbench = v,
+        TabKind::MissionPlanner => app.show_mission_planner_workbench = v,
+        TabKind::Survivability => app.show_survivability_workbench = v,
+        TabKind::Photogrammetry => app.show_photogrammetry_workbench = v,
+        TabKind::Cosim => app.show_cosim_workbench = v,
+        TabKind::Mbd => app.show_mbd_workbench = v,
+        TabKind::TopOpt => app.show_topopt_workbench = v,
+        TabKind::NodeGraph => app.show_nodegraph_workbench = v,
+        TabKind::BondGraph => app.show_bondgraph_workbench = v,
+        TabKind::Surrogate => app.show_surrogate_workbench = v,
+        TabKind::Optics => app.show_optics_workbench = v,
+        TabKind::Acoustics => app.show_acoustics_workbench = v,
+        TabKind::Waveform => app.show_waveform_workbench = v,
+        TabKind::Blank => {}
+    }
+}
+
+/// Is this accesskit node a **clickable button** (so [`invoke_named`] /
+/// [`list_buttons`] should consider it)? egui maps `ui.button(...)` to
+/// [`Role::Button`] and a selectable label / toggle to
+/// [`Role::ToggleButton`]; both are invokable via the `Default` action, so both
+/// count. Other roles (labels, spin buttons, the window root) are excluded.
+fn is_clickable(node: &egui::accesskit::Node) -> bool {
+    use egui::accesskit::Role;
+    matches!(node.role(), Role::Button | Role::ToggleButton)
+}
+
+/// Apply one [`InvokeNamed`](AgentCommand::InvokeNamed): probe the active
+/// workbench's accessibility tree, resolve `name` to a clickable node, and queue
+/// an `accesskit` `Default` action on it for [`crate::ValenxApp::raw_input_hook`]
+/// to inject next frame (so the matching button reports `.clicked()` — the same
+/// path a real click takes). Exact name match first, then case-insensitive. No
+/// active workbench, or no matching button, posts a fail-loud `warn` note and
+/// queues nothing (never a panic); a match posts an ack naming the queued button.
+fn invoke_named(app: &mut ValenxApp, ch: usize, name: &str) {
+    let warn = |app: &mut ValenxApp, msg: String| {
+        crate::assistant_workbench::append_feed_note(app, ch, "Claude", &msg, "warn");
+    };
+
+    let Some(nodes) = probe_active_workbench(app) else {
+        warn(
+            app,
+            "invoke_named: no active workbench to drive (open a workbench tab first)".to_string(),
+        );
+        return;
+    };
+
+    // Resolve the target node by accessible name: exact match preferred, then a
+    // case-insensitive fallback so an agent that lower-cased a caption still
+    // hits. Only clickable nodes (buttons / toggles) are eligible, so a matching
+    // *label* never shadows the real button.
+    let want = name.trim();
+    let resolved = nodes
+        .iter()
+        .find(|(_, n)| is_clickable(n) && n.name() == Some(want))
+        .or_else(|| {
+            nodes.iter().find(|(_, n)| {
+                is_clickable(n) && n.name().is_some_and(|s| s.eq_ignore_ascii_case(want))
+            })
+        })
+        .map(|(id, _)| *id);
+
+    match resolved {
+        Some(id) => {
+            // Queue the click for raw_input_hook to inject next frame. The bridge
+            // keeps frames alive (unfocused request_repaint), so it fires promptly.
+            app.pending_accesskit_actions
+                .push((id, egui::accesskit::Action::Default));
+            crate::assistant_workbench::append_feed_note(
+                app,
+                ch,
+                "Claude",
+                &format!("invoke_named: queued click on \u{201c}{want}\u{201d}"),
+                "result",
+            );
+        }
+        None => {
+            // List what *is* clickable so the agent can correct the name.
+            let avail: Vec<&str> = nodes
+                .iter()
+                .filter(|(_, n)| is_clickable(n))
+                .filter_map(|(_, n)| n.name())
+                .collect();
+            warn(
+                app,
+                format!(
+                    "invoke_named: no clickable button named \u{201c}{want}\u{201d} in the active workbench (available: {})",
+                    if avail.is_empty() {
+                        "none".to_string()
+                    } else {
+                        avail.join(", ")
+                    }
+                ),
+            );
+        }
+    }
+}
+
+/// Apply one [`ListButtons`](AgentCommand::ListButtons): probe the active
+/// workbench's accessibility tree and post a single feed note listing every
+/// clickable button caption, so an agent can discover the
+/// [`InvokeNamed`](AgentCommand::InvokeNamed) name space. No app state changes.
+fn list_buttons(app: &mut ValenxApp, ch: usize) {
+    let Some(nodes) = probe_active_workbench(app) else {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            "list_buttons: no active workbench (open a workbench tab first)",
+            "warn",
+        );
+        return;
+    };
+    // Dedup while preserving order (egui can emit a caption more than once, e.g.
+    // a label node duplicating a button's text).
+    let mut names: Vec<&str> = Vec::new();
+    for (_, n) in &nodes {
+        if is_clickable(n) {
+            if let Some(s) = n.name() {
+                if !names.contains(&s) {
+                    names.push(s);
+                }
+            }
+        }
+    }
+    let body = if names.is_empty() {
+        "buttons (0): (none — this workbench has no named buttons)".to_string()
+    } else {
+        format!("buttons ({}): {}", names.len(), names.join(", "))
+    };
+    crate::assistant_workbench::append_feed_note(app, ch, "Claude", &body, "result");
+}
+
+/// Apply one [`ReadText`](AgentCommand::ReadText): probe the active workbench's
+/// accessibility tree and post its readable text (label / value nodes), so an
+/// agent can self-verify a result generically without a per-workbench
+/// `agent_readout`. Bounded in length to keep the feed note manageable. No app
+/// state changes.
+fn read_text(app: &mut ValenxApp, ch: usize) {
+    /// Cap on the concatenated text so a huge panel can't post a giant note.
+    const MAX_TEXT: usize = 2000;
+
+    let Some(nodes) = probe_active_workbench(app) else {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            "read_text: no active workbench (open a workbench tab first)",
+            "warn",
+        );
+        return;
+    };
+
+    use egui::accesskit::Role;
+    // Collect readable text: static labels and the value of any value-bearing
+    // node (spin buttons / text fields show their current value via `value()`).
+    // Skip the window root and structural nodes. Dedup consecutive repeats.
+    let mut parts: Vec<String> = Vec::new();
+    for (_, n) in &nodes {
+        let text: Option<String> = match n.role() {
+            // egui maps `ui.label(...)` to `Role::StaticText` (there is no
+            // `Role::Label` in accesskit 0.12).
+            Role::StaticText => n.name().map(str::to_string),
+            // Value-bearing controls expose their current value via `value()`;
+            // fall back to the caption when a value isn't set.
+            Role::TextInput | Role::SpinButton => n
+                .value()
+                .map(str::to_string)
+                .or_else(|| n.name().map(str::to_string)),
+            _ => None,
+        };
+        if let Some(t) = text {
+            let t = t.trim();
+            if !t.is_empty() && parts.last().map(String::as_str) != Some(t) {
+                parts.push(t.to_string());
+            }
+        }
+    }
+
+    let mut body = parts.join(" \u{2022} ");
+    if body.len() > MAX_TEXT {
+        body.truncate(MAX_TEXT);
+        body.push_str(" \u{2026}");
+    }
+    let body = if body.is_empty() {
+        "read_text: (no readable text in the active workbench panel)".to_string()
+    } else {
+        format!("text: {body}")
+    };
+    crate::assistant_workbench::append_feed_note(app, ch, "Claude", &body, "result");
 }
 
 /// **LAZY-BUILD materialiser.** Build unit `n`'s deferred product the first time
@@ -5628,5 +6113,250 @@ mod tests {
             "valid circle added one entity"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ---- Generic accessibility-name bridge (invoke_named / list_buttons / read_text) ----
+
+    #[test]
+    fn parses_invoke_named_list_buttons_read_text() {
+        // The three new generic commands round-trip from their wire form.
+        let inv: AgentCommand =
+            serde_json::from_str(r#"{"cmd":"invoke_named","name":"▶ Compute"}"#).unwrap();
+        assert_eq!(
+            inv,
+            AgentCommand::InvokeNamed {
+                name: "▶ Compute".into()
+            }
+        );
+        let lb: AgentCommand = serde_json::from_str(r#"{"cmd":"list_buttons"}"#).unwrap();
+        assert_eq!(lb, AgentCommand::ListButtons);
+        let rt: AgentCommand = serde_json::from_str(r#"{"cmd":"read_text"}"#).unwrap();
+        assert_eq!(rt, AgentCommand::ReadText);
+    }
+
+    #[test]
+    fn probe_resolves_a_named_button_to_an_accesskit_node() {
+        // The load-bearing claim: the headless probe of the ACTIVE workbench
+        // emits an accesskit tree whose nodes carry the button captions, so a
+        // name → NodeId resolution is possible with no per-workbench wiring.
+        // Open the Springs workbench (its "▶ Analyze" button is a stable caption).
+        let mut app = ValenxApp::default();
+        app.tab_bar.open(TabKind::Springs);
+        project_tabs::sync_active(&mut app);
+
+        let nodes = probe_active_workbench(&mut app).expect("active workbench yields a tree");
+        let analyze = nodes
+            .iter()
+            .find(|(_, n)| is_clickable(n) && n.name() == Some("▶ Analyze"));
+        assert!(
+            analyze.is_some(),
+            "the Springs '▶ Analyze' button is a clickable, named node in the probe tree; \
+             captions seen = {:?}",
+            nodes
+                .iter()
+                .filter(|(_, n)| is_clickable(n))
+                .filter_map(|(_, n)| n.name())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn invoke_named_queues_an_action_and_acks() {
+        // `invoke_named` on a real workbench button resolves the name and queues
+        // exactly one accesskit Default action for raw_input_hook to inject, and
+        // posts a `result` ack — no panic, no app-state mutation beyond the queue.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "invoke_named_ok");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        app.tab_bar.open(TabKind::Springs);
+        project_tabs::sync_active(&mut app);
+        assert!(app.pending_accesskit_actions.is_empty());
+
+        apply(
+            &mut app,
+            1,
+            AgentCommand::InvokeNamed {
+                name: "▶ Analyze".into(),
+            },
+        );
+
+        assert_eq!(
+            app.pending_accesskit_actions.len(),
+            1,
+            "exactly one Default action was queued for next-frame injection"
+        );
+        assert_eq!(
+            app.pending_accesskit_actions[0].1,
+            egui::accesskit::Action::Default
+        );
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        assert!(
+            body.contains("queued click"),
+            "a successful invoke acks with a result note; feed = {body:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn invoke_named_is_case_insensitive_fallback() {
+        // An agent that lower-cased the caption still hits via the
+        // case-insensitive fallback (the '▶' is preserved; only ASCII case is
+        // folded, which is enough for the "analyze" word).
+        let mut app = ValenxApp::default();
+        app.tab_bar.open(TabKind::Springs);
+        project_tabs::sync_active(&mut app);
+        apply(
+            &mut app,
+            0,
+            AgentCommand::InvokeNamed {
+                name: "▶ analyze".into(),
+            },
+        );
+        assert_eq!(
+            app.pending_accesskit_actions.len(),
+            1,
+            "case-insensitive fallback resolved '▶ analyze' to '▶ Analyze'"
+        );
+    }
+
+    #[test]
+    fn invoke_named_unknown_button_warns_and_queues_nothing() {
+        // A caption with no matching clickable node is a fail-loud `warn` that
+        // also lists what IS available — and queues nothing (never a panic).
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "invoke_named_bad");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        app.tab_bar.open(TabKind::Springs);
+        project_tabs::sync_active(&mut app);
+
+        apply(
+            &mut app,
+            1,
+            AgentCommand::InvokeNamed {
+                name: "No Such Button".into(),
+            },
+        );
+
+        assert!(
+            app.pending_accesskit_actions.is_empty(),
+            "no action queued for an unknown caption"
+        );
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let warned = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("kind").and_then(|k| k.as_str()) == Some("warn")
+                    && v.get("detail")
+                        .and_then(|d| d.as_str())
+                        .is_some_and(|d| d.contains("no clickable button named"))
+            });
+        assert!(warned, "unknown button warns; feed = {body:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn invoke_named_no_active_workbench_warns() {
+        // With no active workbench tab there is nothing to probe → a `warn`, not
+        // a panic, and nothing queued.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "invoke_named_noactive");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        // No tab opened → active_kind() is None.
+        apply(
+            &mut app,
+            1,
+            AgentCommand::InvokeNamed {
+                name: "▶ Analyze".into(),
+            },
+        );
+        assert!(app.pending_accesskit_actions.is_empty());
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        assert!(
+            body.contains("no active workbench"),
+            "no-active-workbench warns; feed = {body:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn probe_is_side_effect_free_on_visibility() {
+        // The probe force-sets the active workbench's `show_*` flag to render its
+        // panel, then MUST restore it — a hidden workbench stays hidden after a
+        // probe (so list_buttons / read_text don't pop panels open as a side
+        // effect). Springs is active but its `show_*` flag is left FALSE here
+        // (we don't call sync_active), so the probe must leave it false.
+        let mut app = ValenxApp::default();
+        app.tab_bar.open(TabKind::Springs);
+        // Deliberately do NOT sync_active → show_springs_workbench stays false.
+        assert!(!app.show_springs_workbench);
+        let _ = probe_active_workbench(&mut app);
+        assert!(
+            !app.show_springs_workbench,
+            "probe restored the prior (hidden) visibility — no side effect"
+        );
+    }
+
+    #[test]
+    fn list_buttons_lists_the_active_workbench_captions() {
+        // `list_buttons` posts a `result` note enumerating the active workbench's
+        // clickable captions (so an agent can discover the invoke_named names).
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "list_buttons");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        app.tab_bar.open(TabKind::Springs);
+        project_tabs::sync_active(&mut app);
+
+        apply(&mut app, 1, AgentCommand::ListButtons);
+
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        assert!(
+            body.contains("buttons (") && body.contains("Analyze"),
+            "list_buttons enumerates the Springs captions incl. Analyze; feed = {body:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn raw_input_hook_injects_and_drains_queued_actions() {
+        // The injection half: a queued action is pushed into the frame's
+        // RawInput as an AccessKitActionRequest and the queue is drained (each
+        // action fires on exactly one frame).
+        use eframe::App as _;
+        let mut app = ValenxApp::default();
+        // Any NodeId works here — raw_input_hook only forwards it verbatim into
+        // the frame's RawInput (resolution from a name happens earlier, in
+        // invoke_named). `NodeId` is a public newtype over a u64.
+        let target = egui::accesskit::NodeId(0xC0FFEE);
+        app.pending_accesskit_actions
+            .push((target, egui::accesskit::Action::Default));
+
+        let ctx = egui::Context::default();
+        let mut raw = egui::RawInput::default();
+        app.raw_input_hook(&ctx, &mut raw);
+
+        assert!(
+            app.pending_accesskit_actions.is_empty(),
+            "the queue is drained after injection"
+        );
+        let injected = raw.events.iter().any(|e| {
+            matches!(
+                e,
+                egui::Event::AccessKitActionRequest(req)
+                    if req.action == egui::accesskit::Action::Default && req.target == target
+            )
+        });
+        assert!(
+            injected,
+            "the queued action was injected as an AccessKitActionRequest"
+        );
     }
 }
