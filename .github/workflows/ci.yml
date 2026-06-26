@@ -136,7 +136,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      # Pin to the repo's MSRV toolchain (rust-toolchain.toml) so CI rustfmt
+      # matches local `cargo fmt`. @stable installs a newer rustfmt whose
+      # line-wrapping differs at the 100-col boundary, causing false diffs.
+      - uses: dtolnay/rust-toolchain@1.88.0
         with:
           components: rustfmt
       - run: cargo fmt --all --check
@@ -148,10 +151,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.88.0
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
+      # `--all-features` pulls OpenCASCADE + the EGL/GL/Wayland GUI stack
+      # (khronos-egl needs egl.pc), which aren't on the runner by default.
+      - name: System deps (Ubuntu)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libocct-foundation-dev libocct-modeling-algorithms-dev \
+            libocct-modeling-data-dev libocct-ocaf-dev \
+            libgl1-mesa-dev libegl-dev libwayland-dev libxkbcommon-dev \
+            libasound2-dev
       # Scoped to the changed crates on a PR (see the `changes` job);
       # `--workspace` on push-to-master and nightly.
       - run: cargo clippy ${{ needs.changes.outputs.build_scope }} --all-targets --all-features -- -D warnings
@@ -264,8 +277,18 @@ jobs:
       RUSTDOCFLAGS: "-D warnings"
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.88.0
       - uses: Swatinem/rust-cache@v2
+      # `--all-features` pulls OpenCASCADE + the EGL/GL/Wayland GUI stack
+      # (khronos-egl needs egl.pc), which aren't on the runner by default.
+      - name: System deps (Ubuntu)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libocct-foundation-dev libocct-modeling-algorithms-dev \
+            libocct-modeling-data-dev libocct-ocaf-dev \
+            libgl1-mesa-dev libegl-dev libwayland-dev libxkbcommon-dev \
+            libasound2-dev
       # Scoped to the changed crates on a PR (see the `changes` job);
       # `--workspace` on push-to-master and nightly.
       - run: cargo doc ${{ needs.changes.outputs.build_scope }} --no-deps --all-features
