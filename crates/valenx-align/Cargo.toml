@@ -14,6 +14,13 @@ repository.workspace   = true
 # for the data-model derives. No heavy or platform-specific deps.
 valenx-bioseq = { path = "../valenx-bioseq" }
 serde         = { workspace = true }
+# rust-bio: foundational, widely-used (crates.io `bio`) bioinformatics
+# algorithms. We adopt its FM-index / BWT / suffix-array and reference
+# pairwise aligner to cross-validate the in-house DP routines and to
+# expose battle-tested implementations. Pinned directly (not via the
+# workspace table) to keep this dependency local to the one crate that
+# uses it. `fasta` codec pulled in transitively; no extra features.
+bio = "4"
 
 [lints.rust]
 unused_imports = "warn"
