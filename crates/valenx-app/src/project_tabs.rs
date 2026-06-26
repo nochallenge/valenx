@@ -288,12 +288,21 @@ pub enum TabKind {
     //    the input sliders predict the output instantly — the what-if loop — with
     //    train/test MSE reported and validated against truth) --
     Surrogate,
+    // -- Optics (in-house geometric ray optics: the Gaussian thin-lens
+    //    equation 1/f = 1/do + 1/di over valenx-optics) --
+    Optics,
+    // -- Acoustics (in-house monopole / pulsating-sphere radiation: radiated
+    //    pressure + SPL over valenx-acoustics) --
+    Acoustics,
+    // -- Waveform (in-house Value Change Dump viewer: signals + transition
+    //    counts + time range over valenx-waveform) --
+    Waveform,
 }
 
 impl TabKind {
     /// Every *template* kind (i.e. excluding [`TabKind::Blank`]), in
     /// `＋ from template`-menu order (grouped via [`Self::group`]).
-    pub const TEMPLATES: [TabKind; 53] = [
+    pub const TEMPLATES: [TabKind; 56] = [
         TabKind::Rocket,
         TabKind::Engine,
         TabKind::Astro,
@@ -347,6 +356,9 @@ impl TabKind {
         TabKind::Cosim,
         TabKind::Autonomy,
         TabKind::Mbd,
+        TabKind::Optics,
+        TabKind::Acoustics,
+        TabKind::Waveform,
     ];
 
     /// Group header shown in the `＋ from template` new-tab menu. Blank is
@@ -407,6 +419,9 @@ impl TabKind {
             TabKind::Survivability => "Simulation",
             TabKind::Cosim => "Simulation",
             TabKind::Mbd => "Simulation",
+            TabKind::Optics => "Simulation",
+            TabKind::Acoustics => "Simulation",
+            TabKind::Waveform => "Simulation",
         }
     }
 
@@ -467,6 +482,9 @@ impl TabKind {
             TabKind::NodeGraph => "Node graph (visual node editor)",
             TabKind::BondGraph => "Bond graph (multi-domain systems)",
             TabKind::Surrogate => "Surrogate model (ML solver emulator)",
+            TabKind::Optics => "Optics (thin lens)",
+            TabKind::Acoustics => "Acoustics (radiation)",
+            TabKind::Waveform => "Waveform (VCD viewer)",
         }
     }
 
@@ -529,6 +547,9 @@ impl TabKind {
             TabKind::NodeGraph => app.show_nodegraph_workbench = true,
             TabKind::BondGraph => app.show_bondgraph_workbench = true,
             TabKind::Surrogate => app.show_surrogate_workbench = true,
+            TabKind::Optics => app.show_optics_workbench = true,
+            TabKind::Acoustics => app.show_acoustics_workbench = true,
+            TabKind::Waveform => app.show_waveform_workbench = true,
         }
     }
 
@@ -597,6 +618,9 @@ impl TabKind {
             "nodegraph" | "nodes" | "graph" | "pipeline" => Some(TabKind::NodeGraph),
             "bondgraph" | "bond" | "bonds" => Some(TabKind::BondGraph),
             "surrogate" | "emulator" | "rsm" | "metamodel" => Some(TabKind::Surrogate),
+            "optics" | "lens" | "thinlens" => Some(TabKind::Optics),
+            "acoustics" | "radiation" | "monopole" => Some(TabKind::Acoustics),
+            "waveform" | "vcd" | "logicanalyzer" => Some(TabKind::Waveform),
             _ => None,
         }
     }
@@ -1402,6 +1426,10 @@ pub const ALL_WORKBENCH_KINDS: &[&str] = &[
     // In-house state-vector quantum-circuit simulator (valenx-quantum) —
     // surfaced by the Quantum circuit workbench.
     "quantum",
+    // In-house Value Change Dump waveform parser (valenx-waveform) —
+    // surfaced by the Waveform (VCD viewer) workbench. ("optics" + "acoustics"
+    // are already registered above in the science / EE batches.)
+    "waveform",
     // The Mesh Toolbox is gated on `show_mesh_toolbox` (a `_toolbox`, not a
     // `_workbench`, field) but behaves like a per-tab workbench, so it is
     // mappable here under the same id the agent registry / `TabKind::from_id`
@@ -1453,7 +1481,7 @@ pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
         "thermistor" => app.show_thermistor_workbench = on,
         "straingauge" => app.show_straingauge_workbench = on,
         "drone" => app.show_drone_workbench = on,
-        "acoustics" => app.show_acoustics_workbench = on,
+        "acoustics" | "radiation" | "monopole" => app.show_acoustics_workbench = on,
         "acidbase" => app.show_acidbase_workbench = on,
         "bjt" => app.show_bjt_workbench = on,
         "bmr" => app.show_bmr_workbench = on,
@@ -1526,7 +1554,7 @@ pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
         "leverage" => app.show_leverage_workbench = on,
         "mohr" => app.show_mohr_workbench = on,
         "mosfet" => app.show_mosfet_workbench = on,
-        "optics" => app.show_optics_workbench = on,
+        "optics" | "lens" | "thinlens" => app.show_optics_workbench = on,
         "orifice" => app.show_orifice_workbench = on,
         "pressurevessel" => app.show_pressurevessel_workbench = on,
         "torsion" => app.show_torsion_workbench = on,
@@ -1580,6 +1608,7 @@ pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
         "brep" | "brepcad" | "partbrep" | "solid" => app.show_brep_workbench = on,
         "thermo" | "thermodynamics" | "eos" => app.show_thermo_workbench = on,
         "quantum" | "qcircuit" | "qubit" => app.show_quantum_workbench = on,
+        "waveform" | "vcd" | "logicanalyzer" => app.show_waveform_workbench = on,
         "bondgraph" | "bond" | "bonds" => app.show_bondgraph_workbench = on,
         // Mesh Toolbox (a `_toolbox` flag, mapped here for parity).
         "mesh" | "meshtoolbox" => app.show_mesh_toolbox = on,
@@ -1617,6 +1646,9 @@ fn clear_all_workbenches(app: &mut ValenxApp) {
     app.show_brep_workbench = false;
     app.show_thermo_workbench = false;
     app.show_quantum_workbench = false;
+    app.show_optics_workbench = false;
+    app.show_acoustics_workbench = false;
+    app.show_waveform_workbench = false;
     app.show_mesh_toolbox = false;
     app.show_sheetmetal_workbench = false;
     app.show_reverse_workbench = false;
@@ -3182,6 +3214,9 @@ mod tests {
             ("nodegraph", TabKind::NodeGraph),
             ("bondgraph", TabKind::BondGraph),
             ("surrogate", TabKind::Surrogate),
+            ("optics", TabKind::Optics),
+            ("acoustics", TabKind::Acoustics),
+            ("waveform", TabKind::Waveform),
         ];
         // Every TEMPLATES kind is covered by the canonical table above.
         assert_eq!(canonical.len(), TabKind::TEMPLATES.len());
@@ -4589,6 +4624,9 @@ mod tests {
             app.show_brep_workbench,
             app.show_thermo_workbench,
             app.show_quantum_workbench,
+            app.show_optics_workbench,
+            app.show_acoustics_workbench,
+            app.show_waveform_workbench,
             app.show_mesh_toolbox,
             app.show_sheetmetal_workbench,
             app.show_reverse_workbench,
@@ -4705,6 +4743,9 @@ mod tests {
             TabKind::NodeGraph => crate::nodegraph_workbench::draw_nodegraph_workbench(app, ctx),
             TabKind::BondGraph => crate::bondgraph_workbench::draw_bondgraph_workbench(app, ctx),
             TabKind::Surrogate => crate::surrogate_workbench::draw_surrogate_workbench(app, ctx),
+            TabKind::Optics => crate::optics_workbench::draw_optics_workbench(app, ctx),
+            TabKind::Acoustics => crate::acoustics_workbench::draw_acoustics_workbench(app, ctx),
+            TabKind::Waveform => crate::waveform_workbench::draw_waveform_workbench(app, ctx),
         });
     }
 

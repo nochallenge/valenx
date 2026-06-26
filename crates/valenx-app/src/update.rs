@@ -1778,6 +1778,20 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Waveform (VCD viewer) workbench — an
+                    // in-house Value Change Dump parser (valenx-waveform).
+                    if ui
+                        .checkbox(&mut self.show_waveform_workbench, "Waveform (VCD viewer)")
+                        .on_hover_text(
+                            "Show / hide the Waveform (VCD viewer) Workbench — an in-house Value \
+                             Change Dump parser (Valenx's digital logic-analyzer input). Paste or \
+                             edit a VCD trace and Parse lists every signal (name + bit width), each \
+                             signal's transition count, and the overall time range (valenx-waveform).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Node Graph workbench — an in-house
                     // visual node editor (draggable nodes, output->input wiring,
                     // a topological evaluation pass).
@@ -3776,6 +3790,11 @@ impl eframe::App for ValenxApp {
             // quantum-circuit simulator (valenx-quantum). A no-op unless
             // toggled on via View → Quantum circuit.
             crate::quantum_workbench::draw_quantum_workbench(self, ctx);
+
+            // Waveform (VCD viewer) Workbench (right) — in-house Value Change
+            // Dump parser (valenx-waveform). A no-op unless toggled on via
+            // View → Waveform (VCD viewer).
+            crate::waveform_workbench::draw_waveform_workbench(self, ctx);
 
             // Survivability / protection Workbench (right) — the DEFENSIVE /
             // protective side of the shared blast/impact physics (free-field

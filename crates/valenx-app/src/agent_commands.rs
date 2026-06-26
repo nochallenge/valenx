@@ -1309,6 +1309,12 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
                 run_bondgraph_bridge(app, ch, &id);
             } else if id.as_str() == "surrogate.train" {
                 run_surrogate_bridge(app, ch, &id);
+            } else if id.as_str() == "optics.compute" {
+                run_optics_bridge(app, ch, &id);
+            } else if id.as_str() == "acoustics.compute" {
+                run_acoustics_bridge(app, ch, &id);
+            } else if id.as_str() == "waveform.parse" {
+                run_waveform_bridge(app, ch, &id);
             } else {
                 // Resolve `id` against the EXISTING command-palette registry and
                 // invoke the matching command through the SAME `(cmd.invoke)(app)`
@@ -1857,6 +1863,106 @@ fn run_thermo_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
     );
 }
 
+/// Fire the Optics thin-lens compute from the bridge. The **Analyze** action
+/// exists only as an in-panel button; this routes the bridge id
+/// `optics.compute` to the SAME `run` function the button calls.
+///
+/// The active tab must be a [`TabKind::Optics`]; otherwise this posts a
+/// fail-loud `warn` note and changes nothing. After computing it acks with
+/// the optics readout (object distance + focal length + image distance +
+/// magnification + real/virtual).
+fn run_optics_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::Optics) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Optics workbench"),
+            "warn",
+        );
+        return;
+    }
+    crate::optics_workbench::run(app);
+    let readout = app
+        .optics
+        .agent_readout()
+        .unwrap_or_else(|| "(no readout)".to_string());
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {readout}"),
+        "result",
+    );
+}
+
+/// Fire the Acoustics monopole-radiation compute from the bridge. The
+/// **Radiate** action exists only as an in-panel button; this routes the
+/// bridge id `acoustics.compute` to the SAME `run` function the button
+/// calls.
+///
+/// The active tab must be a [`TabKind::Acoustics`]; otherwise this posts a
+/// fail-loud `warn` note and changes nothing. After computing it acks with
+/// the acoustics readout (source radius + surface velocity + frequency +
+/// observer distance + radiated pressure + SPL).
+fn run_acoustics_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::Acoustics) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Acoustics workbench"),
+            "warn",
+        );
+        return;
+    }
+    crate::acoustics_workbench::run(app);
+    let readout = app
+        .acoustics
+        .agent_readout()
+        .unwrap_or_else(|| "(no readout)".to_string());
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {readout}"),
+        "result",
+    );
+}
+
+/// Fire the Waveform VCD parse from the bridge. The **Parse** action exists
+/// only as an in-panel button; this routes the bridge id `waveform.parse` to
+/// the SAME `run` function the button calls.
+///
+/// The active tab must be a [`TabKind::Waveform`]; otherwise this posts a
+/// fail-loud `warn` note and changes nothing. After parsing it acks with the
+/// waveform readout (signal count + per-signal name/width/transition count +
+/// time range).
+fn run_waveform_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::Waveform) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Waveform workbench"),
+            "warn",
+        );
+        return;
+    }
+    crate::waveform_workbench::run(app);
+    let readout = app
+        .waveform
+        .agent_readout()
+        .unwrap_or_else(|| "(no readout)".to_string());
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {readout}"),
+        "result",
+    );
+}
+
 /// Fire the Quantum circuit run from the bridge. The **Run** action exists
 /// only as an in-panel button; this routes the bridge id `quantum.run` to
 /// the SAME `run` function the button calls.
@@ -2083,6 +2189,9 @@ fn set_control(
         TabKind::NodeGraph => app.nodegraph.agent_set(name, value),
         TabKind::BondGraph => app.bondgraph.agent_set(name, value),
         TabKind::Surrogate => app.surrogate.agent_set(name, value),
+        TabKind::Optics => app.optics.agent_set(name, value),
+        TabKind::Acoustics => app.acoustics.agent_set(name, value),
+        TabKind::Waveform => app.waveform.agent_set(name, value),
         other => Err(format!(
             "set_control: workbench {other:?} ({}) has no settable controls yet",
             kind.label()
@@ -2214,6 +2323,13 @@ fn list_controls(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
         TabKind::Surrogate => {
             crate::surrogate_workbench::SurrogateWorkbenchState::agent_control_names()
         }
+        TabKind::Optics => crate::optics_workbench::OpticsWorkbenchState::agent_control_names(),
+        TabKind::Acoustics => {
+            crate::acoustics_workbench::AcousticsWorkbenchState::agent_control_names()
+        }
+        TabKind::Waveform => {
+            crate::waveform_workbench::WaveformWorkbenchState::agent_control_names()
+        }
         _ => &[],
     };
 
@@ -2279,6 +2395,9 @@ fn read_readout(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
         TabKind::NodeGraph => Some(app.nodegraph.agent_readout()),
         TabKind::BondGraph => Some(app.bondgraph.agent_readout()),
         TabKind::Surrogate => Some(app.surrogate.agent_readout()),
+        TabKind::Optics => Some(app.optics.agent_readout()),
+        TabKind::Acoustics => Some(app.acoustics.agent_readout()),
+        TabKind::Waveform => Some(app.waveform.agent_readout()),
         _ => None,
     };
 

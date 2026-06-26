@@ -276,9 +276,12 @@ valenx-photogrammetry = { path = "../valenx-photogrammetry" }
 # surfaced by the Rotor / Drone (BEMT) workbench (src/rotor_workbench.rs).
 # Pure-Rust solver; the workbench calls its real API directly (no subprocess).
 valenx-rotor         = { path = "../valenx-rotor" }
-# Native rectangular-room reverberation + SPL — surfaced by the Acoustics
-# workbench (src/acoustics_workbench.rs).
+# Native rectangular-room reverberation + SPL + monopole radiation —
+# surfaced by the Acoustics workbench (src/acoustics_workbench.rs).
 valenx-acoustics     = { path = "../valenx-acoustics" }
+# In-house Value Change Dump (VCD) waveform parser — surfaced by the
+# Waveform (VCD viewer) workbench (src/waveform_workbench.rs).
+valenx-waveform      = { path = "../valenx-waveform" }
 # Native aqueous pH / buffer equilibria — surfaced by the Acid-Base
 # workbench (src/acidbase_workbench.rs).
 valenx-acidbase      = { path = "../valenx-acidbase" }
