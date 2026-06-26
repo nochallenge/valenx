@@ -13,6 +13,25 @@ publish.workspace     = true
 [dependencies]
 thiserror = { workspace = true }
 
+# --- optional GPU compute acceleration (feature `gpu`) ---------------
+# An OPTIONAL wgpu compute path for the dominant per-iteration grid
+# relaxation (the pressure-Poisson weighted-Jacobi sweep). The native
+# CPU solvers stay the default and only entry point; nothing here is
+# pulled into a default build. All three deps are the exact versions
+# `eframe` 0.28's wgpu backend already resolves in the workspace
+# lockfile — wgpu 0.20, bytemuck 1, pollster 0.3 — so enabling the
+# feature adds NO new transitive dependency tree.
+wgpu     = { version = "0.20", optional = true }
+bytemuck = { workspace = true, optional = true }
+pollster = { version = "0.3", optional = true }
+
+[features]
+# Off by default: the pure-CPU solver is the baseline build. Enable to
+# compile the `gpu` module (a wgpu compute Jacobi/SOR sweep that runs
+# where a headless adapter exists, falling back to the CPU path
+# otherwise).
+gpu = ["dep:wgpu", "dep:bytemuck", "dep:pollster"]
+
 [lints.rust]
 unused_imports = "warn"
 missing_docs   = "warn"
