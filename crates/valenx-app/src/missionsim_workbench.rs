@@ -360,7 +360,7 @@ impl MissionSimWorkbenchState {
     /// on an unknown caption / wrong type (the bridge posts a `warn` note); no
     /// field is written on error and nothing panics. The count fields
     /// (`blue count` / `red count`, `Lanchester steps`) and `seed` read
-    /// [`AgentValue::as_i64`]; every other caption is an `f64` drag value.
+    /// `AgentValue::as_i64`; every other caption is an `f64` drag value.
     pub fn agent_set(
         &mut self,
         name: &str,
@@ -500,7 +500,7 @@ impl MissionSimWorkbenchState {
     /// Run the **Monte-Carlo engagement analysis**: the single-run pipeline (for
     /// the plan view + Lanchester curve), then `mc_runs` replications of the
     /// *same* abstract scenario via `valenx-mission-sim`'s
-    /// [`monte_carlo`], aggregated into an [`OutcomeStats`] (which side prevails,
+    /// `monte_carlo`, aggregated into an [`OutcomeStats`] (which side prevails,
     /// survivor spreads, exchange ratio, and a blue-survivor histogram).
     ///
     /// This adds **no** new lethality / targeting — it is pure statistics over the

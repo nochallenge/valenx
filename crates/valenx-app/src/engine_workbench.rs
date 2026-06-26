@@ -124,8 +124,8 @@ impl EngineWorkbenchState {
     /// Fail-loud: an unknown caption or a value of the wrong type returns
     /// `Err(String)` (the bridge turns it into a `warn` feed note) — never a
     /// panic, and no field is written on error. Numeric captions read
-    /// [`AgentValue::as_f64`]; the one enum caption (`propellant`) reads
-    /// [`AgentValue::as_str`] and matches a small set of combo names.
+    /// `AgentValue::as_f64`; the one enum caption (`propellant`) reads
+    /// `AgentValue::as_str` and matches a small set of combo names.
     ///
     /// Unit handling mirrors the UI: `"chamber pressure"` is given in **bar**
     /// (the field stores Pa, so it is multiplied by `1e5`) and `"throat area"`

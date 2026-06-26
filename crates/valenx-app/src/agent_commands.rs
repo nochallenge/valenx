@@ -410,7 +410,7 @@ pub enum AgentCommand {
     /// palette actions become drivable over the robust polled file-bridge with
     /// **no duplicated action logic**. An unknown `id` posts an "unknown command
     /// id" feed note and is otherwise a no-op (never a panic); a successful run
-    /// posts a "ran <id>" ack note.
+    /// posts a `"ran <id>"` ack note.
     ///
     /// Honest scope: most ids are pure in-process state (the 8 camera views,
     /// shading, run/sweep/cancel, settings, audit-tail) and drive cleanly
@@ -501,11 +501,11 @@ pub enum AgentCommand {
     /// bespoke bridge run-id.
     ///
     /// Mechanism (identical to how an external UIA client clicks by name):
-    /// [`invoke_named`] runs a **headless probe** of the active workbench's panel
+    /// `invoke_named` runs a **headless probe** of the active workbench's panel
     /// in a throwaway accesskit-enabled context, finds the node whose accessible
     /// `name` matches `name`, and queues an `accesskit` `Default` action on that
     /// node id ([`crate::ValenxApp::pending_accesskit_actions`]). On the **next**
-    /// frame [`crate::ValenxApp::raw_input_hook`] injects it as an
+    /// frame `crate::ValenxApp::raw_input_hook` injects it as an
     /// `AccessKitActionRequest`, and egui reports the matching button as
     /// `.clicked()` — the same path a real click takes (the bridge keeps frames
     /// alive via the unfocused `request_repaint`, so the queued action fires
@@ -582,7 +582,7 @@ pub enum AgentCommand {
     FrameAll,
     /// **Auto-tile / organize the open workspace panels into a balanced grid**
     /// — the file-driven equivalent of the tab-strip "Tile" button. Routes
-    /// through the **same** [`crate::dock_layout::ValenxApp::auto_tile_dock`]
+    /// through the **same** `crate::dock_layout::ValenxApp::auto_tile_dock`
     /// the button calls: every open central-workspace panel (workbenches, the
     /// Assistant, any Workbench+Agent tiles) is reflowed into a
     /// `ceil(sqrt(N))`-column grid so all of them stay visible and legible
@@ -2580,7 +2580,7 @@ fn read_readout(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
 }
 
 /// Draw the **active workbench's right-side panel** into a (probe) context, for
-/// the headless accessibility probe behind [`invoke_named`] / [`list_buttons`] /
+/// the headless accessibility probe behind `invoke_named` / [`list_buttons`] /
 /// [`read_text`]. Dispatches the active [`TabKind`] to the SAME
 /// `draw_<wb>_workbench(app, ctx)` entry point the live `update()` loop calls, so
 /// the probe tree is byte-for-byte the panel the user sees (every `draw_*` fn
@@ -2666,7 +2666,7 @@ fn draw_active_workbench_probe(app: &mut ValenxApp, ctx: &egui::Context, kind: T
 /// Run a **headless accessibility probe of the active workbench** and return its
 /// emitted accesskit nodes — the SAME `(NodeId, Node)` tree a screen reader / a
 /// UI-Automation client reads. The shared engine behind the three generic,
-/// no-per-workbench-wiring commands ([`invoke_named`], [`list_buttons`],
+/// no-per-workbench-wiring commands (`invoke_named`, [`list_buttons`],
 /// [`read_text`]).
 ///
 /// Renders the active workbench's panel into a throwaway accesskit-enabled
@@ -2679,7 +2679,7 @@ fn draw_active_workbench_probe(app: &mut ValenxApp, ctx: &egui::Context, kind: T
 /// `accesskit::NodeId` is a deterministic hash of its egui `Id` (derived from
 /// the widget's source location / label), so the id a button gets in this probe
 /// context is identical to the id it gets in the real frame — the id resolved
-/// here can be queued for [`crate::ValenxApp::raw_input_hook`] to inject.
+/// here can be queued for `crate::ValenxApp::raw_input_hook` to inject.
 fn probe_active_workbench(
     app: &mut ValenxApp,
 ) -> Option<Vec<(egui::accesskit::NodeId, egui::accesskit::Node)>> {
@@ -2834,7 +2834,7 @@ fn set_workbench_show_flag(app: &mut ValenxApp, kind: TabKind, v: bool) {
     }
 }
 
-/// Is this accesskit node a **clickable button** (so [`invoke_named`] /
+/// Is this accesskit node a **clickable button** (so `invoke_named` /
 /// [`list_buttons`] should consider it)? egui maps `ui.button(...)` to
 /// [`Role::Button`] and a selectable label / toggle to
 /// [`Role::ToggleButton`]; both are invokable via the `Default` action, so both
@@ -2846,7 +2846,7 @@ fn is_clickable(node: &egui::accesskit::Node) -> bool {
 
 /// Apply one [`InvokeNamed`](AgentCommand::InvokeNamed): probe the active
 /// workbench's accessibility tree, resolve `name` to a clickable node, and queue
-/// an `accesskit` `Default` action on it for [`crate::ValenxApp::raw_input_hook`]
+/// an `accesskit` `Default` action on it for `crate::ValenxApp::raw_input_hook`
 /// to inject next frame (so the matching button reports `.clicked()` — the same
 /// path a real click takes). Exact name match first, then case-insensitive. No
 /// active workbench, or no matching button, posts a fail-loud `warn` note and

@@ -204,9 +204,9 @@ impl AeroWorkbenchState {
     }
 
     /// Set one labelled control by its user-visible caption, for the agent
-    /// `SetControl` bridge. The six enum captions read [`AgentValue::as_str`] and
-    /// match a small option-name set; the toggles read [`AgentValue::as_bool`];
-    /// numeric fields read [`AgentValue::as_f64`] / [`AgentValue::as_i64`].
+    /// `SetControl` bridge. The six enum captions read `AgentValue::as_str` and
+    /// match a small option-name set; the toggles read `AgentValue::as_bool`;
+    /// numeric fields read `AgentValue::as_f64` / `AgentValue::as_i64`.
     ///
     /// Fail-loud: an unknown caption, a wrong type, an unrecognised enum name, or
     /// a negative count returns `Err` (the bridge turns it into a `warn` note) —

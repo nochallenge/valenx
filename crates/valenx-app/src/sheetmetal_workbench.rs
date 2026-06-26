@@ -62,10 +62,10 @@ impl SheetmetalWorkbenchState {
     }
 
     /// Set one labelled control by its user-visible caption, for the agent
-    /// `SetControl` bridge. Every bend parameter reads [`AgentValue::as_f64`].
+    /// `SetControl` bridge. Every bend parameter reads `AgentValue::as_f64`.
     /// Fail-loud: an unknown caption or a value of the wrong type returns `Err`
     /// — never a panic, no field written on error. (Out-of-range values are
-    /// caught at [`run_sheetmetal`] time, which surfaces an in-panel error.)
+    /// caught at `run_sheetmetal` time, which surfaces an in-panel error.)
     pub fn agent_set(
         &mut self,
         name: &str,
@@ -223,7 +223,7 @@ fn bend_profile(
 
 /// Build the bent-sheet side profile for the live preview, best-effort `None`
 /// when the form dimensions are invalid (the same preconditions as
-/// [`run_sheetmetal`], minus the k-factor which only affects the scalars).
+/// `run_sheetmetal`, minus the k-factor which only affects the scalars).
 fn preview_bend(s: &SheetmetalWorkbenchState) -> Option<Vec<Vector3<f64>>> {
     if !(s.thickness_mm.is_finite() && s.thickness_mm > 0.0) {
         return None;

@@ -495,7 +495,7 @@ mod headless_ui_tests {
             .filter(|n| n.role() == Role::SpinButton)
             .collect();
         assert!(
-            spin_buttons.len() >= 1,
+            !spin_buttons.is_empty(),
             "expected the transmissionline numeric controls as spin buttons, got {}",
             spin_buttons.len()
         );
@@ -503,11 +503,10 @@ mod headless_ui_tests {
             spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
             "every transmissionline DragValue must be labelled_by its caption"
         );
-        for caption in ["Z₀ (Ω)"] {
-            assert!(
-                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
-                "caption '{caption}' should be a named node in the a11y tree"
-            );
-        }
+        let caption = "Z₀ (Ω)";
+        assert!(
+            nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+            "caption '{caption}' should be a named node in the a11y tree"
+        );
     }
 }

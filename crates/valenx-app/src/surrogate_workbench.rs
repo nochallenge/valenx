@@ -26,7 +26,7 @@
 //! and `I` held constant), so it is a genuine, smooth, nonlinear 2-input response
 //! surface (cubic in length, linear in load). See [`Truth::deflection`].
 //!
-//! The surrogate is a tiny **in-house multilayer perceptron** ([`Mlp`]):
+//! The surrogate is a tiny **in-house multilayer perceptron** (`Mlp`):
 //! `2 -> H -> H -> 1` dense layers with **ReLU** hidden activations and a linear
 //! output, trained by **full-batch gradient descent with Adam** on **mean-squared
 //! error**. Inputs are fed in normalised `[0,1]` space and the target is
@@ -348,7 +348,7 @@ impl Mlp {
 // The surrogate model: owns the net + the I/O standardisation + a metrics record
 // ---------------------------------------------------------------------------
 
-/// A trained surrogate: the [`Mlp`] plus the **target standardisation**
+/// A trained surrogate: the `Mlp` plus the **target standardisation**
 /// (`mean` / `std`) used to map physical delta to the net's training space and
 /// back. Predicts in physical units (metres) by inverting the standardisation.
 #[derive(Clone, Debug)]

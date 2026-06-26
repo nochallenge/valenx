@@ -302,6 +302,8 @@ mod tests {
         got.sort_unstable();
 
         // (x,y)->id mapping is id = x*3 + y.
+        // reason: keep the `x * 3 + y` literal form so the mapping is self-documenting.
+        #[allow(clippy::identity_op)]
         let expected = vec![1 * 3 + 1, 1 * 3 + 2, 2 * 3 + 1, 2 * 3 + 2]; // 4,5,7,8
         assert_eq!(got, expected);
         assert_eq!(got.len(), 4);

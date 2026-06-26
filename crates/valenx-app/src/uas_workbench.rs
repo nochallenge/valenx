@@ -452,8 +452,8 @@ impl UasWorkbenchState {
     /// `SetControl` bridge. Captions match exactly what the form draws. Fail-loud
     /// on an unknown caption / wrong type (the bridge posts a `warn` note); no
     /// field is written on error and nothing panics. The two enum captions
-    /// (`configuration`, `sweep variable`) read [`AgentValue::as_str`]; the
-    /// `rotor count` / `sweep points` integer fields read [`AgentValue::as_i64`];
+    /// (`configuration`, `sweep variable`) read `AgentValue::as_str`; the
+    /// `rotor count` / `sweep points` integer fields read `AgentValue::as_i64`;
     /// every other caption is an `f64` drag value.
     pub fn agent_set(
         &mut self,
@@ -1524,12 +1524,13 @@ mod tests {
     fn head_on_intercept_matches_range_over_closing_speed() {
         // Threat 1000 m down +x flying straight back at 20 m/s; interceptor at
         // origin, 80 m/s. Closing 100 m/s -> TTI 10 s (the crate's pinned case).
-        let mut c = CounterUasParams::default();
-        c.threat_pos_xy = [1000.0, 0.0];
-        c.threat_vel_xy = [-20.0, 0.0];
-        c.interceptor_pos_xy = [0.0, 0.0];
-        c.interceptor_max_speed = 80.0;
-        c.sensor_range_m = 500.0;
+        let c = CounterUasParams {
+            threat_pos_xy: [1000.0, 0.0],
+            threat_vel_xy: [-20.0, 0.0],
+            interceptor_pos_xy: [0.0, 0.0],
+            interceptor_max_speed: 80.0,
+            sensor_range_m: 500.0,
+        };
         let ic = run_intercept(&c).expect("intercept");
         let tti = ic.time_to_intercept_s.expect("feasible");
         assert!(
@@ -1541,11 +1542,13 @@ mod tests {
     #[test]
     fn opening_faster_target_has_no_intercept() {
         // Target ahead opening at 60 m/s, interceptor only 40 m/s -> None.
-        let mut c = CounterUasParams::default();
-        c.threat_pos_xy = [100.0, 0.0];
-        c.threat_vel_xy = [60.0, 0.0];
-        c.interceptor_pos_xy = [0.0, 0.0];
-        c.interceptor_max_speed = 40.0;
+        let c = CounterUasParams {
+            threat_pos_xy: [100.0, 0.0],
+            threat_vel_xy: [60.0, 0.0],
+            interceptor_pos_xy: [0.0, 0.0],
+            interceptor_max_speed: 40.0,
+            ..Default::default()
+        };
         let ic = run_intercept(&c).expect("intercept call ok");
         assert!(
             ic.time_to_intercept_s.is_none(),

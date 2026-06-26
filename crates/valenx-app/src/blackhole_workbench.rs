@@ -144,8 +144,8 @@ impl BlackHoleWorkbenchState {
     }
 
     /// Set one labelled control by its user-visible caption, for the agent
-    /// `SetControl` bridge. Numeric fields read [`AgentValue::as_f64`] /
-    /// [`AgentValue::as_i64`]; `spacetime` reads [`AgentValue::as_str`] and
+    /// `SetControl` bridge. Numeric fields read `AgentValue::as_f64` /
+    /// `AgentValue::as_i64`; `spacetime` reads `AgentValue::as_str` and
     /// matches the family names. Fail-loud: an unknown caption, wrong type, or
     /// negative image size returns `Err` — never a panic, no field written on
     /// error. (Setting `spin`/`charge` on a member that ignores them is allowed;
@@ -600,7 +600,11 @@ mod tests {
             shadow: vec![true, false], // pixel 0 captured, pixel 1 escapes
         };
         let rgb = shadow_to_rgb(&img);
-        assert_eq!(rgb.len(), 2 * 1 * 3);
+        // reason: width(2) * height(1) * channels(3) — the `* 1` documents the
+        // image dimensions, so keep the literal shape rather than pre-folding it.
+        #[allow(clippy::identity_op)]
+        let expected_len = 2 * 1 * 3;
+        assert_eq!(rgb.len(), expected_len);
         assert_eq!(&rgb[0..3], &[0, 0, 0], "shadow pixel is black");
         assert!(rgb[3..6].iter().any(|&c| c > 0), "sky pixel is not black");
     }

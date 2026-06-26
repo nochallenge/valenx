@@ -232,7 +232,7 @@ impl BondGraphPreset {
 }
 
 /// All editable element parameters for every preset (only the active preset's
-/// fields are read by [`Self::state_space`] / the UI, but holding them all lets
+/// fields are read by `Self::state_space` / the UI, but holding them all lets
 /// the user flip presets without losing values). SI units throughout.
 #[derive(Clone, Copy, Debug)]
 pub struct BondGraphParams {

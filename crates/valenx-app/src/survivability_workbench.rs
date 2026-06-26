@@ -225,7 +225,7 @@ impl SurvivabilityWorkbenchState {
     /// `SetControl` bridge. Captions match exactly what the form draws (incl. the
     /// two non-ASCII captions). Fail-loud on an unknown caption / wrong type (the
     /// bridge posts a `warn` note); no field is written on error and nothing
-    /// panics. Every control is an `f64` drag value ([`AgentValue::as_f64`]); the
+    /// panics. Every control is an `f64` drag value (`AgentValue::as_f64`); the
     /// downstream `valenx-survivability` constructors re-validate the physical
     /// ranges on the next `run`, so this setter only type-checks.
     pub fn agent_set(

@@ -294,9 +294,9 @@ impl UqWorkbenchState {
     /// Fail-loud: an unknown caption or a value of the wrong type returns
     /// `Err(String)` (the bridge turns it into a `warn` feed note) — never a
     /// panic, and no field is written on error. Numeric fields read
-    /// [`AgentValue::as_f64`] / [`AgentValue::as_i64`]; the two enum captions
+    /// `AgentValue::as_f64` / `AgentValue::as_i64`; the two enum captions
     /// (`x1 distribution` / `x2 distribution`, `response model g`) read
-    /// [`AgentValue::as_str`] and match a small set of names. The `x1`/`x2`
+    /// `AgentValue::as_str` and match a small set of names. The `x1`/`x2`
     /// parameter captions accept both the Normal (`mean`/`std`) and Uniform
     /// (`lo`/`hi`) spellings since they address the same two fields (`p0`/`p1`).
     pub fn agent_set(

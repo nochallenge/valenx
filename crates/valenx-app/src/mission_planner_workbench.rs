@@ -1750,8 +1750,10 @@ mod tests {
         // distinct target (goal + entities, minus the observer's own cell) and a
         // visible/blocked summary; each stored flag matches a direct flat
         // line_of_sight call, and the SE corner goal is masked by the demo walls.
-        let mut s = MissionPlannerWorkbenchState::default();
-        s.terrain_on = false;
+        let mut s = MissionPlannerWorkbenchState {
+            terrain_on: false,
+            ..Default::default()
+        };
         s.rebuild_route_grid();
         s.route_goal = (ROUTE_GRID_W - 1, ROUTE_GRID_H - 1); // SE corner (behind walls)
         assert!(s.los_results.is_empty());
@@ -1896,8 +1898,10 @@ mod tests {
         // the observer high enough recovers at least as many sight lines (it sees
         // over the terrain). Uses an explicit cross-ridge observer/target so the
         // masking is deterministic regardless of the demo entity positions.
-        let mut s = MissionPlannerWorkbenchState::default();
-        s.los_observer = (1, ROUTE_GRID_H - 2); // NW side of the ridge
+        let mut s = MissionPlannerWorkbenchState {
+            los_observer: (1, ROUTE_GRID_H - 2), // NW side of the ridge
+            ..Default::default()
+        };
         let across = (ROUTE_GRID_W - 1, 1); // SE side, beyond the ridge
         s.obs_height_m = 2.0;
         s.tgt_height_m = 0.0;

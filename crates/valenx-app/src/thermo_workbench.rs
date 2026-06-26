@@ -4,7 +4,7 @@
 //!
 //! The user picks a pure fluid (CO₂ / N₂ / CH₄ / H₂O / C₃H₈), an EoS model
 //! ([`valenx_thermo::EosModel::PengRobinson`] / `Srk`), and sets a
-//! temperature `T` [K] and pressure `P` [Pa] with labelled, AI-settable
+//! temperature `T` (K) and pressure `P` (Pa) with labelled, AI-settable
 //! DragValues. **Compute** binds the EoS to the fluid and reports the
 //! liquid & vapor compressibility roots `Z` ([`Eos::z_roots`]) plus the
 //! pure-component saturation pressure `Psat(T)`
@@ -125,9 +125,9 @@ pub struct ThermoWorkbenchState {
     pub fluid: FluidKind,
     /// Selected cubic EoS model.
     pub model: EosModel,
-    /// Temperature `T` [K].
+    /// Temperature `T` (K).
     pub t_k: f64,
-    /// Pressure `P` [Pa].
+    /// Pressure `P` (Pa).
     pub p_pa: f64,
 
     /// Latest compute result, or `None` before the first compute.
@@ -510,8 +510,10 @@ mod tests {
     #[test]
     fn saturation_pressure_co2_matches_experiment() {
         // CO₂ Psat at 273.15 K ≈ 3.49 MPa (the crate's validated example).
-        let mut s = ThermoWorkbenchState::default();
-        s.t_k = 273.15;
+        let mut s = ThermoWorkbenchState {
+            t_k: 273.15,
+            ..Default::default()
+        };
         s.compute_now();
         let r = s.result.as_ref().expect("result");
         let psat = r.psat.expect("subcritical T has a Psat");
