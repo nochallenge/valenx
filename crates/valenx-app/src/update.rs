@@ -1747,6 +1747,37 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
+                    // Toggle the right-side Thermodynamics workbench — in-house
+                    // industrial fluid thermodynamics (cubic equations of state +
+                    // vapor–liquid phase behavior, valenx-thermo).
+                    if ui
+                        .checkbox(&mut self.show_thermo_workbench, "Thermodynamics (EoS)")
+                        .on_hover_text(
+                            "Show / hide the Thermodynamics Workbench — in-house cubic equations of \
+                             state (Peng–Robinson / SRK) + vapor–liquid phase behavior. Pick a fluid \
+                             (CO₂ / N₂ / CH₄ / H₂O / C₃H₈), a model, and a (T, P); Compute solves the \
+                             liquid & vapor compressibility Z and the saturation pressure Psat(T) \
+                             (valenx-thermo).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Quantum circuit workbench — an
+                    // in-house state-vector quantum-circuit simulator
+                    // (valenx-quantum).
+                    if ui
+                        .checkbox(&mut self.show_quantum_workbench, "Quantum circuit")
+                        .on_hover_text(
+                            "Show / hide the Quantum circuit Workbench — an in-house state-vector \
+                             simulator. Pick a qubit count, append gates (Hadamard / Pauli-X on a \
+                             selectable qubit; CNOT on selectable control/target), and Run replays \
+                             the circuit and reports the basis-state probabilities (valenx-quantum).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     // Toggle the right-side Node Graph workbench — an in-house
                     // visual node editor (draggable nodes, output->input wiring,
                     // a topological evaluation pass).
@@ -3734,6 +3765,17 @@ impl eframe::App for ValenxApp {
             // boolean set-ops + tessellation, valenx-truck-cad). A no-op
             // unless toggled on via View → Part B-Rep (CAD).
             crate::brep_workbench::draw_brep_workbench(self, ctx);
+
+            // Thermodynamics Workbench (right) — in-house industrial fluid
+            // thermodynamics (cubic EoS + vapor–liquid phase behavior,
+            // valenx-thermo). A no-op unless toggled on via
+            // View → Thermodynamics (EoS).
+            crate::thermo_workbench::draw_thermo_workbench(self, ctx);
+
+            // Quantum circuit Workbench (right) — in-house state-vector
+            // quantum-circuit simulator (valenx-quantum). A no-op unless
+            // toggled on via View → Quantum circuit.
+            crate::quantum_workbench::draw_quantum_workbench(self, ctx);
 
             // Survivability / protection Workbench (right) — the DEFENSIVE /
             // protective side of the shared blast/impact physics (free-field
