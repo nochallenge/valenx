@@ -11902,6 +11902,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-quantum"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "num-complex",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "valenx-queueing"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -12486,6 +12494,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "valenx-thermo"
+version = "0.1.0-alpha.1"
+
+[[package]]
 name = "valenx-thermocouple"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -12656,6 +12668,15 @@ dependencies = [
  "png 0.18.1",
  "thiserror 2.0.18",
  "tracing",
+]
+
+[[package]]
+name = "valenx-waveform"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
