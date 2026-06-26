@@ -177,6 +177,7 @@ pub mod pipeflow_workbench;
 pub mod pipenetwork_workbench;
 pub mod piping_workbench;
 pub mod topopt_workbench;
+pub mod waveform_workbench;
 // Science / bio / civil batch — surface valenx-retainingwall, -openchannel,
 // -weir, -thermocycle, -queueing, -radioactivity, -osmosis, -thermoreg,
 // -hemodynamics, -popdynamics as reactive right-side workbenches.
@@ -1786,6 +1787,15 @@ pub struct ValenxApp {
     pub show_optics_workbench: bool,
     /// State for the Optics workbench. See [`crate::optics_workbench`].
     pub optics: crate::optics_workbench::OpticsWorkbenchState,
+
+    /// Whether the right-side **Waveform (VCD viewer)** workbench panel is
+    /// visible. Defaults to `false`; toggled from the View menu or opened by
+    /// the agent bridge under the id `"waveform"`. An in-house Value Change
+    /// Dump parser (Valenx's digital logic-analyzer input, via
+    /// valenx-waveform). See [`crate::waveform_workbench`].
+    pub show_waveform_workbench: bool,
+    /// Editable VCD source + latest parse result for the Waveform workbench.
+    pub waveform: crate::waveform_workbench::WaveformWorkbenchState,
 
     /// Whether the right-side Orifice Meter workbench is visible (View menu).
     pub show_orifice_workbench: bool,

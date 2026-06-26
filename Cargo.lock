@@ -10045,6 +10045,7 @@ dependencies = [
  "valenx-vehicle",
  "valenx-vibration",
  "valenx-viz",
+ "valenx-waveform",
  "valenx-weir",
  "valenx-windturbine",
  "walkers",
