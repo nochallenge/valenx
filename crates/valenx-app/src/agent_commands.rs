@@ -580,6 +580,16 @@ pub enum AgentCommand {
     /// **nothing** is loaded the camera is left unchanged and a `warn` feed note
     /// says so (never a panic); on success an ack note is posted.
     FrameAll,
+    /// **Auto-tile / organize the open workspace panels into a balanced grid**
+    /// — the file-driven equivalent of the tab-strip "Tile" button. Routes
+    /// through the **same** [`crate::dock_layout::ValenxApp::auto_tile_dock`]
+    /// the button calls: every open central-workspace panel (workbenches, the
+    /// Assistant, any Workbench+Agent tiles) is reflowed into a
+    /// `ceil(sqrt(N))`-column grid so all of them stay visible and legible
+    /// instead of one being crushed to a sliver. A no-op (warn note) when no
+    /// panel is open or on a clean agent product tab; on success an ack note
+    /// reports how many panels were tiled.
+    Tile,
     /// **Add a straight-line vertex to the in-house CAD sketch** by explicit
     /// model-space coordinates — the file-driven equivalent of a Line-tool click
     /// on the sketch canvas. Routes through the **same**
@@ -1582,6 +1592,41 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
                     "frame_all: no mesh or STL loaded (camera unchanged)",
                     "warn",
                 );
+            }
+        }
+        AgentCommand::Tile => {
+            // Organize the open workspace panels into a balanced grid through the
+            // SAME `auto_tile_dock` the tab-strip "Tile" button drives. A clean
+            // agent product tab or an empty workspace is a deliberate no-op
+            // (warn note, never a panic); otherwise report the panel count.
+            if app.dock_agent_only {
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    "tile: this is a single agent unit (nothing to re-grid)",
+                    "warn",
+                );
+            } else {
+                let count = app.open_tileable_count();
+                if count == 0 {
+                    crate::assistant_workbench::append_feed_note(
+                        app,
+                        ch,
+                        "Claude",
+                        "tile: no workspace panels open",
+                        "warn",
+                    );
+                } else {
+                    app.auto_tile_dock();
+                    crate::assistant_workbench::append_feed_note(
+                        app,
+                        ch,
+                        "Claude",
+                        &format!("tiled {count} panel(s) into a balanced grid"),
+                        "result",
+                    );
+                }
             }
         }
         AgentCommand::AddSketchPoint { x, y } => {
