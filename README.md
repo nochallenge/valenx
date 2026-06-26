@@ -1,4 +1,4 @@
-# Valenx
+# Valenx — AI-controlled design and simulation
 
 > A native, open-source desktop simulation suite — written in Rust, no
 > browser, no subscription, no vendor lock-in. One app spanning:
