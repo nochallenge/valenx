@@ -195,6 +195,22 @@ impl eframe::App for ValenxApp {
         // automation, adapter-probe, etc.), so the idle cost is only ~1 fps.
         ctx.request_repaint_after(crate::agent_commands::POLL_INTERVAL);
 
+        // Faster heartbeat WHILE THE AGENT BRIDGE IS ACTIVE. An external AI
+        // driving valenx from the background needs queued commands applied
+        // promptly, but egui throttles repaints to ~0 fps when the window is
+        // unfocused/idle, so the 1 fps heartbeat above can leave a freshly
+        // appended command waiting up to a full second for the next frame even
+        // once the poll's `POLL_INTERVAL` window has opened. When the bridge is
+        // in use — its env channels are configured, OR a global command file
+        // already exists on disk — request a ~6 fps THROTTLED repaint so the
+        // poll fires near the start of each `POLL_INTERVAL` window instead of
+        // up to a frame late. Deliberately `request_repaint_after` (not the
+        // full-speed `request_repaint`) to keep the idle/battery cost low, and
+        // gated so the normal interactive build (no bridge) is unaffected.
+        if crate::agent_commands::bridge_active(self) {
+            ctx.request_repaint_after(std::time::Duration::from_millis(150));
+        }
+
         self.pump_run_events();
         self.pump_sweep_events();
         // Repaint promptly while a run or sweep is live so residual

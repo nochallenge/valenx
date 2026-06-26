@@ -653,6 +653,29 @@ pub fn global_cmd_path(app: &ValenxApp) -> PathBuf {
     base_dir.join(format!("{CMD_STEM}.jsonl"))
 }
 
+/// Is the agent file-bridge **active** this session? True when an external
+/// agent is (or is about to be) driving valenx, used by the eframe `update()`
+/// loop to decide whether to schedule the faster ~6 fps heartbeat that keeps
+/// queued commands flowing while the window is unfocused/idle (see `update.rs`).
+///
+/// Two independent signals, either of which means "drive me":
+/// - the chat-bridge **env channels** are configured
+///   (`$VALENX_ASSISTANT_INBOX` / `$VALENX_ASSISTANT_FEED`) — set by the launcher
+///   whenever the in-app Assistant bridge is wired up; or
+/// - a **global command file** ([`global_cmd_path`]) already exists on disk —
+///   the moment an agent appends its first command (even with no env override
+///   and no unit yet), so a cold agent that just writes the global file is
+///   served promptly.
+///
+/// Cheap: an env lookup plus one `Path::exists` (a single `stat`), called once
+/// per frame. When neither holds the normal interactive build pays nothing
+/// beyond that.
+pub fn bridge_active(app: &ValenxApp) -> bool {
+    std::env::var_os("VALENX_ASSISTANT_INBOX").is_some()
+        || std::env::var_os("VALENX_ASSISTANT_FEED").is_some()
+        || global_cmd_path(app).exists()
+}
+
 /// **Wipe stale command files at launch.** Deletes every
 /// `valenx_chat_cmd_u*.jsonl` in the command-channel base directory (the parent
 /// of [`crate::assistant_workbench`]'s inbox path — the same dir [`cmd_path`]
@@ -808,13 +831,32 @@ pub fn poll_and_apply_agent_commands(app: &mut ValenxApp) {
 }
 
 /// Apply **one** command from the **global** channel
-/// (`<base-dir>/valenx_chat_cmd.jsonl`). Only [`NewUnit`](AgentCommand::NewUnit)
-/// is meaningful here — it opens a fresh Workbench+Agent unit (the bootstrap an
-/// agent needs before any unit exists) and optionally builds a product into it.
-/// Every other variant is a per-*unit* command and is ignored on the global
-/// channel (it has no unit to act on); a malformed line never reaches here (the
-/// poll loop skips unparseable lines). Like [`apply`], every branch is a
-/// no-op-on-bad-input rather than a panic.
+/// (`<base-dir>/valenx_chat_cmd.jsonl`).
+///
+/// [`NewUnit`](AgentCommand::NewUnit) is the global-channel **bootstrap** — it
+/// opens a fresh Workbench+Agent unit (the only place that can, since a per-unit
+/// channel already *is* a unit) and optionally builds a product into it. It is
+/// handled inline below.
+///
+/// **Every other drive command is ALSO honoured here**, so an external agent can
+/// drive the whole app from the one global file with no unit-bootstrap: the
+/// app/tab-level commands (`new_tab`, `open_workbench`, `focus_tab`,
+/// `rename_tab`, `close_tab`), the control/readout commands (`set_control`,
+/// `run_command`, `read_readout`, `list_controls`, `list_commands`), the camera
+/// /sketch/2-D commands, `note`, and `animate` (which carries its own target
+/// `n`) are dispatched through the **same** [`apply`] reducer the per-unit
+/// channel uses, against the **active tab / app** — with the special **channel
+/// `0`** sentinel so their ack/`warn` feed notes land in the **GLOBAL** feed
+/// (`valenx_chat_feed.jsonl`, see
+/// [`crate::assistant_workbench::append_feed_note`]) that an agent reading the
+/// global channel watches, not a per-unit feed.
+///
+/// The inherently per-unit *product* commands (`show_product`, `show_3d`,
+/// `show_2d`) target a `workspace:<n>` pane that the global channel has no unit
+/// for, so they are a deliberate no-op here (use `new_unit` to mint a unit
+/// first, then drive them on that unit's channel). A malformed line never
+/// reaches here (the poll loop skips unparseable lines). Like [`apply`], every
+/// branch is a no-op-on-bad-input rather than a panic.
 fn apply_global(app: &mut ValenxApp, cmd: AgentCommand) {
     let AgentCommand::NewUnit {
         kind,
@@ -823,8 +865,19 @@ fn apply_global(app: &mut ValenxApp, cmd: AgentCommand) {
         group,
     } = cmd
     else {
-        // Non-`new_unit` commands are per-unit; the global channel has no unit
-        // to target, so they are ignored here.
+        match cmd {
+            // Inherently per-unit product renders: no `workspace:<n>` pane on
+            // the global channel, so skip (mint a unit with `new_unit` first).
+            AgentCommand::ShowProduct { .. }
+            | AgentCommand::Show3d { .. }
+            | AgentCommand::Show2d { .. } => {}
+            // `new_unit` is the early-bound arm above; it can't reach here.
+            AgentCommand::NewUnit { .. } => {}
+            // Everything else (tab ops, set/run/read/list, camera, sketch, 2-D,
+            // note, animate) drives the active tab / app through the SAME
+            // `apply` reducer, with channel `0` so acks go to the GLOBAL feed.
+            other => apply(app, 0, other),
+        }
         return;
     };
 
@@ -4077,6 +4130,100 @@ mod tests {
             "only the newly-appended new_unit ran the 2nd time (no replay)"
         );
         assert_eq!(app.agent_global_cmd_cursor, Some(2));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn global_channel_drives_open_workbench_and_set_control_against_active_tab() {
+        // FIX: the GLOBAL command file now honours the full drive command set
+        // (not just `new_unit`), so an agent can drive EVERYTHING from the one
+        // global channel with no unit bootstrap. END-TO-END through the REAL
+        // poll path: with NO Workbench+Agent unit (wb_agent_counter == 0) and a
+        // Blank active tab, the agent appends `open_workbench` (switch the
+        // active tab to UQ) then `set_control` (write a UQ param) to the GLOBAL
+        // file. The poll applies both against the active tab/app, and their ack
+        // notes land in the GLOBAL feed (channel-0 sentinel), not a per-unit one.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "global_full_cmds");
+        // Route the GLOBAL feed at a file we can read back.
+        let global_feed = dir.join("valenx_chat_feed.jsonl");
+        app.assistant.set_feed_path_for_test(global_feed.clone());
+        // A Blank active tab for `open_workbench` to switch.
+        app.tab_bar.open(TabKind::Blank);
+        project_tabs::sync_active(&mut app);
+        assert_ne!(
+            app.uq.params.n_samples, 256,
+            "precondition: UQ sample count not already 256"
+        );
+
+        let path = global_cmd_path(&app);
+        std::fs::write(
+            &path,
+            concat!(
+                "{\"cmd\":\"open_workbench\",\"id\":\"uq\"}\n",
+                "{\"cmd\":\"set_control\",\"name\":\"Monte-Carlo samples N\",\"value\":256,\"workbench\":\"uq\"}\n",
+            ),
+        )
+        .unwrap();
+
+        assert_eq!(
+            app.wb_agent_counter, 0,
+            "no unit exists — global drive only"
+        );
+        poll_and_apply_agent_commands(&mut app);
+
+        // `open_workbench` switched the active tab to UQ...
+        let idx = app.tab_bar.active.expect("a tab is active");
+        assert_eq!(
+            app.tab_bar.tabs[idx].kind,
+            TabKind::Uq,
+            "global open_workbench switched the active tab to UQ"
+        );
+        assert!(app.show_uq_workbench, "the UQ workbench panel is shown");
+        // ...and `set_control` wrote the UQ param through the same reducer.
+        assert_eq!(
+            app.uq.params.n_samples, 256,
+            "global set_control wrote the UQ sample count against the active tab"
+        );
+
+        // The ack notes were posted to the GLOBAL feed (channel 0), not a
+        // per-unit feed — that is what an agent reading the global channel sees.
+        let body = std::fs::read_to_string(&global_feed).expect("global feed written");
+        let ack_count = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .filter(|v| v.get("detail").and_then(|d| d.as_str()).is_some())
+            .count();
+        assert!(
+            ack_count >= 1,
+            "global-channel commands ack into the global feed; feed = {body:?}"
+        );
+        // No per-unit feed (u0 / u1) was created for these global acks.
+        assert!(
+            !crate::assistant_workbench::unit_feed_path(&app, 0).exists(),
+            "global acks do not leak into a u0 unit feed"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn bridge_active_true_when_global_cmd_file_exists() {
+        // `bridge_active` drives the faster ~6 fps heartbeat in update.rs. It is
+        // true the moment a global command file exists on disk, so a cold agent
+        // that just writes the global file is served promptly even with no env
+        // override set. (The env-var signals are covered by their own presence;
+        // here we exercise the on-disk-file signal in isolation.)
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "bridge_active");
+        let path = global_cmd_path(&app);
+        // Without the file (and absent env vars) the file-signal is off. We
+        // can't assert the whole function is false here because the test
+        // process may have the env vars set, so just assert the file flips it on.
+        std::fs::write(&path, "{\"cmd\":\"note\",\"text\":\"hi\"}\n").unwrap();
+        assert!(
+            bridge_active(&app),
+            "an existing global command file marks the bridge active"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
