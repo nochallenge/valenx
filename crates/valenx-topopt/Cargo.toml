@@ -1,0 +1,23 @@
+[package]
+name        = "valenx-topopt"
+description = "In-house 2-D SIMP topology optimization — generative minimum-compliance structural design (density-based, OC update, sensitivity filter) over Q4 plane-stress elements, solved with the valenx-fem faer sparse backend."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace     = true
+
+[dependencies]
+nalgebra        = { workspace = true }
+nalgebra-sparse = { workspace = true }
+faer            = { workspace = true }
+
+valenx-fem = { path = "../valenx-fem" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

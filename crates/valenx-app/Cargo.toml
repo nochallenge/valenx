@@ -103,6 +103,11 @@ valenx-macro         = { path = "../valenx-macro" }
 valenx-addons        = { path = "../valenx-addons" }
 valenx-mesh-to-brep  = { path = "../valenx-mesh-to-brep" }
 valenx-fem           = { path = "../valenx-fem" }
+# In-house 2-D SIMP topology optimization (generative minimum-compliance
+# structural design), surfaced by the Topology Optimization workbench
+# (src/topopt_workbench.rs). Reuses valenx-fem's faer sparse solver for the FE
+# solves; no new external deps.
+valenx-topopt        = { path = "../valenx-topopt" }
 
 # The coupled rocket design→simulate example engine, surfaced by the
 # Rocket workbench (src/rocket_workbench.rs). Couples valenx-astro

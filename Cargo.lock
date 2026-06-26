@@ -9379,6 +9379,7 @@ dependencies = [
  "valenx-thermocycle",
  "valenx-thermoreg",
  "valenx-threephase",
+ "valenx-topopt",
  "valenx-torsion",
  "valenx-transformer",
  "valenx-transmissionline",
@@ -11865,6 +11866,16 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "serde",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "valenx-topopt"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "faer",
+ "nalgebra",
+ "nalgebra-sparse",
+ "valenx-fem",
 ]
 
 [[package]]

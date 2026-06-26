@@ -59,6 +59,7 @@ members = [
     "crates/valenx-addons",
     "crates/valenx-mesh-to-brep",
     "crates/valenx-fem",
+    "crates/valenx-topopt",
     "crates/valenx-rocket-demo",
     "crates/valenx-inspect",
     "crates/valenx-reverse",

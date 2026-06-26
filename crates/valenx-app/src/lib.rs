@@ -170,6 +170,7 @@ pub mod photogrammetry_workbench;
 pub mod pipeflow_workbench;
 pub mod pipenetwork_workbench;
 pub mod piping_workbench;
+pub mod topopt_workbench;
 // Science / bio / civil batch — surface valenx-retainingwall, -openchannel,
 // -weir, -thermocycle, -queueing, -radioactivity, -osmosis, -thermoreg,
 // -hemodynamics, -popdynamics as reactive right-side workbenches.
@@ -2090,6 +2091,16 @@ pub struct ValenxApp {
     /// Live reaction–diffusion field + playback state for the Morphogenesis
     /// workbench.
     pub morphogenesis: crate::morphogenesis_workbench::MorphogenesisWorkbenchState,
+
+    /// Whether the right-side **Topology Optimization** workbench panel is
+    /// visible. Defaults to `false`; toggled from the View menu or opened by the
+    /// agent bridge under the id `"topopt"`. In-house 2-D SIMP generative
+    /// structural design (minimum-compliance density optimisation), solved on
+    /// the valenx-fem faer sparse backend. See [`crate::topopt_workbench`].
+    pub show_topopt_workbench: bool,
+    /// Input parameters + latest result + animation cursor for the Topology
+    /// Optimization workbench.
+    pub topopt: crate::topopt_workbench::TopOptWorkbenchState,
 
     /// Whether the right-side Survivability / protection workbench panel is
     /// visible. Defaults to `false`; toggled from the View menu or opened by the
