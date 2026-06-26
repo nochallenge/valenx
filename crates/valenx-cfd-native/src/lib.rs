@@ -82,6 +82,25 @@
 //!   Wired into the SIMPLE driver through [`PressurePoissonSolver`]
 //!   alongside the original SOR.
 //!
+//! ## Optional GPU acceleration of the inner relaxation
+//!
+//! The dominant per-iteration cost of a SIMPLE run is the inner
+//! pressure-Poisson relaxation — the five-point stencil swept over the
+//! whole grid, many times per outer iteration. In its **weighted-Jacobi**
+//! form that sweep is embarrassingly parallel (each cell reads only the
+//! previous iterate), so an optional [`gpu`] module ports it to a
+//! `wgpu` **compute shader**: a single WGSL kernel
+//! ([`gpu::JACOBI_SWEEP_WGSL`]) that performs one sweep across storage
+//! buffers, dispatched one invocation per cell. It is gated behind the
+//! `gpu` Cargo feature and is purely **additive** — the CPU solvers stay
+//! the default path, [`gpu::GpuJacobi::new`] returns `None` when no GPU
+//! adapter is present (CI / headless), and the kernel is a faithful
+//! single-precision port of [`multigrid::weighted_jacobi_sweep`],
+//! validated sweep-for-sweep against an `f32` CPU reference. (The `f64`
+//! production solver is untouched; single precision is the standard
+//! choice for the *inner* smoother, whose result SIMPLE consumes only
+//! approximately.)
+//!
 //! ## Honest scope — a real v1, not OpenFOAM
 //!
 //! Every algorithm here is the genuine article and the solver produces
@@ -114,6 +133,8 @@
 pub mod aero_coeffs;
 pub mod benchmark;
 pub mod error;
+#[cfg(feature = "gpu")]
+pub mod gpu;
 pub mod grid;
 pub mod linsolve;
 pub mod multigrid;
@@ -129,6 +150,8 @@ pub use benchmark::{
     GHIA_V_RE_1000, GHIA_V_RE_400, GHIA_X, GHIA_Y,
 };
 pub use error::CfdError;
+#[cfg(feature = "gpu")]
+pub use gpu::{jacobi_sweep_f32_cpu, CoeffArrays, GpuJacobi, JACOBI_SWEEP_WGSL};
 pub use grid::{Field, Grid};
 pub use linsolve::{poisson_residual, solve_sor, PoissonCoeffs, SorResult};
 pub use multigrid::{
