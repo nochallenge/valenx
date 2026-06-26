@@ -1297,6 +1297,8 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
                 run_morphogenesis_bridge(app, ch, &id);
             } else if id.as_str() == "topopt.run" {
                 run_topopt_bridge(app, ch, &id);
+            } else if id.as_str() == "brep.build" {
+                run_brep_bridge(app, ch, &id);
             } else if id.as_str() == "nodegraph.eval" {
                 run_nodegraph_bridge(app, ch, &id);
             } else if id.as_str() == "bondgraph.solve" {
@@ -1785,6 +1787,40 @@ fn run_topopt_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
     );
 }
 
+/// Fire the Part B-Rep build from the bridge. The **Build** action exists
+/// only as an in-panel button; this routes the bridge id `brep.build` to
+/// the SAME `run` function the button calls, so a `RunCommand` drives the
+/// full primitive-build → boolean → tessellation pipeline.
+///
+/// The active tab must be a [`TabKind::BrepCad`]; otherwise this posts a
+/// fail-loud `warn` note and changes nothing. After building it acks with
+/// the brep readout (primitives + boolean op + solid topology + mesh
+/// counts + volume + bounding box).
+fn run_brep_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::BrepCad) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Part B-Rep workbench"),
+            "warn",
+        );
+        return;
+    }
+    crate::brep_workbench::run(app);
+    let readout = app
+        .brep
+        .agent_readout()
+        .unwrap_or_else(|| "(no readout)".to_string());
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {readout}"),
+        "result",
+    );
+}
+
 /// Fire the Node Graph topological evaluation from the bridge. The **Evaluate**
 /// action exists only as an in-panel button; this routes the bridge id
 /// `nodegraph.eval` to the SAME `run` function the button calls, so a
@@ -1972,6 +2008,7 @@ fn set_control(
         TabKind::Rocket => app.rocket.agent_set(name, value),
         TabKind::Engine => app.engine.agent_set(name, value),
         TabKind::Cad => app.cad.agent_set(name, value),
+        TabKind::BrepCad => app.brep.agent_set(name, value),
         TabKind::TopOpt => app.topopt.agent_set(name, value),
         TabKind::NodeGraph => app.nodegraph.agent_set(name, value),
         TabKind::BondGraph => app.bondgraph.agent_set(name, value),
@@ -2094,6 +2131,7 @@ fn list_controls(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
         TabKind::Rocket => crate::rocket_workbench::RocketWorkbenchState::agent_control_names(),
         TabKind::Engine => crate::engine_workbench::EngineWorkbenchState::agent_control_names(),
         TabKind::Cad => crate::cad_workbench::CadWorkbenchState::agent_control_names(),
+        TabKind::BrepCad => crate::brep_workbench::BrepWorkbenchState::agent_control_names(),
         TabKind::TopOpt => crate::topopt_workbench::TopOptWorkbenchState::agent_control_names(),
         TabKind::NodeGraph => {
             crate::nodegraph_workbench::NodeGraphWorkbenchState::agent_control_names()
@@ -2163,6 +2201,7 @@ fn read_readout(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
         TabKind::Survivability => Some(app.survivability.agent_readout()),
         TabKind::Genetics => Some(app.genetics.agent_readout()),
         TabKind::TopOpt => Some(app.topopt.agent_readout()),
+        TabKind::BrepCad => Some(app.brep.agent_readout()),
         TabKind::NodeGraph => Some(app.nodegraph.agent_readout()),
         TabKind::BondGraph => Some(app.bondgraph.agent_readout()),
         TabKind::Surrogate => Some(app.surrogate.agent_readout()),

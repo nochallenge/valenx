@@ -45,6 +45,7 @@ pub mod batterypack_workbench;
 pub mod beam_workbench;
 pub mod blackhole_workbench;
 pub mod bondgraph_workbench;
+pub mod brep_workbench;
 pub mod cad_workbench;
 pub mod car_workbench;
 pub mod cfd_workbench;
@@ -2104,6 +2105,17 @@ pub struct ValenxApp {
     /// Input parameters + latest result + animation cursor for the Topology
     /// Optimization workbench.
     pub topopt: crate::topopt_workbench::TopOptWorkbenchState,
+
+    /// Whether the right-side **Part B-Rep (CAD)** workbench panel is
+    /// visible. Defaults to `false`; toggled from the View menu or opened by
+    /// the agent bridge under the id `"brep"`. An in-house boundary-
+    /// representation solid modeler on the `truck` CAD kernel (NURBS
+    /// primitives + boolean set-ops + tessellation, via valenx-truck-cad).
+    /// See [`crate::brep_workbench`].
+    pub show_brep_workbench: bool,
+    /// Primitive selectors + sizes + boolean op + latest build result for
+    /// the Part B-Rep workbench.
+    pub brep: crate::brep_workbench::BrepWorkbenchState,
 
     /// Whether the right-side **Node Graph** workbench panel is visible.
     /// Defaults to `false`; toggled from the View menu or opened by the agent
