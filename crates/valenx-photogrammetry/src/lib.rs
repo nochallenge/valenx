@@ -118,6 +118,23 @@
 //! registered camera; scale free), and track building is the conservative
 //! "drop any one-image-twice component" heuristic.
 //!
+//! **Lens-distortion / camera-calibration ops** are the [`distortion`] module
+//! — the Brown–Conrady ("plumb-bob") radial-tangential model `(k1, k2, p1, p2,
+//! k3)` (OpenCV's `calibrateCamera` / COLMAP's `OPENCV` camera). Stages 3–5
+//! treat every camera as an *ideal pinhole* ([`project_point`] has no
+//! distortion term); this module supplies the missing piece that relates real,
+//! lens-bent pixels to that ideal model. It adds a [`Distortion`] coefficient
+//! set, the analytic forward map [`distort_normalized`] / [`project_distorted`]
+//! (pinhole project **with** distortion), the iterative inverse
+//! [`undistort_normalized`] (OpenCV's `undistortPoints` fixed-point loop), and
+//! [`unproject_to_ray`] (observed pixel → undistorted calibrated ray) — all in
+//! the crate's existing [`CameraIntrinsics`] + `nalgebra` types, no new heavy
+//! dependency. With [`Distortion::none`] every op degenerates exactly to the
+//! undistorted pinhole path. Honest scope (module docs): the 5-coefficient
+//! plumb-bob model (no thin-prism / rational `k4..k6` terms), coefficients
+//! assumed *given* (it models distortion, it does not estimate it), and the
+//! inverse is iterative.
+//!
 //! ## Provenance / licensing
 //!
 //! This is a *clean-room* implementation written from the published
@@ -164,6 +181,7 @@
 
 pub mod bundle;
 pub mod descriptor;
+pub mod distortion;
 pub mod fast;
 pub mod geometry;
 pub mod image;
@@ -182,6 +200,9 @@ pub use bundle::{
 };
 pub use descriptor::{
     describe_keypoint, hamming_distance, DESCRIPTOR_BITS, DESCRIPTOR_BYTES, PATCH_RADIUS,
+};
+pub use distortion::{
+    distort_normalized, project_distorted, undistort_normalized, unproject_to_ray, Distortion,
 };
 pub use error::{PhotogrammetryError, Result};
 pub use fast::detect_fast;
