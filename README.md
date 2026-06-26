@@ -1,10 +1,15 @@
 # Valenx — AI-controlled design and simulation
 
 > A native, open-source desktop simulation suite — written in Rust, no
-> browser, no subscription, no vendor lock-in. One app spanning:
+> browser, no subscription, no vendor lock-in — and **AI-drivable end to end**
+> (every workbench exposes named accessible widgets + an agent-command bridge,
+> so an AI agent can operate the whole app, not just a human). One app spanning:
 > **engineering** — aerospace (launch-vehicle ascent, orbital mechanics,
-> re-entry), CFD, FEA, electromagnetics, multibody dynamics, thermal,
-> battery, and a parametric CAD/CAM suite; **chemistry & materials** —
+> re-entry), CFD (plus a GPU-compute path), FEA, electromagnetics, multibody
+> dynamics, thermal, **thermodynamics** (equations of state), **acoustics**,
+> **optics**, **topology optimization**, **large-deformation (MPM)**, battery,
+> and a parametric CAD/CAM suite (with a B-Rep solid kernel); **chemistry &
+> materials** —
 > molecular dynamics, quantum chemistry, reaction dynamics, and
 > cheminformatics; and **computational biology** — genomics, sequence
 > alignment, phylogenetics, population genetics, protein structure &
@@ -13,8 +18,10 @@
 > (extracellular fields, Hodgkin–Huxley cable models, bioheat); and
 > **gravitational physics** — an in-house general-relativity / black-hole
 > engine (Kerr–Newman spacetimes, geodesics, Hawking thermodynamics, and a
-> shadow ray-tracer). Native Rust solvers plus 141 open-source tool
-> integrations.
+> shadow ray-tracer); **quantum computing** — a state-vector circuit
+> simulator; and **defense / mission planning** — a map-based tactical planner
+> (OSM basemap, MIL-STD-2525 symbology, A\* routing, line-of-sight), analysis /
+> planning only. Native Rust solvers plus 141 open-source tool integrations.
 
 **Status:** `0.1.0-alpha.1` — pre-release. The workflow loop is
 usable end-to-end (load project, click a case, **Prepare**, **Run**,
@@ -116,12 +123,38 @@ Rust solvers ship inside the app and work out of the box:
   **multi-contact current steering**, and **extracellular recording** (the
   forward-EAP read-out model) — each validated against a textbook or
   closed-form result (see [Validation](#validation)).
+- **Thermo-fluids & acoustics** — fluid **thermodynamics** (Peng–Robinson / SRK
+  cubic equations of state, compressibility, saturation pressure — validated vs
+  NIST), free-field **acoustic radiation** (monopole / dipole directivity), and a
+  GPU-compute pressure-Poisson sweep for the CFD core (`valenx-thermo`,
+  `valenx-acoustics`, `valenx-cfd-native`).
+- **Mechanics depth** — **topology optimization** (SIMP, generative
+  minimum-weight structures), the **Material Point Method** (2-D MLS-MPM for
+  large-deformation / failure where mesh FEM inverts), and **porous-media /
+  groundwater** flow (Darcy + unsaturated Richards) on the FEM core
+  (`valenx-topopt`, `valenx-mpm`, `valenx-fem`).
+- **Optics, quantum & signals** — geometric **optics** (thin-lens + paraxial
+  ABCD ray-transfer), a **quantum-circuit** state-vector simulator
+  (H/X/Y/Z/S/T/CNOT/CZ + Born-rule measurement, Bell + GHZ validated), and a
+  **digital-waveform** (VCD) viewer (`valenx-optics`, `valenx-quantum`,
+  `valenx-waveform`).
+- **Defense / mission planning** — a map-based tactical planner: real OSM basemap
+  tiles, **MIL-STD-2525 / APP-6** affiliation symbology, **A\*** routing over a
+  terrain cost grid, and terrain-masked **line-of-sight**. Analysis / planning
+  posture only — no weapons-lethality / targeting.
+- **AI-drivable everywhere** — every workbench is a reactive panel with **named,
+  accessible widgets** (an AccessKit tree) plus an **agent-command bridge**, so an
+  AI agent — or any MCP client, via the in-tree `valenx-mcp` server — can set
+  parameters, run, and read results across the whole app. This is the
+  "AI-controlled" half of the name.
 
 The external tools below are **optional** — reach for them when you want a
 reference implementation, a GPU/ML model, or a domain not yet native. A few
-domains are still external-only and on the roadmap: a native
-**electromagnetics** solver, native **unstructured meshing**, and
-**large-scale 3-D / industrial CFD**. **Contributors welcome —
+domains are still external-only or only partly native and on the roadmap: a
+native **electromagnetics** solver, fuller **unstructured meshing** (a native
+voxel→hex mesher ships now; general tet meshing is next), and **large-scale
+3-D / industrial CFD** (a GPU-compute pressure-Poisson path ships now; full
+industrial scale is next). **Contributors welcome —
 AI-assisted included** (see [CONTRIBUTING.md](./CONTRIBUTING.md) +
 [AGENTS.md](./AGENTS.md)).
 
@@ -307,6 +340,9 @@ Full per-tool status and capability matrix: [STATUS.md](./STATUS.md).
    Don't rewrite what already works.
 5. **Replace where it matters.** The UX, the integration, the
    workflow — that's what we build new.
+6. **AI-drivable first.** Every workbench exposes named accessible
+   widgets + an agent-command bridge, so AI agents operate the app as
+   first-class users — not just humans.
 
 ## License
 
