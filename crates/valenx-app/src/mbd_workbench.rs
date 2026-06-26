@@ -19,7 +19,7 @@
 //!
 //! * **Drop onto a plane** — a rigid body released above a flat ground plane and
 //!   integrated through the real **penalty-contact** path
-//!   ([`valenx_mbd::contact::body_contact_wrench`] / [`contact_force`]): while
+//!   ([`valenx_mbd::contact::body_contact_wrench`] / `contact_force`): while
 //!   clear of the ground it is in free fall, so its height follows the analytic
 //!   `h(t) = h₀ − ½ g t²` (the **free-fall PIN**); once it penetrates, the
 //!   compliant spring–damper pushes it back and it settles with a small steady
@@ -1588,8 +1588,10 @@ mod tests {
         // Positive control: a sane drop config validates cleanly (so the Err
         // tests above are catching the bad values, not failing for another
         // reason).
-        let mut p = MbdParams::default();
-        p.demo = MbdDemo::Drop;
+        let p = MbdParams {
+            demo: MbdDemo::Drop,
+            ..Default::default()
+        };
         assert!(p.validate().is_ok(), "default drop params must validate");
     }
 }

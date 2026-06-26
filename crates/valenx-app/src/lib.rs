@@ -834,7 +834,7 @@ pub struct ValenxApp {
     pub dock_agent_only: bool,
     /// When `true` (the default), opening or switching to a tab that has **two
     /// or more** central-workspace panels open auto-organises them into a
-    /// balanced grid (via [`dock_layout::ValenxApp::auto_tile_dock`]) so every
+    /// balanced grid (via `dock_layout::ValenxApp::auto_tile_dock`) so every
     /// panel stays visible and legible instead of the Assistant being crushed
     /// to a sliver beside a wide workbench. The user can turn this off
     /// (View → "Auto-tile panels on open") and still tile on demand with the
@@ -869,7 +869,7 @@ pub struct ValenxApp {
     /// [`invoke_named`](crate::agent_commands::AgentCommand::InvokeNamed) bridge
     /// command. Each entry is an `accesskit` node id (resolved from a widget's
     /// accessible **name** by [`crate::agent_commands`]'s headless probe) plus
-    /// the action to fire on it (`Default` = a click). [`Self::raw_input_hook`]
+    /// the action to fire on it (`Default` = a click). `Self::raw_input_hook`
     /// drains this into the next frame's `RawInput` as
     /// `Event::AccessKitActionRequest`, so egui treats it **exactly** like an
     /// Invoke arriving from an external UI-Automation client — the same code
@@ -2251,7 +2251,7 @@ pub struct ValenxApp {
     /// opened by the agent bridge under the id `"ppi"` (aliases `"interactome"`
     /// / `"network"`). Wraps `valenx-ppi` (the in-house sequence-first
     /// coevolution PPI engine — APC-corrected mutual-information over a paired
-    /// MSA folded into a fused [0,1] score, plus an all-vs-all interactome
+    /// MSA folded into a fused `[0,1]` score, plus an all-vs-all interactome
     /// screen). See [`crate::ppi_workbench`].
     pub show_ppi_workbench: bool,
     /// Form + result state for the PPI / interactome workbench (a named demo
@@ -2344,7 +2344,7 @@ pub struct ValenxApp {
     /// rename (which leaves `projects.len()` unchanged) now flips the key and
     /// the launcher shows the new name on the next frame. The fourth key is
     /// [`ValenxApp::focus_category`] so flipping the focus rebuilds immediately.
-    /// See the cache-build site in `update.rs`. Type aliased as [`PaletteCache`].
+    /// See the cache-build site in `update.rs`. Type aliased as `PaletteCache`.
     pub palette_cache: PaletteCache,
 
     // ── Swappable viewport system (cloud/viewport) ────────────────────────

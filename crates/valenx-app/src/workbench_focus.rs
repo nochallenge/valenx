@@ -1,7 +1,7 @@
 //! Frontend **domain-focus** filter — a pure-UI focus layer that narrows the
 //! workbench menus/launcher to a single working domain.
 //!
-//! valenx ships 44 primary workbench [`TabKind`](crate::project_tabs::TabKind)s
+//! valenx ships 44 primary workbench `TabKind`s
 //! spread across a handful of domains (Aerospace, Simulation, CAD & mesh,
 //! Machine design, Civil & AEC, Life sciences, …). A user who is, say, doing
 //! only bio work sees every domain's tools at once. The domain-focus filter
@@ -42,7 +42,7 @@
 //! ## Persistence
 //!
 //! The focus is **in-session only** — it is a transient view preference held on
-//! [`ValenxApp`](crate::ValenxApp) and is *not* written to the settings file,
+//! [`crate::ValenxApp`] and is *not* written to the settings file,
 //! so it resets to "All" on relaunch (matching how the other per-session view
 //! toggles like the Open-Tabs search behave). Persisting it would mean adding a
 //! field to the on-disk `Settings`; that was intentionally left out to keep
@@ -268,7 +268,6 @@ mod tests {
     #[test]
     fn focus_selector_labelled_by_name_is_stable() {
         assert_eq!(FOCUS_SELECTOR_LABEL, "Focus");
-        assert!(!FOCUS_SELECTOR_LABEL.is_empty());
     }
 
     /// Render the focus selector headlessly in a real egui pass (accesskit

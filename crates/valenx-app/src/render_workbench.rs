@@ -65,10 +65,10 @@ impl RenderWorkbenchState {
     }
 
     /// Set one labelled control by its user-visible caption, for the agent
-    /// `SetControl` bridge. The three count fields read [`AgentValue::as_i64`]
+    /// `SetControl` bridge. The three count fields read `AgentValue::as_i64`
     /// (the render clamps the value at solve time, so any non-negative integer
-    /// is accepted here); `exposure` reads [`AgentValue::as_f64`] (narrowed to
-    /// `f32`); the finish toggle reads [`AgentValue::as_bool`]. Fail-loud: an
+    /// is accepted here); `exposure` reads `AgentValue::as_f64` (narrowed to
+    /// `f32`); the finish toggle reads `AgentValue::as_bool`. Fail-loud: an
     /// unknown caption, wrong type, or negative count returns `Err` — never a
     /// panic, no field written on error.
     pub fn agent_set(

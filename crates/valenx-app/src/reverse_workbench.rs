@@ -63,8 +63,8 @@ impl ReverseWorkbenchState {
     }
 
     /// Set one labelled control by caption, for the agent `SetControl` bridge.
-    /// Numeric fields read [`AgentValue::as_i64`] (the two demo counts); `shape`
-    /// reads [`AgentValue::as_str`] and matches the picker names. Fail-loud: an
+    /// Numeric fields read `AgentValue::as_i64` (the two demo counts); `shape`
+    /// reads `AgentValue::as_str` and matches the picker names. Fail-loud: an
     /// unknown caption, wrong type, or negative count returns `Err` — never a
     /// panic, no field written on error.
     pub fn agent_set(

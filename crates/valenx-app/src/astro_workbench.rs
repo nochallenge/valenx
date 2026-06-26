@@ -139,8 +139,8 @@ impl AstroWorkbenchState {
 
     /// Set one labelled control by its user-visible caption (Ascent tab) or its
     /// section-qualified name (mission planners), for the agent `SetControl`
-    /// bridge. `Steering law` reads [`AgentValue::as_str`] and matches the
-    /// guidance names; every other control is numeric ([`AgentValue::as_f64`]).
+    /// bridge. `Steering law` reads `AgentValue::as_str` and matches the
+    /// guidance names; every other control is numeric (`AgentValue::as_f64`).
     ///
     /// Fail-loud: an unknown name or a value of the wrong type returns `Err`
     /// (the bridge turns it into a `warn` note) — never a panic, no field

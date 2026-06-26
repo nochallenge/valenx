@@ -583,9 +583,11 @@ mod tests {
     fn hover_reports_physical_figure_of_merit() {
         // V = 0 is hover: FM must be in (0, 1] (cannot beat the actuator-disk
         // limit) and efficiency is defined as 0.
-        let mut s = RotorWorkbenchState::default();
-        s.freestream_v = 0.0;
-        s.rpm = 6000.0;
+        let s = RotorWorkbenchState {
+            freestream_v: 0.0,
+            rpm: 6000.0,
+            ..Default::default()
+        };
         let perf = s.solve().expect("hover should solve");
         assert_eq!(perf.efficiency, 0.0);
         assert!(perf.figure_of_merit > 0.0 && perf.figure_of_merit <= 1.0);
@@ -595,8 +597,10 @@ mod tests {
     fn bad_geometry_surfaces_error_not_fake_numbers() {
         // Hub at/above the tip is unphysical — the engine must return an Err,
         // which the workbench renders as a `⚠ …` status (never invents loads).
-        let mut s = RotorWorkbenchState::default();
-        s.hub_radius_m = 0.2; // >= tip (0.15)
+        let s = RotorWorkbenchState {
+            hub_radius_m: 0.2, // >= tip (0.15)
+            ..Default::default()
+        };
         assert!(s.solve().is_err());
 
         // Non-monotonic stations (a duplicate radius) also error.
@@ -608,14 +612,20 @@ mod tests {
     #[test]
     fn out_of_domain_operating_point_errors() {
         // Zero rpm / zero density / negative V are rejected by solve().
-        let mut s = RotorWorkbenchState::default();
-        s.rpm = 0.0;
+        let s = RotorWorkbenchState {
+            rpm: 0.0,
+            ..Default::default()
+        };
         assert!(s.solve().is_err());
-        let mut s2 = RotorWorkbenchState::default();
-        s2.air_density = 0.0;
+        let s2 = RotorWorkbenchState {
+            air_density: 0.0,
+            ..Default::default()
+        };
         assert!(s2.solve().is_err());
-        let mut s3 = RotorWorkbenchState::default();
-        s3.freestream_v = -1.0;
+        let s3 = RotorWorkbenchState {
+            freestream_v: -1.0,
+            ..Default::default()
+        };
         assert!(s3.solve().is_err());
     }
 

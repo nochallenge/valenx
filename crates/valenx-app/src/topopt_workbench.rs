@@ -698,10 +698,12 @@ mod tests {
 
     #[test]
     fn run_now_arms_animation_and_produces_a_field() {
-        let mut s = TopOptWorkbenchState::default();
-        s.nx = 30;
-        s.ny = 15;
-        s.max_iter = 12;
+        let mut s = TopOptWorkbenchState {
+            nx: 30,
+            ny: 15,
+            max_iter: 12,
+            ..Default::default()
+        };
         s.run_now();
         let r = s.result.as_ref().expect("a result after run");
         assert!(!r.density.is_empty());
@@ -728,10 +730,12 @@ mod tests {
     #[test]
     fn animation_advances_then_parks_on_final() {
         let ctx = egui::Context::default();
-        let mut s = TopOptWorkbenchState::default();
-        s.nx = 24;
-        s.ny = 12;
-        s.max_iter = 10;
+        let mut s = TopOptWorkbenchState {
+            nx: 24,
+            ny: 12,
+            max_iter: 10,
+            ..Default::default()
+        };
         s.run_now();
         let last = s.result.as_ref().unwrap().snapshots.len() - 1;
         // Pump frames; eventually anim_idx reaches the last snapshot and stops.

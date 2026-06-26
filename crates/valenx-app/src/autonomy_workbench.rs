@@ -15,8 +15,8 @@
 //! thresholds** (a `MinClearance` distance, a `NoCollision` vehicle radius, and
 //! a `StayInBounds` box of half-extents about the origin). Clicking **Run**
 //! builds a [`Scenario`] — the vehicle coasts in a straight line at its initial
-//! velocity — drives the `valenx-sensors` [`Harness`] step-by-step into a
-//! [`Trace`], then scores a [`RequirementSet`] against it into a [`VnvReport`].
+//! velocity — drives the `valenx-sensors` `Harness` step-by-step into a
+//! `Trace`, then scores a [`RequirementSet`] against it into a [`VnvReport`].
 //!
 //! The 2-D top-down view (ENU `+x` east → right, `+y` north → up) draws the
 //! bounds box, the obstacle circle, and the ground-truth trajectory polyline
@@ -279,7 +279,7 @@ impl AutonomyWorkbenchState {
     }
 
     /// Run the full V&V pipeline: build the scenario, drive the harness into a
-    /// [`Trace`] via [`run_scenario`], build the requirement set, and score it
+    /// `Trace` via [`run_scenario`], build the requirement set, and score it
     /// with [`evaluate`] into a [`VnvReport`] — then flatten everything the
     /// painter/readouts need.
     ///

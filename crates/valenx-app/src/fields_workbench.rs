@@ -52,7 +52,7 @@ impl FieldsWorkbenchState {
 
     /// Set one labelled control by caption, for the agent `SetControl` bridge.
     /// The single settable field is the `numbers` text box (whitespace/comma-
-    /// separated list); it reads [`AgentValue::as_str`]. Fail-loud on an unknown
+    /// separated list); it reads `AgentValue::as_str`. Fail-loud on an unknown
     /// caption or a value of the wrong type — never a panic, no field written on
     /// error.
     pub fn agent_set(

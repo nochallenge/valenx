@@ -103,7 +103,7 @@ impl Draft2dWorkbenchState {
     /// line endpoints are the Unicode-subscript captions). Fail-loud on an
     /// unknown caption / wrong type (the bridge posts a `warn` note); no field is
     /// written on error and nothing panics. The line / circle fields read
-    /// [`AgentValue::as_f64`]; `zoom` is the `f32` canvas scale and is clamped to
+    /// `AgentValue::as_f64`; `zoom` is the `f32` canvas scale and is clamped to
     /// the same `0.5..=60.0` range the UI slider enforces.
     pub fn agent_set(
         &mut self,

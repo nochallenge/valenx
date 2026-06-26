@@ -269,9 +269,9 @@ impl ReactdynWorkbenchState {
     }
 
     /// Set one labelled control by its user-visible caption, for the agent
-    /// `SetControl` bridge. Enum captions read [`AgentValue::as_str`] and match a
+    /// `SetControl` bridge. Enum captions read `AgentValue::as_str` and match a
     /// small name set; `xyz` reads a string; numeric fields read
-    /// [`AgentValue::as_f64`] / [`AgentValue::as_i64`]. Fail-loud: an unknown
+    /// `AgentValue::as_f64` / `AgentValue::as_i64`. Fail-loud: an unknown
     /// caption, a wrong type, an unrecognised enum name, or a negative count
     /// returns `Err` — never a panic, no field written on error.
     pub fn agent_set(

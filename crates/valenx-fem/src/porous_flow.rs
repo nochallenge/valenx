@@ -26,8 +26,8 @@
 //!    (head `h` ↔ temperature `T`, hydraulic conductivity `K` ↔ thermal
 //!    conductivity `k`, Darcy flux `q = −K∇h` ↔ heat flux `q = −k∇T`), so
 //!    it reuses the exact same element machinery
-//!    ([`crate::thermal_solver::gradient_matrix`] /
-//!    [`crate::thermal_solver::tet_volume`]) and the SPD sparse solver
+//!    (`thermal_solver::gradient_matrix` /
+//!    `thermal_solver::tet_volume`) and the SPD sparse solver
 //!    ([`crate::faer_solver::solve_spd`]).
 //!
 //! 2. **Unsaturated Richards flow** ([`solve_richards_step`] /

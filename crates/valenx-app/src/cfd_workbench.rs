@@ -166,7 +166,7 @@ impl CfdWorkbenchState {
     /// Set one labelled control by its user-visible caption, for the agent
     /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the
     /// wrong type / out of range returns `Err(String)` — never a panic. Ranges
-    /// mirror [`validate_inputs`]: grid cells `nx`/`ny >= 1`, domain `Lx`/`Ly`
+    /// mirror `validate_inputs`: grid cells `nx`/`ny >= 1`, domain `Lx`/`Ly`
     /// and fluid `density`/`viscosity` finite `> 0`, the SIMPLE iteration cap
     /// `>= 1`. The drive speed accepts any finite value (a negative drive is a
     /// valid reversed lid/inlet). Both case-dependent speed captions

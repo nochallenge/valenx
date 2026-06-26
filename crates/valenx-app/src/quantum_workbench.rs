@@ -5,7 +5,7 @@
 //! Pauli-X `X` on a selectable qubit; `CNOT` on selectable control/target),
 //! and presses **Run**. The recorded program is replayed on a fresh
 //! `|0…0>` register via [`valenx_quantum::Circuit::run`] and the readout
-//! lists the Born-rule [`StateVector::probabilities`] per computational
+//! lists the Born-rule `StateVector::probabilities` per computational
 //! basis state.
 //!
 //! It mirrors the other real-time workbenches (`brep_workbench`): a
@@ -65,7 +65,7 @@ struct QuantumResult {
 /// Persistent state for the Quantum circuit workbench: the qubit count, the
 /// gate-edit selectors, the recorded op list, and the latest run result.
 pub struct QuantumWorkbenchState {
-    /// Number of qubits (1..=[`MAX_PANEL_QUBITS`]).
+    /// Number of qubits (1..=`MAX_PANEL_QUBITS`).
     pub num_qubits: usize,
     /// Currently selected qubit for the single-qubit gate buttons (H / X).
     pub sel_qubit: usize,
@@ -546,9 +546,11 @@ mod tests {
 
     #[test]
     fn prune_drops_out_of_range_ops() {
-        let mut s = QuantumWorkbenchState::default();
-        s.num_qubits = 4;
-        s.ops = vec![Op::H(3), Op::Cnot(0, 1)];
+        let mut s = QuantumWorkbenchState {
+            num_qubits: 4,
+            ops: vec![Op::H(3), Op::Cnot(0, 1)],
+            ..Default::default()
+        };
         s.num_qubits = 1;
         s.prune_ops();
         // Only ops fully inside 0..1 survive.

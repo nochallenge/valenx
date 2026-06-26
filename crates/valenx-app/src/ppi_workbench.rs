@@ -60,8 +60,8 @@
 //!
 //! Honesty: valenx-ppi is a **research / educational coevolution heuristic**
 //! that *ranks candidate interactions for a human to triage — it never emits a
-//! validated "interacts" verdict* ([`PpiScore::requires_review`] is always
-//! `true`, and so is [`RankedInteractions::requires_review`]). Plain
+//! validated "interacts" verdict* (`PpiScore::requires_review` is always
+//! `true`, and so is `RankedInteractions::requires_review`). Plain
 //! APC-corrected MI does not separate direct from transitive couplings the way
 //! a full DCA model does, and the planted toy interactome here proves the
 //! ranking + the graph metrics are wired up and behave monotonically — **not**
@@ -240,10 +240,10 @@ impl PpiAnalysis {
 #[derive(Clone, Copy, Debug)]
 pub struct PpiParams {
     /// Number of host proteins to include from the demo panel (`1..=`
-    /// [`HOST_NAMES`]`.len()`). The pathogen count is fixed to the full
+    /// `HOST_NAMES``.len()`). The pathogen count is fixed to the full
     /// effector panel so the hub keeps its spokes.
     pub n_hosts: usize,
-    /// Number of pathogen effectors to include (`1..=`[`PATHOGEN_NAMES`]`.len()`).
+    /// Number of pathogen effectors to include (`1..=``PATHOGEN_NAMES``.len()`).
     pub n_pathogens: usize,
     /// Which analysis to compute over the resulting interaction network.
     pub analysis: PpiAnalysis,

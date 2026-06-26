@@ -2435,11 +2435,11 @@ mod tests {
             .map(|p| p.ss.map(SsKind::from_dssp_code))
             .collect();
         assert!(
-            kinds.iter().any(|k| *k == Some(SsKind::Helix)),
+            kinds.contains(&Some(SsKind::Helix)),
             "crambin must contain α-helix backbone points"
         );
         assert!(
-            kinds.iter().any(|k| *k == Some(SsKind::Sheet)),
+            kinds.contains(&Some(SsKind::Sheet)),
             "crambin must contain β-sheet backbone points"
         );
     }

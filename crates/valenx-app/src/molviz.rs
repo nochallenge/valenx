@@ -7,17 +7,17 @@
 //! *extends* that set with the representations a structural-biology viewer is
 //! expected to offer, without touching the viewport or the mesh renderer:
 //!
-//! - **[`Representation::Sticks`]** — bonds only (no atom balls), the
+//! - **`Representation::Sticks`** — bonds only (no atom balls), the
 //!   "licorice" model. A thin wrapper that meshes a molecule's bonds as
 //!   capped cylinders.
-//! - **[`Representation::Cartoon`]** — a smooth **Catmull-Rom ribbon/tube**
+//! - **`Representation::Cartoon`** — a smooth **Catmull-Rom ribbon/tube**
 //!   threaded through a protein's Cα backbone, the canonical cartoon view.
 //!   When secondary-structure information is available (the app passes a
 //!   per-residue [`valenx_biostruct::dssp::SecondaryStructure`] track) the
 //!   tube fattens through helices and strands and thins through coil; with no
 //!   SS track it falls back to a uniform tube.
-//! - **[`Representation::Surface`]** — a **probe-based molecular surface**
-//!   ([`SurfaceMode`]): the van-der-Waals surface (`vdW`), the
+//! - **`Representation::Surface`** — a **probe-based molecular surface**
+//!   (`SurfaceMode`): the van-der-Waals surface (`vdW`), the
 //!   **solvent-accessible surface** (`SAS` — union of probe-inflated balls), or
 //!   the **solvent-excluded / Connolly surface** (`SES` — the recognizable
 //!   smooth re-entrant surface, built by eroding the SAS solid by the probe
@@ -27,8 +27,8 @@
 //!   crate) with the full 256-entry edge table and 16-per-cell triangle table.
 //!
 //! The geometry generators are **pure functions** over plain data
-//! ([`ViewMolecule`] / control-point slices / a sampled scalar field), each
-//! returning a [`TriangleMesh`] the viewport already knows how to draw, so
+//! (`ViewMolecule` / control-point slices / a sampled scalar field), each
+//! returning a `TriangleMesh` the viewport already knows how to draw, so
 //! they are unit-testable headless (no GUI). The reactive **representation
 //! picker** lives in the Macromolecular-Structure panel
 //! ([`crate::genetics::biostruct`]) as a row of named `selectable_value`
@@ -38,18 +38,18 @@
 //! ## Honest scope / notes
 //!
 //! - The **surface** offers all three standard probe-based surfaces via
-//!   [`SurfaceMode`]: `vdW` (bare union-of-balls), `SAS` (probe-inflated
+//!   `SurfaceMode`: `vdW` (bare union-of-balls), `SAS` (probe-inflated
 //!   union-of-balls), and `SES` (the rolling-probe solvent-excluded / Connolly
 //!   surface with re-entrant patches). The SES is a **grid** construction —
 //!   erosion of the sampled SAS solid by the probe radius via an exact Euclidean
 //!   distance transform — so its re-entrant patches are correct in form (smooth,
 //!   concave between atoms, enclosing the vdW solid and enclosed by the SAS
 //!   solid) but exact only in the limit of fine grid spacing; it is *not* an
-//!   analytic Connolly patch decomposition. See [`solvent_excluded_field`].
-//! - **[`Representation::Density`]** is the Gaussian-density isosurface (the
+//!   analytic Connolly patch decomposition. See `solvent_excluded_field`.
+//! - **`Representation::Density`** is the Gaussian-density isosurface (the
 //!   molchanica/QuteMol "volume" style): each atom is splatted as a Gaussian and
 //!   the *sum* is meshed at a chosen iso-level — reusing the same marching-cubes
-//!   machinery with a different field generator ([`gaussian_density_field`]). It
+//!   machinery with a different field generator (`gaussian_density_field`). It
 //!   is a phenomenological smooth-blob model (a sum of Gaussians), **not** a
 //!   quantum-mechanical electron density: no wavefunction, no basis set, no
 //!   bonding charge redistribution. The iso-level is read as a fraction of one
@@ -181,7 +181,7 @@ impl Representation {
 ///
 /// `backbone` is the ordered list of protein backbone control points (Cα
 /// positions, one per residue, with an optional secondary-structure code) —
-/// only consulted for [`Representation::Cartoon`]; pass an empty slice for the
+/// only consulted for `Representation::Cartoon`; pass an empty slice for the
 /// atom-based representations. `params` tunes ball/stick radii, the cartoon
 /// tube and the surface grid.
 ///
@@ -288,7 +288,7 @@ fn uniform_scheme_color(mol: &ViewMolecule, scheme: ColorScheme, attrs: &[AtomAt
     [acc[0] / n, acc[1] / n, acc[2] / n]
 }
 
-/// Which **probe-based molecular surface** [`Representation::Surface`] extracts.
+/// Which **probe-based molecular surface** `Representation::Surface` extracts.
 ///
 /// All three are isosurfaces over the same regular grid + the same
 /// [`marching_cubes`]; they differ only in the scalar field that is meshed:
@@ -348,7 +348,7 @@ impl SurfaceMode {
     }
 
     /// Parse a wire token (case-insensitive; a couple of synonyms) back into a
-    /// [`SurfaceMode`]. `None` for an unrecognised token.
+    /// `SurfaceMode`. `None` for an unrecognised token.
     pub fn from_token(s: &str) -> Option<SurfaceMode> {
         match s.trim().to_ascii_lowercase().as_str() {
             "vdw" | "van-der-waals" | "vanderwaals" | "vdw-surface" => Some(SurfaceMode::Vdw),
@@ -384,7 +384,7 @@ pub struct MolvizParams {
     pub ribbon_thickness: f32,
     /// Surface: which probe-based molecular surface to extract — van-der-Waals,
     /// solvent-accessible (SAS), or solvent-excluded/Connolly (SES). See
-    /// [`SurfaceMode`].
+    /// `SurfaceMode`.
     pub surface_mode: SurfaceMode,
     /// Surface: rolling-probe radius (ångström). For [`SurfaceMode::Sas`] it
     /// inflates every atom's vdW radius before the isosurface is extracted; for
@@ -1122,7 +1122,7 @@ fn cap_ring(tris: &mut Vec<StlTriangle>, ring: &[[f32; 3]], center: [f32; 3], fr
 /// tube — the classic flattened-ribbon protein view. The band's half-width and
 /// half-thickness come from [`MolvizParams::ribbon_width`] /
 /// [`MolvizParams::ribbon_thickness`], each scaled per-sample by the point's
-/// secondary-structure [`BackbonePoint::radius_scale`] so helices/strands widen.
+/// secondary-structure `BackbonePoint::radius_scale` so helices/strands widen.
 ///
 /// With fewer than two control points the mesh is empty (a single Cα is drawn
 /// as one small sphere so a 1-residue input is not invisible), mirroring the
@@ -1425,7 +1425,7 @@ pub fn surface(mol: &ViewMolecule, params: &MolvizParams) -> TriangleMesh {
 ///    surface.
 ///
 /// The erosion uses an **exact Euclidean distance transform** (the separable
-/// Felzenszwalb–Huttenlocher squared-distance algorithm, [`squared_edt_3d`])
+/// Felzenszwalb–Huttenlocher squared-distance algorithm, `squared_edt_3d`)
 /// from the *exterior* SAS grid points, scaled by the (cubic) grid spacing. The
 /// returned field is `dist_to_exterior(p) − probe_radius`, positive inside the
 /// SES solid and zero on its boundary, so it meshes with [`marching_cubes`] at
@@ -1643,7 +1643,7 @@ fn element_electron_weight(element: &str) -> f32 {
 /// atoms, producing a smooth, electron-density-like scalar volume that peaks at
 /// (and merges between) atom centres. `wᵢ` is `1` when
 /// [`MolvizParams::density_weight_by_element`] is off, else a crude relative
-/// electron count ([`element_electron_weight`], normalised so hydrogen = 1) so
+/// electron count (`element_electron_weight`, normalised so hydrogen = 1) so
 /// heavier atoms read denser.
 ///
 /// The grid spans the atoms' bounding box padded by a few σ (so the Gaussian
@@ -1782,9 +1782,9 @@ pub fn density_surface(mol: &ViewMolecule, params: &MolvizParams) -> TriangleMes
 ///
 /// Standard table-driven implementation — for each cube of eight neighbouring
 /// samples, an 8-bit case index is formed from which corners are below `iso`,
-/// [`MC_EDGE_TABLE`] gives which of the 12 cube edges the surface crosses, the
+/// `MC_EDGE_TABLE` gives which of the 12 cube edges the surface crosses, the
 /// crossing point on each is found by **linear interpolation** of the field,
-/// and [`MC_TRI_TABLE`] lists the triangles (edge triples). Vertices land on
+/// and `MC_TRI_TABLE` lists the triangles (edge triples). Vertices land on
 /// cube edges, so the mesh is watertight up to floating-point. Returns one
 /// [`StlTriangle`] per emitted triangle (winding chosen so normals point
 /// "outward", i.e. toward decreasing field / outside the union of balls).
@@ -2480,8 +2480,7 @@ mod tests {
             let m = build_mesh(&mol, rep, &[], &p);
             assert!(
                 m.triangle_count() > 0,
-                "{:?} should mesh a 3-atom molecule",
-                rep
+                "{rep:?} should mesh a 3-atom molecule"
             );
         }
         // Cartoon + ribbon need the backbone, not the atom list.
@@ -2504,8 +2503,7 @@ mod tests {
             let m = build_mesh(&empty, rep, &[], &p);
             assert!(
                 m.triangles.is_empty(),
-                "{:?} on an empty molecule must be empty",
-                rep
+                "{rep:?} on an empty molecule must be empty"
             );
         }
         // The surface field generator returns None (nothing to mesh).
@@ -2726,8 +2724,10 @@ mod tests {
         // A pathological grid_max is clamped into [8, 192] so we never try to
         // allocate an absurd grid (and never produce a zero-cell grid).
         let mol = water();
-        let mut p = MolvizParams::default();
-        p.grid_max = 1; // below the floor
+        let mut p = MolvizParams {
+            grid_max: 1, // below the floor
+            ..Default::default()
+        };
         let field = union_of_balls_field(&mol, &p).expect("non-empty");
         assert!(field.dims.iter().all(|&d| d >= 2));
         p.grid_max = 100_000; // absurd; clamped to 192
@@ -2816,11 +2816,13 @@ mod tests {
         // vdw + probe (the probe-inflated ball), within the grid tolerance.
         let center = [1.0_f32, -2.0, 0.5];
         let mol = one_atom("C", center);
-        let mut p = MolvizParams::default();
-        p.surface_mode = SurfaceMode::Sas;
-        p.surface_vdw_scale = 1.0;
-        p.probe_radius = 1.4;
-        p.grid_max = 64;
+        let p = MolvizParams {
+            surface_mode: SurfaceMode::Sas,
+            surface_vdw_scale: 1.0,
+            probe_radius: 1.4,
+            grid_max: 64,
+            ..Default::default()
+        };
 
         let field = union_of_balls_field(&mol, &p).expect("non-empty");
         let tris = surface(&mol, &p).triangles;
@@ -2844,12 +2846,13 @@ mod tests {
         // ignored), strictly smaller than its SAS sphere.
         let center = [0.0_f32, 0.0, 0.0];
         let mol = one_atom("C", center);
-        let mut p = MolvizParams::default();
-        p.surface_vdw_scale = 1.0;
-        p.probe_radius = 1.4;
-        p.grid_max = 64;
-
-        p.surface_mode = SurfaceMode::Vdw;
+        let mut p = MolvizParams {
+            surface_vdw_scale: 1.0,
+            probe_radius: 1.4,
+            grid_max: 64,
+            surface_mode: SurfaceMode::Vdw,
+            ..Default::default()
+        };
         let field = union_of_balls_field_inflated(&mol, &p, 0.0).expect("non-empty");
         let vdw_tris = surface(&mol, &p).triangles;
         assert!(vdw_tris.len() > 200);
@@ -2878,11 +2881,13 @@ mod tests {
         // radius peels the inflation right back off.
         let center = [2.0_f32, 1.0, -1.0];
         let mol = one_atom("C", center);
-        let mut p = MolvizParams::default();
-        p.surface_mode = SurfaceMode::Ses;
-        p.surface_vdw_scale = 1.0;
-        p.probe_radius = 1.4;
-        p.grid_max = 72;
+        let p = MolvizParams {
+            surface_mode: SurfaceMode::Ses,
+            surface_vdw_scale: 1.0,
+            probe_radius: 1.4,
+            grid_max: 72,
+            ..Default::default()
+        };
 
         let field = solvent_excluded_field(&mol, &p).expect("non-empty");
         let tris = surface(&mol, &p).triangles;
@@ -2918,11 +2923,13 @@ mod tests {
         let mut mol = ViewMolecule::new();
         mol.atoms.push(ViewAtom::new([0.0, 0.0, 0.0], "C"));
         mol.atoms.push(ViewAtom::new([1.5, 0.0, 0.0], "C")); // ~C–C bond
-        let mut p = MolvizParams::default();
-        p.surface_mode = SurfaceMode::Ses;
-        p.surface_vdw_scale = 1.0;
-        p.probe_radius = 1.4;
-        p.grid_max = 80;
+        let p = MolvizParams {
+            surface_mode: SurfaceMode::Ses,
+            surface_vdw_scale: 1.0,
+            probe_radius: 1.4,
+            grid_max: 80,
+            ..Default::default()
+        };
 
         let r_vdw = vdw_radius("C") * p.surface_vdw_scale;
         let r_sas = r_vdw + p.probe_radius;
@@ -2969,10 +2976,12 @@ mod tests {
         let mut mol = ViewMolecule::new();
         mol.atoms.push(ViewAtom::new([0.0, 0.0, 0.0], "C"));
         mol.atoms.push(ViewAtom::new([1.5, 0.0, 0.0], "C"));
-        let mut p = MolvizParams::default();
-        p.surface_mode = SurfaceMode::Ses;
-        p.probe_radius = 1.4;
-        p.grid_max = 80;
+        let p = MolvizParams {
+            surface_mode: SurfaceMode::Ses,
+            probe_radius: 1.4,
+            grid_max: 80,
+            ..Default::default()
+        };
 
         let field = solvent_excluded_field(&mol, &p).expect("non-empty");
         let tris = surface(&mol, &p).triangles;
@@ -3032,10 +3041,12 @@ mod tests {
     fn ses_degenerate_inputs_are_guarded() {
         // A clamped (pathological) grid + a zero probe + coincident atoms must
         // not panic, divide by zero, or emit NaN/inf vertices.
-        let mut p = MolvizParams::default();
-        p.surface_mode = SurfaceMode::Ses;
-        p.grid_max = 1; // clamped up to the floor
-        p.probe_radius = 0.0; // SES with a zero probe == the vdW surface
+        let p = MolvizParams {
+            surface_mode: SurfaceMode::Ses,
+            grid_max: 1,       // clamped up to the floor
+            probe_radius: 0.0, // SES with a zero probe == the vdW surface
+            ..Default::default()
+        };
         let mut mol = ViewMolecule::new();
         mol.atoms.push(ViewAtom::new([0.0, 0.0, 0.0], "C"));
         mol.atoms.push(ViewAtom::new([0.0, 0.0, 0.0], "C")); // coincident
@@ -3060,9 +3071,11 @@ mod tests {
         // shrinks). The fine grid must be at least as close as the coarse one.
         let center = [0.0_f32, 0.0, 0.0];
         let mol = one_atom("C", center);
-        let mut p = MolvizParams::default();
-        p.surface_mode = SurfaceMode::Ses;
-        p.probe_radius = 1.4;
+        let mut p = MolvizParams {
+            surface_mode: SurfaceMode::Ses,
+            probe_radius: 1.4,
+            ..Default::default()
+        };
         let target = vdw_radius("C");
 
         p.grid_max = 28;
@@ -3095,11 +3108,13 @@ mod tests {
     fn single_atom_density_isosurface_is_a_sphere_of_the_analytic_radius() {
         // Hydrogen so the element weight is 1 → peak == density_amplitude and
         // the analytic radius uses the amplitude directly.
-        let mut p = MolvizParams::default();
-        p.density_sigma = 1.2;
-        p.density_amplitude = 1.0;
-        p.density_iso = 0.4; // well below the peak → a real sphere
-        p.density_grid_max = 48;
+        let p = MolvizParams {
+            density_sigma: 1.2,
+            density_amplitude: 1.0,
+            density_iso: 0.4, // well below the peak → a real sphere
+            density_grid_max: 48,
+            ..Default::default()
+        };
         let center = [2.0_f32, -1.0, 0.5];
         let mol = one_atom("H", center);
 
@@ -3165,10 +3180,12 @@ mod tests {
     fn density_isosurface_above_peak_amplitude_is_empty_no_panic() {
         // A lone atom's density never exceeds its peak; an iso AT/ABOVE the peak
         // therefore has no crossing → empty mesh, and must not panic.
-        let mut p = MolvizParams::default();
-        p.density_weight_by_element = false; // peak == amplitude exactly
-        p.density_amplitude = 1.0;
-        p.density_iso = 1.0; // exactly the peak — unreachable from below
+        let mut p = MolvizParams {
+            density_weight_by_element: false, // peak == amplitude exactly
+            density_amplitude: 1.0,
+            density_iso: 1.0, // exactly the peak — unreachable from below
+            ..Default::default()
+        };
         let mol = one_atom("C", [0.0, 0.0, 0.0]);
         assert!(
             density_surface(&mol, &p).triangles.is_empty(),
@@ -3183,12 +3200,14 @@ mod tests {
     fn two_overlapping_atoms_give_one_connected_watertight_surface() {
         // Two atoms closer than ~2σ merge into a single connected blob. Use a
         // generous σ so the Gaussians strongly overlap.
-        let mut p = MolvizParams::default();
-        p.density_sigma = 1.5;
-        p.density_amplitude = 1.0;
-        p.density_weight_by_element = false; // equal peaks, simpler reasoning
-        p.density_iso = 0.5;
-        p.density_grid_max = 56;
+        let p = MolvizParams {
+            density_sigma: 1.5,
+            density_amplitude: 1.0,
+            density_weight_by_element: false, // equal peaks, simpler reasoning
+            density_iso: 0.5,
+            density_grid_max: 56,
+            ..Default::default()
+        };
         let mut mol = ViewMolecule::new();
         mol.atoms.push(ViewAtom::new([0.0, 0.0, 0.0], "C"));
         mol.atoms.push(ViewAtom::new([1.5, 0.0, 0.0], "C")); // ~1σ apart → merged
@@ -3218,11 +3237,13 @@ mod tests {
         // Where two equal Gaussians overlap, the summed field at the midpoint
         // can exceed a single atom's peak — the defining feature of a *sum*
         // (vs. the union-of-balls `max`). Place them ~1σ apart.
-        let mut p = MolvizParams::default();
-        p.density_sigma = 1.0;
-        p.density_amplitude = 1.0;
-        p.density_weight_by_element = false;
-        p.density_grid_max = 64;
+        let p = MolvizParams {
+            density_sigma: 1.0,
+            density_amplitude: 1.0,
+            density_weight_by_element: false,
+            density_grid_max: 64,
+            ..Default::default()
+        };
         let mut mol = ViewMolecule::new();
         mol.atoms.push(ViewAtom::new([0.0, 0.0, 0.0], "C"));
         mol.atoms.push(ViewAtom::new([1.0, 0.0, 0.0], "C"));
@@ -3379,9 +3400,11 @@ mod tests {
         // is much wider (binormal) than it is thick (normal). A straight trace
         // on x makes y the wide axis and z the thin axis.
         let bb = straight_backbone(6);
-        let mut p = MolvizParams::default();
-        p.ribbon_width = 1.6;
-        p.ribbon_thickness = 0.2;
+        let p = MolvizParams {
+            ribbon_width: 1.6,
+            ribbon_thickness: 0.2,
+            ..Default::default()
+        };
         let mesh = ribbon(&bb, &p);
         let (min, max) = mesh.bounding_box().expect("non-empty");
         let wide = (max[1] - min[1]).max(max[2] - min[2]);
@@ -3698,15 +3721,17 @@ mod tests {
     /// shared by an even number of triangles.
     fn mesh_is_closed(tris: &[StlTriangle], spacing: f32) -> bool {
         use std::collections::HashMap;
+        type Cell = (i64, i64, i64);
+        type Edge = (Cell, Cell);
         let q = spacing / 100.0; // quantisation step (well below MC vertex spacing)
-        let key = |v: [f32; 3]| -> (i64, i64, i64) {
+        let key = |v: [f32; 3]| -> Cell {
             (
                 (v[0] / q).round() as i64,
                 (v[1] / q).round() as i64,
                 (v[2] / q).round() as i64,
             )
         };
-        let mut edges: HashMap<((i64, i64, i64), (i64, i64, i64)), usize> = HashMap::new();
+        let mut edges: HashMap<Edge, usize> = HashMap::new();
         for t in tris {
             let vs = [key(t.vertices[0]), key(t.vertices[1]), key(t.vertices[2])];
             for e in 0..3 {

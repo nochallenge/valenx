@@ -480,9 +480,11 @@ mod tests {
 
     #[test]
     fn agent_readout_reports_the_loaded_structure() {
-        let mut s = GeneticsWorkbenchState::default();
         // No readout unless the Macromolecular Structure panel is active.
-        s.active = GeneticsPanel::Sequence;
+        let mut s = GeneticsWorkbenchState {
+            active: GeneticsPanel::Sequence,
+            ..Default::default()
+        };
         assert!(s.agent_readout().is_none());
         // On that panel it reports the loaded structure with residue/atom counts.
         s.active = GeneticsPanel::MacromolecularStructure;

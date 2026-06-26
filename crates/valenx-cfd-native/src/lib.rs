@@ -88,12 +88,12 @@
 //! pressure-Poisson relaxation — the five-point stencil swept over the
 //! whole grid, many times per outer iteration. In its **weighted-Jacobi**
 //! form that sweep is embarrassingly parallel (each cell reads only the
-//! previous iterate), so an optional [`gpu`] module ports it to a
+//! previous iterate), so an optional `gpu` module ports it to a
 //! `wgpu` **compute shader**: a single WGSL kernel
-//! ([`gpu::JACOBI_SWEEP_WGSL`]) that performs one sweep across storage
+//! (`gpu::JACOBI_SWEEP_WGSL`) that performs one sweep across storage
 //! buffers, dispatched one invocation per cell. It is gated behind the
 //! `gpu` Cargo feature and is purely **additive** — the CPU solvers stay
-//! the default path, [`gpu::GpuJacobi::new`] returns `None` when no GPU
+//! the default path, `gpu::GpuJacobi::new` returns `None` when no GPU
 //! adapter is present (CI / headless), and the kernel is a faithful
 //! single-precision port of [`multigrid::weighted_jacobi_sweep`],
 //! validated sweep-for-sweep against an `f32` CPU reference. (The `f64`

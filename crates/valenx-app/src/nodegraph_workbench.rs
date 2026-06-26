@@ -7,7 +7,7 @@
 //!
 //! This is the foundation for later **pipeline / systems** editing (bond
 //! graphs, CAD -> FEA pipelines, signal flow): the node-type system is an
-//! extensible [`NodeKind`] enum with a single [`NodeKind::compute`] dispatch and
+//! extensible [`NodeKind`] enum with a single `NodeKind::compute` dispatch and
 //! typed in/out [`PortType`]s, so a new kind is one enum variant plus one
 //! match arm — no canvas / wiring / topo-sort changes.
 //!
@@ -68,7 +68,7 @@ impl PortType {
 }
 
 /// The kind of a node — the extensible heart of the editor. A new node is one
-/// variant here plus an arm in [`NodeKind::inputs`] / [`NodeKind::compute`]
+/// variant here plus an arm in `NodeKind::inputs` / `NodeKind::compute`
 /// (and, if it has a stored parameter, the constant-value plumbing). Bond-graph
 /// elements and pipeline stages slot in the same way.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -301,8 +301,8 @@ impl RocketWorkbenchState {
     /// Fail-loud: an unknown caption or a value of the wrong type returns
     /// `Err(String)` (the bridge turns it into a `warn` feed note) — never a
     /// panic, and no field is written on error. Numeric fields read
-    /// [`AgentValue::as_f64`] / [`AgentValue::as_i64`]; the objective enum reads
-    /// [`AgentValue::as_str`] and matches the radio labels. `strut area A` is
+    /// `AgentValue::as_f64` / `AgentValue::as_i64`; the objective enum reads
+    /// `AgentValue::as_str` and matches the radio labels. `strut area A` is
     /// given in **cm²** and `material yield σy` in **MPa** — the same display
     /// units the form edits — and converted to the stored SI value (m² / Pa).
     /// Numeric values are clamped to the same ranges the DragValues/Slider

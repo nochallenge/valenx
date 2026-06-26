@@ -576,9 +576,9 @@ pub fn show_molecule(
 /// `mesh.triangles` (the shape [`crate::molviz::build_mesh_colored`] returns);
 /// it is expanded here to the triangle-major per-vertex layout the renderer
 /// emits (three copies per triangle, via
-/// [`crate::products_registry::per_triangle_to_vertex_colors`]) so it lines up
+/// `crate::products_registry::per_triangle_to_vertex_colors`) so it lines up
 /// 1:1 with the surface vertices — exactly the per-triangle→per-vertex bridge
-/// the Workbench+Agent molecule tile ([`molecule_product`]) uses. A length
+/// the Workbench+Agent molecule tile (`molecule_product`) uses. A length
 /// mismatch can never half-colour the mesh: the viewport length-guards the
 /// buffer and falls back to neutral metal.
 ///
@@ -606,7 +606,7 @@ pub fn show_molecule_colored(
 
 /// A small canonical demo molecule — a single water (H₂O) with realistic
 /// geometry (O at the origin, two O–H bonds at ~104.5°, 0.96 Å), bonds detected
-/// by the covalent-radius rule. Used by [`molecule_product`] so the
+/// by the covalent-radius rule. Used by `molecule_product` so the
 /// agent-bridge molecule tile renders a real, correctly-coloured structure with
 /// no external data.
 fn demo_molecule() -> ViewMolecule {
@@ -672,7 +672,7 @@ fn molecule_formula(mol: &ViewMolecule) -> String {
 /// ([`crate::products_registry::mesh_from_triangle_soup`]), and expands the
 /// per-triangle CPK colours to the triangle-major per-vertex `vertex_colors` the
 /// tile renderer paints
-/// ([`crate::products_registry::per_triangle_to_vertex_colors`]) — so the
+/// (`crate::products_registry::per_triangle_to_vertex_colors`) — so the
 /// molecule renders coloured by element (O red, H white) rather than flat metal.
 /// Pure and app-state-free. The readout reports the formula and atom/bond
 /// counts.

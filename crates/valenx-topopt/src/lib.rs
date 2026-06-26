@@ -681,10 +681,10 @@ mod tests {
         }
         // A rigid-body translation in x is a zero-energy mode: K · [1,0,1,0,...]
         // = 0 (rows sum to zero over the x-DOFs).
-        for i in 0..8 {
+        for row in &ke {
             let mut row_x = 0.0;
             for j in (0..8).step_by(2) {
-                row_x += ke[i][j];
+                row_x += row[j];
             }
             assert!(row_x.abs() < 1e-9, "x rigid-body mode not in null space");
         }

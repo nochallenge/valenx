@@ -75,7 +75,7 @@ struct WaveformResult {
 /// Persistent state for the Waveform workbench: the editable VCD source and
 /// the latest parse result.
 pub struct WaveformWorkbenchState {
-    /// The VCD source text the user edits / pastes (seeded with [`SAMPLE_VCD`]).
+    /// The VCD source text the user edits / pastes (seeded with `SAMPLE_VCD`).
     pub source: String,
 
     /// Latest parse result, or `None` before the first parse.
@@ -418,8 +418,10 @@ mod tests {
 
     #[test]
     fn parse_error_surfaces_for_garbage_without_panic() {
-        let mut s = WaveformWorkbenchState::default();
-        s.source = "this is not a vcd file at all".to_string();
+        let mut s = WaveformWorkbenchState {
+            source: "this is not a vcd file at all".to_string(),
+            ..Default::default()
+        };
         s.parse_now();
         // Either a clean parse with no signals or a surfaced error — never a
         // panic. The garbage here has no `$enddefinitions`, so it errors.
