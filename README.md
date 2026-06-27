@@ -185,25 +185,62 @@ running them — lives in [docs/VALIDATION.md](./docs/VALIDATION.md).
 | Neuro — `valenx-neuro` | anisotropic FEM + steering | tensor-σ point source matches the **closed-form** anisotropic Green's function within ~10%; multi-contact **current steering** shifts the focus |
 | Neuro — `valenx-neuro` | extracellular recording (forward-EAP) | **biphasic** spike with a dominant-negative (sink) phase; amplitude falls off with electrode distance; membrane currents conserve charge (Σ ≈ 0) |
 
-## Install
+## Download & Install
 
-> **`0.1.0-alpha.1` builds from source today** — pre-built installers aren't
-> published yet. Building is one command ([Build from source](#build-from-source),
-> just below) and is the supported path for the alpha. The signed packages
-> below are the planned `1.0` distribution; they'll appear on
-> [Releases][releases] as they're cut.
+> **Pre-alpha (`0.1.0-alpha.1`).** Pre-built portable binaries for Windows and
+> Linux are published on the [Releases page][releases]. They're *tested-build*
+> (they compile + link in CI on every release) but real-world runtime testing is
+> just beginning — expect sharp edges. You can always
+> [build from source](#build-from-source) instead.
+>
+> **GPU drivers required.** Valenx renders with `wgpu`, so you need working GPU
+> drivers: **Vulkan or DX12 on Windows, Vulkan or OpenGL on Linux**.
 
-| Platform | Planned package |
-| --- | --- |
-| Windows | `Valenx-<ver>-x86_64.msi` |
-| macOS   | `Valenx-<ver>.dmg` |
-| Linux (Debian/Ubuntu) | `valenx_<ver>_amd64.deb` |
-| Linux (Fedora/RHEL/openSUSE) | `valenx-<ver>.x86_64.rpm` |
+Grab the archive for your OS from the **[latest release][releases-latest]**:
 
-Full installer guide with per-OS pinning recipes:
-[docs/INSTALLER.md](./docs/INSTALLER.md).
+| Platform | Download | Status |
+| --- | --- | --- |
+| **Windows** (x86_64) | `valenx-<ver>-x86_64-pc-windows-msvc.zip` | tested-build |
+| **Linux** (x86_64) | `valenx-<ver>-x86_64-unknown-linux-gnu.tar.gz` | tested-build |
+| **macOS** (Apple Silicon) | `valenx-<ver>-aarch64-apple-darwin.tar.gz` | **experimental** |
+
+**Windows**
+
+1. Download the `.zip` and unzip it.
+2. Run `valenx.exe`.
+
+> SmartScreen may warn — the binary is unsigned in this pre-alpha. Choose
+> *More info → Run anyway*.
+
+**Linux**
+
+```sh
+tar -xzf valenx-<ver>-x86_64-unknown-linux-gnu.tar.gz
+cd valenx-<ver>-x86_64-unknown-linux-gnu
+chmod +x valenx
+./valenx
+```
+
+**macOS — experimental**
+
+The macOS build **compiles in CI but the GUI is not yet verified on macOS**, so
+treat it as experimental (and the archive may be absent if that best-effort build
+didn't complete). To try it:
+
+```sh
+tar -xzf valenx-<ver>-aarch64-apple-darwin.tar.gz
+cd valenx-<ver>-aarch64-apple-darwin
+xattr -dr com.apple.quarantine valenx   # clear Gatekeeper quarantine (unsigned)
+chmod +x valenx
+./valenx
+```
+
+Each archive also bundles `LICENSE-MIT`, `LICENSE-APACHE`, and a short
+`README.txt`. Signed native installers (`.msi` / `.dmg` / `.deb` / `.rpm`) are
+the planned `1.0` distribution — see [docs/INSTALLER.md](./docs/INSTALLER.md).
 
 [releases]: https://github.com/nochallenge/valenx/releases
+[releases-latest]: https://github.com/nochallenge/valenx/releases/latest
 
 ## Build from source
 
