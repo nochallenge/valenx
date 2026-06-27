@@ -667,7 +667,7 @@ semver = "1"
 # Native UI — eframe wraps winit + egui with a default glow backend.
 # wgpu bindings are activated via the backend feature when the
 # viewport crate graduates to its own renderer.
-eframe    = { version = "0.28", default-features = false, features = ["accesskit", "default_fonts", "wgpu", "wayland", "x11"] }
+eframe    = { version = "0.35", default-features = false, features = ["accesskit", "default_fonts", "wgpu", "wayland", "x11"] }
 egui      = "0.28"
 egui_plot = "0.28"
 # Official egui tiling/docking crate (emilk) — backs the opt-in
