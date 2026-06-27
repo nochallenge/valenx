@@ -38,7 +38,7 @@
 //! * **Generic** (every other drivable product): open the product's tab and
 //!   render its panel in a throwaway headless `accesskit` frame (the SAME probe
 //!   `read_text` / the AI-drivability tests use, via
-//!   [`crate::agent_commands::probe_active_workbench_text`]). This executes the
+//!   `crate::agent_commands::probe_active_workbench_text`). This executes the
 //!   workbench's real draw/compute path; PASS iff it renders substantive text
 //!   with no `NaN`/`inf`/error token.
 //! * **Skip**: a product that genuinely cannot self-verify head-less (GPU
@@ -54,7 +54,7 @@
 //! ```
 //!
 //! …or `CheckMode::Deep(my_deep_fn)` for a known-value assertion, or
-//! `CheckMode::Skip("reason")`. The [`registry_covers_every_template`] test
+//! `CheckMode::Skip("reason")`. The `registry_covers_every_template` test
 //! guarantees the registry stays in lock-step with `TabKind::TEMPLATES` (the
 //! authoritative 56), so a newly-added product fails CI until it has a row.
 
@@ -207,7 +207,7 @@ pub enum Filter {
 
 impl Filter {
     /// Parse `--group <G>` / `--id <id>` out of the CLI tokens that follow
-    /// `self-test`. An explicit `--id` wins over `--group`; neither ⇒ [`All`].
+    /// `self-test`. An explicit `--id` wins over `--group`; neither ⇒ `All`.
     pub fn from_args(args: &[String]) -> Filter {
         let mut group: Option<String> = None;
         let mut id: Option<String> = None;
@@ -251,7 +251,7 @@ impl Filter {
 /// Every product's self-test registration, in `TabKind::TEMPLATES` order.
 ///
 /// The single source of truth for what the self-test drives. Keep one row per
-/// `TabKind::TEMPLATES` entry; [`registry_covers_every_template`] enforces it.
+/// `TabKind::TEMPLATES` entry; `registry_covers_every_template` enforces it.
 pub fn product_checks() -> Vec<ProductCheck> {
     use CheckMode::{Deep, Generic, Skip};
     use TabKind as K;
@@ -329,10 +329,12 @@ pub fn product_checks() -> Vec<ProductCheck> {
             kind: K::Fem,
             mode: Deep(check_fem),
         },
+        // topopt: DEEP — SIMP invariant: converged volume constraint satisfied +
+        // compliance decreased from iteration 0 (minimisation monotone-improvement).
         ProductCheck {
             id: "topopt",
             kind: K::TopOpt,
-            mode: Generic,
+            mode: Deep(check_topopt),
         },
         // nodegraph: DEEP — default Constant(2)+Constant(2)→Add→Output = 4.0.
         ProductCheck {
@@ -340,15 +342,17 @@ pub fn product_checks() -> Vec<ProductCheck> {
             kind: K::NodeGraph,
             mode: Deep(check_nodegraph),
         },
+        // bondgraph: DEEP — mass-spring-damper ωn=√(k/m), ζ=b/(2√(km)) (closed form).
         ProductCheck {
             id: "bondgraph",
             kind: K::BondGraph,
-            mode: Generic,
+            mode: Deep(check_bondgraph),
         },
+        // surrogate: DEEP — MLP learns δ=PL³/3EI: test MSE small + pred≈truth (<5%).
         ProductCheck {
             id: "surrogate",
             kind: K::Surrogate,
-            mode: Generic,
+            mode: Deep(check_surrogate),
         },
         // reactdyn: DEEP — H2 AIMD NVE energy conservation |ΔE/E₀| < 1e-2.
         ProductCheck {
@@ -374,40 +378,48 @@ pub fn product_checks() -> Vec<ProductCheck> {
             kind: K::Fields,
             mode: Deep(check_fields),
         },
+        // fluids: DEEP — SPH conservation: particle count = N³ (mass conserved) +
+        // every particle finite & bounded in the box (no blow-up settling invariant).
         ProductCheck {
             id: "fluids",
             kind: K::Fluids,
-            mode: Generic,
+            mode: Deep(check_fluids),
         },
+        // ocean: DEEP — deep-water dispersion ω²=gk: phase speed √(g/k), period 2π/ω.
         ProductCheck {
             id: "ocean",
             kind: K::Ocean,
-            mode: Generic,
+            mode: Deep(check_ocean),
         },
+        // rom: DEEP — POD full-rank reconstruction error → ~0 + captured energy → 1.
         ProductCheck {
             id: "rom",
             kind: K::Rom,
-            mode: Generic,
+            mode: Deep(check_rom),
         },
+        // uq: DEEP — linear-Gaussian g: MC mean a₀+Σaᵢμᵢ + var Σaᵢ²σᵢ² (exact moments).
         ProductCheck {
             id: "uq",
             kind: K::Uq,
-            mode: Generic,
+            mode: Deep(check_uq),
         },
+        // missionsim: DEEP — Lanchester square-law invariant a·A²−b·B² conserved.
         ProductCheck {
             id: "missionsim",
             kind: K::MissionSim,
-            mode: Generic,
+            mode: Deep(check_missionsim),
         },
+        // missionplanner: DEEP — A* open-field octile-optimal path length max(Δx,Δy)+1.
         ProductCheck {
             id: "missionplanner",
             kind: K::MissionPlanner,
-            mode: Generic,
+            mode: Deep(check_missionplanner),
         },
+        // survivability: DEEP — SDOF equivalent static deflection x_st = F_peak/k (δ=F/k).
         ProductCheck {
             id: "survivability",
             kind: K::Survivability,
-            mode: Generic,
+            mode: Deep(check_survivability),
         },
         // cosim: external FMI/HELICS co-simulation tool.
         ProductCheck {
@@ -1386,6 +1398,444 @@ fn check_mbd(app: &mut ValenxApp) -> CheckOutcome {
     CheckOutcome::pass(format!(
         "pendulum T={t_measured:.3} s ≈ 2π√(L/g)={t_analytic:.3} s; drift {:.1e}",
         result.energy_rel_drift
+    ))
+}
+
+// ---------------------------------------------------------------------------
+// Simulation deep checks (the FINAL deep-check batch) — each drives the SAME
+// compute path the panel's button fires and asserts a documented analytic value
+// or a conservation / constraint / monotone-convergence INVARIANT. The
+// iterative / stochastic products (topopt, fluids, surrogate, rom, uq,
+// missionsim) are checked by their documented invariant, which is the honest
+// correctness signal for a non-closed-form solver.
+// ---------------------------------------------------------------------------
+
+/// **ocean** — the deep-water dispersion relation `ω² = g·k` is exact. The
+/// default deterministic sea's longest (first) Gerstner component has wavelength
+/// `L = base_wavelength = 30 m`, so `k = 2π/L`, the phase speed is
+/// `c = √(g/k) = 6.84 m/s` and the period is `T = 2π/√(g·k) = 4.38 s`. Builds
+/// the workbench's real `OceanWaveField` (the SAME field the panel renders) and
+/// asserts the first component's `phase_speed()` and `period()` against the
+/// closed form (tol 1e-6).
+fn check_ocean(app: &mut ValenxApp) -> CheckOutcome {
+    let field = match app.ocean.build_field() {
+        Ok(f) => f,
+        Err(e) => return CheckOutcome::fail(format!("ocean build_field failed: {e}")),
+    };
+    let Some(w0) = field.waves().first() else {
+        return CheckOutcome::fail("ocean field has no wave components".to_string());
+    };
+    // Longest component: wavelength = base_wavelength (i = 0 ⇒ frac = 0).
+    let l = app.ocean.params.base_wavelength;
+    let g = valenx_ocean::STANDARD_GRAVITY;
+    let k = std::f64::consts::TAU / l;
+    let c_expected = (g / k).sqrt();
+    let t_expected = std::f64::consts::TAU / (g * k).sqrt();
+    let c = w0.phase_speed();
+    let t = w0.period();
+    if !c.is_finite() || (c - c_expected).abs() >= 1e-6 {
+        return CheckOutcome::fail(format!(
+            "deep-water phase speed c={c:.5} vs √(g/k)={c_expected:.5} m/s"
+        ));
+    }
+    if !t.is_finite() || (t - t_expected).abs() >= 1e-6 {
+        return CheckOutcome::fail(format!(
+            "wave period T={t:.5} vs 2π/√(gk)={t_expected:.5} s"
+        ));
+    }
+    CheckOutcome::pass(format!(
+        "deep-water L={l:.0}m: c={c:.3} m/s=√(g/k), T={t:.3} s=2π/√(gk)"
+    ))
+}
+
+/// **uq** — for the default linear response `g = a₀ + a₁·x₁ + a₂·x₂` with
+/// `aᵢ = 1` and independent Normals `x₁~N(10, 2²)`, `x₂~N(5, 1²)`, the output is
+/// itself Normal with **exact** mean `a₀ + Σaᵢμᵢ = 1+10+5 = 16` and variance
+/// `Σaᵢ²σᵢ² = 4+1 = 5` (std = √5 = 2.236). Drives the real seed-fixed Monte-Carlo
+/// `run()` and asserts the estimated mean / std match the closed form within 2 %
+/// (the `UQ_SEED`-fixed N = 4000 estimate is reproducible and well inside that).
+fn check_uq(app: &mut ValenxApp) -> CheckOutcome {
+    let result = match app.uq.run() {
+        Ok(r) => r,
+        Err(e) => return CheckOutcome::fail(format!("uq run failed: {e}")),
+    };
+    // Exact moments of the linear-Gaussian response (default params).
+    let p = &app.uq.params;
+    let mean_exact = p.a0 + p.a1 * p.x1.p0 + p.a2 * p.x2.p0; // 16
+    let var_exact = (p.a1 * p.x1.p1).powi(2) + (p.a2 * p.x2.p1).powi(2); // 5
+    let std_exact = var_exact.sqrt();
+    let mean_err = (result.mean - mean_exact).abs() / mean_exact.abs();
+    let std_err = (result.std - std_exact).abs() / std_exact.abs();
+    if !result.mean.is_finite() || mean_err > 0.02 {
+        return CheckOutcome::fail(format!(
+            "MC mean {:.4} vs a₀+Σaᵢμᵢ={mean_exact:.4} ({:.1}% > 2%)",
+            result.mean,
+            mean_err * 100.0
+        ));
+    }
+    if !result.std.is_finite() || std_err > 0.02 {
+        return CheckOutcome::fail(format!(
+            "MC std {:.4} vs √(Σaᵢ²σᵢ²)={std_exact:.4} ({:.1}% > 2%)",
+            result.std,
+            std_err * 100.0
+        ));
+    }
+    CheckOutcome::pass(format!(
+        "MC mean={:.3}≈{mean_exact:.0}, std={:.3}≈√{var_exact:.0} (linear-Gaussian, seed-fixed)",
+        result.mean, result.std
+    ))
+}
+
+/// **missionplanner** — the A\* shortest path on a uniform grid is an exact
+/// graph result. Over an open 8-connected `CostGrid::uniform` field the
+/// octile-optimal corner-to-corner path has exactly `max(|Δx|, |Δy|) + 1` cells
+/// (diagonal-then-straight). Replaces the route grid with a 12×8 open field
+/// (terrain off), then drives the SAME `compute_route()` the **Compute route**
+/// button fires and asserts the path is contiguous, hits both endpoints, and has
+/// the octile-optimal length 12 cells (Δx = 11, Δy = 7 ⇒ 11 steps).
+fn check_missionplanner(app: &mut ValenxApp) -> CheckOutcome {
+    use valenx_mission_sim::routing::CostGrid;
+    let s = &mut app.mission_planner;
+    // A clean, deterministic open field with a known shortest-path length.
+    let (w, h) = (12usize, 8usize);
+    s.terrain_on = false;
+    s.route_grid = CostGrid::uniform(w, h, 1.0);
+    s.route_start = (0, 0);
+    s.route_goal = (w - 1, h - 1);
+    s.compute_route();
+    let Some(path) = s.route.as_ref() else {
+        return CheckOutcome::fail(format!(
+            "A* found no route on an open field ({})",
+            s.route_status
+        ));
+    };
+    if path.first() != Some(&s.route_start) || path.last() != Some(&s.route_goal) {
+        return CheckOutcome::fail(format!(
+            "path endpoints {:?}..{:?} != {:?}..{:?}",
+            path.first(),
+            path.last(),
+            s.route_start,
+            s.route_goal
+        ));
+    }
+    // 8-connected contiguity: each step moves at most one cell in x and y.
+    let contiguous = path.windows(2).all(|wnd| {
+        let dx = (wnd[0].0 as isize - wnd[1].0 as isize).abs();
+        let dy = (wnd[0].1 as isize - wnd[1].1 as isize).abs();
+        dx <= 1 && dy <= 1 && (dx + dy) != 0
+    });
+    if !contiguous {
+        return CheckOutcome::fail(format!("path is not 8-connected contiguous: {path:?}"));
+    }
+    // Octile-optimal length: max(dx, dy) + 1 cells.
+    let expected_cells = (w - 1).max(h - 1) + 1;
+    if path.len() != expected_cells {
+        return CheckOutcome::fail(format!(
+            "A* path {} cells vs octile-optimal max(Δx,Δy)+1={expected_cells}",
+            path.len()
+        ));
+    }
+    CheckOutcome::pass(format!(
+        "A* open-field {w}×{h}: {} cells = max(Δx,Δy)+1 (octile-optimal, contiguous)",
+        path.len()
+    ))
+}
+
+/// **rom** — Proper Orthogonal Decomposition is the energy-optimal linear basis:
+/// retaining **all** numerically-significant POD modes reconstructs the snapshot
+/// set to machine precision. Runs the real POD/SVD once at the default rank to
+/// discover the data rank `r = #significant singular values`, then re-runs with
+/// `rank = r` and asserts (a) the relative Frobenius reconstruction error → ~0
+/// (< 1e-6), (b) the captured-energy fraction → ~1, and (c) the cumulative
+/// energy spectrum is monotone non-decreasing — the documented POD invariant.
+fn check_rom(app: &mut ValenxApp) -> CheckOutcome {
+    let probe = match app.rom.run() {
+        Ok(r) => r,
+        Err(e) => return CheckOutcome::fail(format!("rom run failed: {e}")),
+    };
+    let full_rank = probe.singular_values.len();
+    if full_rank == 0 {
+        return CheckOutcome::fail("rom snapshot matrix has rank 0".to_string());
+    }
+    // Cumulative energy must be monotone non-decreasing and end at ~1.
+    let cum = &probe.cumulative_energy;
+    let monotone = cum.windows(2).all(|w| w[1] >= w[0] - 1e-12);
+    if !monotone {
+        return CheckOutcome::fail("cumulative POD energy is not monotone".to_string());
+    }
+    if let Some(&last) = cum.last() {
+        if !last.is_finite() || (last - 1.0).abs() > 1e-9 {
+            return CheckOutcome::fail(format!("cumulative energy ends at {last:.6}, not 1.0"));
+        }
+    }
+    // Retain ALL modes → reconstruction error to machine precision.
+    app.rom.params.rank = full_rank;
+    let result = match app.rom.run() {
+        Ok(r) => r,
+        Err(e) => return CheckOutcome::fail(format!("rom full-rank run failed: {e}")),
+    };
+    if !result.reconstruction_error.is_finite() || result.reconstruction_error >= 1e-6 {
+        return CheckOutcome::fail(format!(
+            "full-rank ({full_rank}-mode) reconstruction error {:.2e} (≥1e-6)",
+            result.reconstruction_error
+        ));
+    }
+    if !result.captured_energy.is_finite() || (result.captured_energy - 1.0).abs() > 1e-6 {
+        return CheckOutcome::fail(format!(
+            "full-rank captured energy {:.6} (want ~1.0)",
+            result.captured_energy
+        ));
+    }
+    CheckOutcome::pass(format!(
+        "POD full rank={full_rank}: recon err {:.1e}≈0, captured energy {:.4}≈1 (monotone)",
+        result.reconstruction_error, result.captured_energy
+    ))
+}
+
+/// **surrogate** — a small `2→H→H→1` MLP trained (fixed seed) on the closed-form
+/// cantilever deflection `δ = P·L³/3EI` must *learn* it: at the default
+/// hyper-parameters the test-set MSE drops well below the untrained scale and
+/// the live surrogate prediction tracks the analytic truth. Drives the SAME
+/// `train()` the **Train** button fires and asserts (a) the surrogate-vs-true
+/// **relative error** at the default mid-range input is < 5 %, and (b) the
+/// trained test-MSE is small (< 1e-2 in standardised target units).
+fn check_surrogate(app: &mut ValenxApp) -> CheckOutcome {
+    crate::surrogate_workbench::run(app); // sample + train (seed 0xC0FF_EE15_F00D)
+    let m = &app.surrogate.model;
+    if !m.trained {
+        return CheckOutcome::fail("surrogate did not train".to_string());
+    }
+    if !m.test_mse.is_finite() || m.test_mse >= 1e-2 {
+        return CheckOutcome::fail(format!(
+            "trained test MSE {:.3e} (≥1e-2 standardised) — did not learn",
+            m.test_mse
+        ));
+    }
+    // Live surrogate vs analytic truth at the default mid-range slider input.
+    let truth = app.surrogate.true_value();
+    let pred = app.surrogate.predicted_value();
+    if !(truth.is_finite() && pred.is_finite()) {
+        return CheckOutcome::fail(format!("non-finite surrogate: true={truth}, pred={pred}"));
+    }
+    let rel = if truth.abs() > 1e-15 {
+        (pred - truth).abs() / truth.abs()
+    } else {
+        (pred - truth).abs()
+    };
+    if rel > 0.05 {
+        return CheckOutcome::fail(format!(
+            "surrogate vs PL³/3EI rel err {:.1}% (>5%): true={truth:.4e}, pred={pred:.4e}",
+            rel * 100.0
+        ));
+    }
+    CheckOutcome::pass(format!(
+        "MLP learned δ=PL³/3EI: test MSE {:.2e}, pred vs truth rel err {:.2}%",
+        m.test_mse,
+        rel * 100.0
+    ))
+}
+
+/// **survivability** — the SDOF protective element's **equivalent static
+/// deflection** is the exact closed form `x_st = F_peak / k`, where the effective
+/// peak force is the side-on overpressure times the loaded tributary area
+/// (`F = Pso · A`). Drives the full real pipeline (`run()`) and asserts the
+/// reported `static_deflection_m` equals the independently-recomputed `Pso·A/k`
+/// (tight relative tol 1e-6) — δ = F/k.
+fn check_survivability(app: &mut ValenxApp) -> CheckOutcome {
+    let result = match app.survivability.run() {
+        Ok(r) => r,
+        Err(e) => return CheckOutcome::fail(format!("survivability run failed: {e}")),
+    };
+    let p = &app.survivability.params;
+    let f_peak = result.blast.peak_overpressure_pa * p.loaded_area_m2;
+    let x_st_expected = f_peak / p.element_stiffness_n_m;
+    let x_st = result.response.static_deflection_m;
+    let rel = (x_st - x_st_expected).abs() / x_st_expected.abs().max(1e-30);
+    if !x_st.is_finite() || rel > 1e-6 {
+        return CheckOutcome::fail(format!(
+            "SDOF static deflection {x_st:.6e} vs F_peak/k={x_st_expected:.6e} m (Pso·A/k)"
+        ));
+    }
+    CheckOutcome::pass(format!(
+        "SDOF x_st={x_st:.4e} m = F_peak/k (Pso·A/k); δ=F/k closed form"
+    ))
+}
+
+/// **topopt** — SIMP topology optimisation is iterative, so its correctness
+/// signals are its documented **invariants**: the converged design (a) satisfies
+/// the **volume constraint** `mean(ρ) ≈ vol_frac` (the material budget), and (b)
+/// the compliance objective **decreased** from iteration 0 (minimisation
+/// monotone-improvement). Drives the SAME `run_now()` the **Run optimization**
+/// button fires and asserts both against the default MBB-beam case.
+fn check_topopt(app: &mut ValenxApp) -> CheckOutcome {
+    crate::topopt_workbench::run(app);
+    let Some(r) = app.topopt.result.as_ref() else {
+        return CheckOutcome::fail("no topopt result after run".to_string());
+    };
+    // (a) Volume constraint: achieved volume fraction ≈ the target budget.
+    let target = app.topopt.vol_frac;
+    let vol_err = (r.volume_fraction - target).abs();
+    if !r.volume_fraction.is_finite() || vol_err > 0.02 {
+        return CheckOutcome::fail(format!(
+            "achieved vol {:.4} vs target {target:.4} (|Δ|={vol_err:.4} > 0.02)",
+            r.volume_fraction
+        ));
+    }
+    // (b) Compliance must have decreased from the first iteration to the last.
+    let hist = &r.compliance_history;
+    let (Some(&first), Some(&last)) = (hist.first(), hist.last()) else {
+        return CheckOutcome::fail("topopt has no compliance history".to_string());
+    };
+    if !(first.is_finite() && last.is_finite()) || last >= first {
+        return CheckOutcome::fail(format!(
+            "compliance did not decrease: c0={first:.4} → c_final={last:.4}"
+        ));
+    }
+    CheckOutcome::pass(format!(
+        "SIMP: vol {:.3}≈target {target:.2}; compliance {first:.3}→{last:.3} (↓ over {} iters)",
+        r.volume_fraction, r.iterations
+    ))
+}
+
+/// **bondgraph** — the default mass-spring-damper preset's second-order response
+/// has the textbook-exact undamped natural frequency `ωn = √(k/m)` and damping
+/// ratio `ζ = b/(2√(k·m))`. For `m = 1`, `b = 0.5`, `k = 20`: `ωn = √20 = 4.472
+/// rad/s`, `ζ = 0.0559` (underdamped). Drives the real `solve()` (the **Solve**
+/// button path) and asserts the preset's reported `ωn`/`ζ` match the closed form
+/// (tol 1e-4); also checks the integrated displacement settles toward the exact
+/// step steady state `x_ss = F/k`.
+fn check_bondgraph(app: &mut ValenxApp) -> CheckOutcome {
+    app.bondgraph.solve();
+    let p = &app.bondgraph.params;
+    let wn_expected = (p.stiffness / p.mass).sqrt();
+    let zeta_expected = p.damping / (2.0 * (p.stiffness * p.mass).sqrt());
+    let Some((wn, zeta)) = app.bondgraph.preset.natural_freq_damping(p) else {
+        return CheckOutcome::fail("MSD natural_freq_damping returned None".to_string());
+    };
+    if !wn.is_finite() || (wn - wn_expected).abs() >= 1e-4 {
+        return CheckOutcome::fail(format!("ωn={wn:.5} vs √(k/m)={wn_expected:.5} rad/s"));
+    }
+    if !zeta.is_finite() || (zeta - zeta_expected).abs() >= 1e-4 {
+        return CheckOutcome::fail(format!("ζ={zeta:.5} vs b/(2√(km))={zeta_expected:.5}"));
+    }
+    // The undamped step steady state is x_ss = F/k; the lightly-damped trace must
+    // stay bounded around it (no blow-up) — a sanity invariant on the integrator.
+    let x_ss = p.force / p.stiffness;
+    if let Some((_, x)) = app.bondgraph.solution.samples.last() {
+        if let Some(&q) = x.first() {
+            if !q.is_finite() || q.abs() > 4.0 * x_ss.abs().max(1e-9) {
+                return CheckOutcome::fail(format!(
+                    "displacement q={q:.4} blew up (x_ss=F/k={x_ss:.4})"
+                ));
+            }
+        }
+    }
+    CheckOutcome::pass(format!(
+        "MSD ωn={wn:.4} rad/s=√(k/m), ζ={zeta:.4}=b/(2√(km)); x_ss=F/k={x_ss:.3} m"
+    ))
+}
+
+/// **fluids** — SPH is a particle method, so its conservation invariant is that
+/// the particle population is **conserved** (no particles created or destroyed)
+/// and the simulation stays **physically bounded** (every position / speed /
+/// density finite, particles confined to the boundary box — no blow-up). Drives
+/// the real `run()` (the **Run simulation** path) on the default `N = 4` lattice
+/// (64 particles) and asserts the particle count equals `N³` and every particle
+/// is finite and inside the (padded) box.
+fn check_fluids(app: &mut ValenxApp) -> CheckOutcome {
+    let result = match app.fluids.run() {
+        Ok(r) => r,
+        Err(e) => return CheckOutcome::fail(format!("fluids run failed: {e}")),
+    };
+    let n = app.fluids.params.n_per_axis;
+    let expected = n * n * n;
+    if result.particles.len() != expected {
+        return CheckOutcome::fail(format!(
+            "particle count {} != N³ = {expected} (mass not conserved)",
+            result.particles.len()
+        ));
+    }
+    // Bounded + finite invariant: nothing NaN/inf, nothing flung out of the box.
+    let box_size = app.fluids.params.box_size;
+    let pad = box_size; // generous: one box-width of slack around [0, box].
+    for (i, s) in result.particles.iter().enumerate() {
+        if !(s.position.x.is_finite() && s.position.y.is_finite() && s.position.z.is_finite()) {
+            return CheckOutcome::fail(format!("particle {i} has a non-finite position"));
+        }
+        if !(s.speed.is_finite() && s.density.is_finite()) {
+            return CheckOutcome::fail(format!("particle {i}: speed/density non-finite"));
+        }
+        let p = &s.position;
+        if p.x < -pad
+            || p.x > box_size + pad
+            || p.y < -pad
+            || p.y > box_size + pad
+            || p.z < -pad
+            || p.z > box_size + pad
+        {
+            return CheckOutcome::fail(format!(
+                "particle {i} escaped the box: {p:?} (box {box_size})"
+            ));
+        }
+    }
+    CheckOutcome::pass(format!(
+        "SPH conserved {expected} particles ({n}³), all finite & in-box (ρ̄={:.1})",
+        result.mean_density
+    ))
+}
+
+/// **missionsim** — the Lanchester aggregate sub-mode integrates the classic
+/// **square law** (`dA/dt = −b·B`, `dB/dt = −a·A`), whose exact dynamics conserve
+/// `a·A² − b·B²`. Drives the real seeded `run()` (the same RK4 the panel plots)
+/// and asserts (a) the initial invariant equals the closed form
+/// `0.05·100² − 0.03·80² = 308`, and (b) it is conserved **over the smooth
+/// phase** — the prefix where both forces stay strictly positive (relative drift
+/// < 1e-4). Once the losing force is annihilated the integrator clamps it at 0,
+/// which legitimately breaks the smooth invariant (documented in
+/// `valenx-mission-sim`), so the check ends the conservation window there rather
+/// than asserting through the clamp.
+fn check_missionsim(app: &mut ValenxApp) -> CheckOutcome {
+    let result = match app.missionsim.run() {
+        Ok(r) => r,
+        Err(e) => return CheckOutcome::fail(format!("missionsim run failed: {e}")),
+    };
+    let p = &app.missionsim.params;
+    let (a_rate, b_rate) = (p.lanchester_a_rate, p.lanchester_b_rate);
+    let invariant = |a: f64, b: f64| a_rate * a * a - b_rate * b * b;
+    let curve = &result.lanchester;
+    if curve.len() < 2 {
+        return CheckOutcome::fail(format!("Lanchester curve too short ({})", curve.len()));
+    }
+    // (a) Initial invariant equals the closed form from the default params.
+    let inv0_expected = a_rate * p.lanchester_a0.powi(2) - b_rate * p.lanchester_b0.powi(2); // 308
+    let inv0 = invariant(curve[0].a, curve[0].b);
+    if !inv0.is_finite() || (inv0 - inv0_expected).abs() > 1e-6 {
+        return CheckOutcome::fail(format!(
+            "initial square-law invariant {inv0:.4} vs a·A₀²−b·B₀²={inv0_expected:.4}"
+        ));
+    }
+    // (b) Conserved over the smooth phase: the last sample at which BOTH forces
+    // are still strictly positive (before either is clamped to 0). RK4 on the
+    // linear system holds the invariant to integration tolerance there.
+    const EPS: f64 = 1e-9;
+    let smooth_end = curve
+        .iter()
+        .rposition(|pt| pt.a > EPS && pt.b > EPS)
+        .unwrap_or(0);
+    if smooth_end == 0 {
+        return CheckOutcome::fail("Lanchester forces depleted immediately".to_string());
+    }
+    let pt = &curve[smooth_end];
+    let inv_smooth = invariant(pt.a, pt.b);
+    let drift = (inv_smooth - inv0).abs() / inv0.abs().max(1e-30);
+    if !inv_smooth.is_finite() || drift > 1e-4 {
+        return CheckOutcome::fail(format!(
+            "square-law invariant drifted {drift:.2e} (>1e-4) over the smooth phase: \
+             {inv0:.4} → {inv_smooth:.4} at step {smooth_end}"
+        ));
+    }
+    CheckOutcome::pass(format!(
+        "Lanchester a·A²−b·B²={inv0:.1} (=308 exact); conserved over smooth phase, drift {drift:.1e}"
     ))
 }
 
@@ -2562,6 +3012,90 @@ mod tests {
         let mut app = ValenxApp::default();
         let out = check_autonomy(&mut app);
         assert_eq!(out.status, Status::Pass, "autonomy: {}", out.detail);
+    }
+
+    // -- Simulation DEEP batch (the final deep-check batch) ------------------
+
+    /// Simulation DEEP: ocean deep-water dispersion c=√(g/k), T=2π/√(gk).
+    #[test]
+    fn deep_ocean_passes_dispersion() {
+        let mut app = ValenxApp::default();
+        let out = check_ocean(&mut app);
+        assert_eq!(out.status, Status::Pass, "ocean: {}", out.detail);
+        assert!(out.detail.contains("c="), "detail: {}", out.detail);
+    }
+
+    /// Simulation DEEP: uq linear-Gaussian exact mean (16) + std (√5).
+    #[test]
+    fn deep_uq_passes_linear_gaussian_moments() {
+        let mut app = ValenxApp::default();
+        let out = check_uq(&mut app);
+        assert_eq!(out.status, Status::Pass, "uq: {}", out.detail);
+        assert!(out.detail.contains("mean="), "detail: {}", out.detail);
+    }
+
+    /// Simulation DEEP: missionplanner A* octile-optimal open-field path length.
+    #[test]
+    fn deep_missionplanner_passes_octile_path() {
+        let mut app = ValenxApp::default();
+        let out = check_missionplanner(&mut app);
+        assert_eq!(out.status, Status::Pass, "missionplanner: {}", out.detail);
+    }
+
+    /// Simulation DEEP: rom POD full-rank reconstruction error → ~0.
+    #[test]
+    fn deep_rom_passes_full_rank_reconstruction() {
+        let mut app = ValenxApp::default();
+        let out = check_rom(&mut app);
+        assert_eq!(out.status, Status::Pass, "rom: {}", out.detail);
+    }
+
+    /// Simulation DEEP: surrogate MLP learns δ=PL³/3EI (low test MSE + pred≈truth).
+    #[test]
+    fn deep_surrogate_passes_learned_function() {
+        let mut app = ValenxApp::default();
+        let out = check_surrogate(&mut app);
+        assert_eq!(out.status, Status::Pass, "surrogate: {}", out.detail);
+    }
+
+    /// Simulation DEEP: survivability SDOF static deflection x_st = F_peak/k.
+    #[test]
+    fn deep_survivability_passes_static_deflection() {
+        let mut app = ValenxApp::default();
+        let out = check_survivability(&mut app);
+        assert_eq!(out.status, Status::Pass, "survivability: {}", out.detail);
+    }
+
+    /// Simulation DEEP: topopt SIMP volume-constraint + compliance-decrease invariant.
+    #[test]
+    fn deep_topopt_passes_simp_invariant() {
+        let mut app = ValenxApp::default();
+        let out = check_topopt(&mut app);
+        assert_eq!(out.status, Status::Pass, "topopt: {}", out.detail);
+    }
+
+    /// Simulation DEEP: bondgraph MSD ωn=√(k/m), ζ=b/(2√(km)) closed form.
+    #[test]
+    fn deep_bondgraph_passes_natural_frequency() {
+        let mut app = ValenxApp::default();
+        let out = check_bondgraph(&mut app);
+        assert_eq!(out.status, Status::Pass, "bondgraph: {}", out.detail);
+    }
+
+    /// Simulation DEEP: fluids SPH particle-count conservation + bounded invariant.
+    #[test]
+    fn deep_fluids_passes_conservation() {
+        let mut app = ValenxApp::default();
+        let out = check_fluids(&mut app);
+        assert_eq!(out.status, Status::Pass, "fluids: {}", out.detail);
+    }
+
+    /// Simulation DEEP: missionsim Lanchester square-law invariant a·A²−b·B²=308.
+    #[test]
+    fn deep_missionsim_passes_square_law_invariant() {
+        let mut app = ValenxApp::default();
+        let out = check_missionsim(&mut app);
+        assert_eq!(out.status, Status::Pass, "missionsim: {}", out.detail);
     }
 
     /// The `--id` filter selects exactly one product and runs it end-to-end.

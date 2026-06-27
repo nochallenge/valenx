@@ -846,7 +846,7 @@ pub struct ValenxApp {
     /// One-shot guard: has the **startup auto-tile** already run? The launch
     /// path has no active tab, so `project_tabs::sync_active` (which carries the
     /// per-tab-open auto-tile) never fires at boot; the first `update` frame
-    /// instead calls [`Self::maybe_auto_tile_on_open`] once and sets this, so a
+    /// instead calls `Self::maybe_auto_tile_on_open` once and sets this, so a
     /// balanced grid greets the user when several panels are open by default.
     /// Not persisted — reset each launch.
     pub startup_auto_tiled: bool,
