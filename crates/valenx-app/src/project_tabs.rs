@@ -198,13 +198,22 @@ pub enum TabKind {
     Astro,
     Aero,
     Gasdynamics,
+    Rotor,
+    // -- Astrophysics --
+    BlackHole,
     // -- Simulation --
     Cfd,
     Fem,
     Reactdyn,
     Fields,
+    // -- Thermodynamics (in-house cubic equation of state + vapor–liquid
+    //    phase behavior over valenx-thermo) --
+    Thermo,
+    // -- Quantum circuit (in-house state-vector simulator over valenx-quantum) --
+    Quantum,
     // -- CAD & mesh --
     Cad,
+    BrepCad,
     MeshToolbox,
     Sheetmetal,
     Reverse,
@@ -227,22 +236,92 @@ pub enum TabKind {
     Genetics,
     Neuro,
     VariantEffect,
+    Ppi,
+    // -- Turing morphogenesis (Gray–Scott reaction–diffusion; live 3-D
+    //    organic-pattern growth: spots / coral / mitosis / mazes) --
+    Morphogenesis,
+    // -- Sensors --
+    Sensors,
+    // -- Fluids --
+    Fluids,
+    // -- Ocean --
+    Ocean,
+    // -- Reduced-order modelling --
+    Rom,
+    // -- Uncertainty quantification --
+    Uq,
+    // -- Small-UAS design + defensive counter-UAS geometry --
+    Uas,
+    // -- General constructive mission simulation (discrete-event / agent;
+    //    abstract Pk + Lanchester engagement, no lethality) --
+    MissionSim,
+    // -- Visual mission planner (geographic lat/lon map + waypoint routes +
+    //    real-time playback; movement only, no engagement / sensors / orbits) --
+    MissionPlanner,
+    // -- Defensive survivability / protection (blast loading + SDOF protective
+    //    response + P-I diagram + minimum-armor sizing + occupant screen; the
+    //    PROTECTIVE side only, no penetration / lethality) --
+    Survivability,
+    // -- Photogrammetry / structure-from-motion --
+    Photogrammetry,
+    // -- Co-simulation (FMI / HELICS coupling) --
+    Cosim,
+    // -- Autonomy --
+    Autonomy,
+    // -- Multibody dynamics (robot / contact) --
+    Mbd,
+    // -- Topology optimization (in-house 2-D SIMP generative structural design:
+    //    minimum-compliance density optimisation over Q4 plane-stress elements,
+    //    MBB-beam / cantilever load cases) --
+    TopOpt,
+    // -- Node Graph (in-house visual node editor: draggable nodes, output->input
+    //    wiring, topological evaluation; the foundation for bond graphs and
+    //    CAD->FEA pipelines) --
+    NodeGraph,
+    // -- Bond Graph (in-house multi-domain systems modeller: standard bond-graph
+    //    elements R/C/I/Se/Sf/TF/GY/junctions on a canvas, with canonical presets
+    //    whose linear state-space dx/dt = A x + B u is derived from the bond graph
+    //    and integrated with RK4) --
+    BondGraph,
+    // -- Surrogate Model (in-house ML emulator: trains a tiny MLP on samples from
+    //    a closed-form solver (cantilever tip deflection delta = P L^3 / 3 E I) so
+    //    the input sliders predict the output instantly — the what-if loop — with
+    //    train/test MSE reported and validated against truth) --
+    Surrogate,
+    // -- Optics (in-house geometric ray optics: the Gaussian thin-lens
+    //    equation 1/f = 1/do + 1/di over valenx-optics) --
+    Optics,
+    // -- Acoustics (in-house monopole / pulsating-sphere radiation: radiated
+    //    pressure + SPL over valenx-acoustics) --
+    Acoustics,
+    // -- Waveform (in-house Value Change Dump viewer: signals + transition
+    //    counts + time range over valenx-waveform) --
+    Waveform,
 }
 
 impl TabKind {
     /// Every *template* kind (i.e. excluding [`TabKind::Blank`]), in
     /// `＋ from template`-menu order (grouped via [`Self::group`]).
-    pub const TEMPLATES: [TabKind; 29] = [
+    pub const TEMPLATES: [TabKind; 56] = [
         TabKind::Rocket,
         TabKind::Engine,
         TabKind::Astro,
         TabKind::Aero,
         TabKind::Gasdynamics,
+        TabKind::Rotor,
+        TabKind::BlackHole,
         TabKind::Cfd,
         TabKind::Fem,
+        TabKind::TopOpt,
+        TabKind::NodeGraph,
+        TabKind::BondGraph,
+        TabKind::Surrogate,
         TabKind::Reactdyn,
         TabKind::Fields,
+        TabKind::Thermo,
+        TabKind::Quantum,
         TabKind::Cad,
+        TabKind::BrepCad,
         TabKind::MeshToolbox,
         TabKind::Sheetmetal,
         TabKind::Reverse,
@@ -262,6 +341,24 @@ impl TabKind {
         TabKind::Genetics,
         TabKind::Neuro,
         TabKind::VariantEffect,
+        TabKind::Ppi,
+        TabKind::Morphogenesis,
+        TabKind::Sensors,
+        TabKind::Fluids,
+        TabKind::Ocean,
+        TabKind::Rom,
+        TabKind::Uq,
+        TabKind::Uas,
+        TabKind::MissionSim,
+        TabKind::MissionPlanner,
+        TabKind::Survivability,
+        TabKind::Photogrammetry,
+        TabKind::Cosim,
+        TabKind::Autonomy,
+        TabKind::Mbd,
+        TabKind::Optics,
+        TabKind::Acoustics,
+        TabKind::Waveform,
     ];
 
     /// Group header shown in the `＋ from template` new-tab menu. Blank is
@@ -273,12 +370,25 @@ impl TabKind {
             | TabKind::Engine
             | TabKind::Astro
             | TabKind::Aero
-            | TabKind::Gasdynamics => "Aerospace",
-            TabKind::Cfd | TabKind::Fem | TabKind::Reactdyn | TabKind::Fields => "Simulation",
+            | TabKind::Gasdynamics
+            | TabKind::Rotor => "Aerospace",
+            TabKind::BlackHole => "Astrophysics",
+            TabKind::Cfd
+            | TabKind::Fem
+            | TabKind::TopOpt
+            | TabKind::NodeGraph
+            | TabKind::BondGraph
+            | TabKind::Surrogate
+            | TabKind::Reactdyn
+            | TabKind::Thermo
+            | TabKind::Quantum
+            | TabKind::Fields => "Simulation",
             TabKind::Cad
+            | TabKind::BrepCad
             | TabKind::MeshToolbox
             | TabKind::Sheetmetal
             | TabKind::Reverse
+            | TabKind::Photogrammetry
             | TabKind::Draft2d
             | TabKind::Render
             | TabKind::Animate => "CAD & mesh",
@@ -292,7 +402,26 @@ impl TabKind {
             | TabKind::Reinforcement
             | TabKind::Interior
             | TabKind::Geomatics => "Civil & AEC",
-            TabKind::Genetics | TabKind::Neuro | TabKind::VariantEffect => "Life sciences",
+            TabKind::Genetics
+            | TabKind::Neuro
+            | TabKind::VariantEffect
+            | TabKind::Ppi
+            | TabKind::Morphogenesis => "Life sciences",
+            TabKind::Sensors => "Sensors",
+            TabKind::Autonomy => "Sensors",
+            TabKind::Fluids => "Simulation",
+            TabKind::Ocean => "Simulation",
+            TabKind::Rom => "Simulation",
+            TabKind::Uq => "Simulation",
+            TabKind::Uas => "Aerospace",
+            TabKind::MissionSim => "Simulation",
+            TabKind::MissionPlanner => "Simulation",
+            TabKind::Survivability => "Simulation",
+            TabKind::Cosim => "Simulation",
+            TabKind::Mbd => "Simulation",
+            TabKind::Optics => "Simulation",
+            TabKind::Acoustics => "Simulation",
+            TabKind::Waveform => "Simulation",
         }
     }
 
@@ -305,11 +434,16 @@ impl TabKind {
             TabKind::Astro => "Astro / Launch",
             TabKind::Aero => "Aerodynamics",
             TabKind::Gasdynamics => "Gas dynamics",
+            TabKind::Rotor => "Rotor / Drone (BEMT)",
+            TabKind::BlackHole => "Black Hole",
             TabKind::Cfd => "CFD",
             TabKind::Fem => "FEM",
             TabKind::Reactdyn => "Reaction dynamics",
             TabKind::Fields => "Field statistics",
+            TabKind::Thermo => "Thermodynamics (EoS)",
+            TabKind::Quantum => "Quantum circuit",
             TabKind::Cad => "Parametric CAD",
+            TabKind::BrepCad => "Part B-Rep (truck)",
             TabKind::MeshToolbox => "Mesh toolbox",
             TabKind::Sheetmetal => "Sheet metal",
             TabKind::Reverse => "Reverse engineering",
@@ -329,6 +463,28 @@ impl TabKind {
             TabKind::Genetics => "Genetics",
             TabKind::Neuro => "Neural interface",
             TabKind::VariantEffect => "Variant effect",
+            TabKind::Ppi => "Protein interaction (PPI)",
+            TabKind::Morphogenesis => "Morphogenesis",
+            TabKind::Sensors => "Sensors (LiDAR / Radar)",
+            TabKind::Autonomy => "Autonomy V&V",
+            TabKind::Fluids => "Fluids (SPH particle sim)",
+            TabKind::Ocean => "Ocean (waves + buoyancy)",
+            TabKind::Rom => "Reduced-order model (POD)",
+            TabKind::Uq => "Uncertainty quantification",
+            TabKind::Uas => "UAS design & counter-UAS",
+            TabKind::MissionSim => "Mission simulation (constructive)",
+            TabKind::MissionPlanner => "Mission Planner",
+            TabKind::Survivability => "Survivability / protection",
+            TabKind::Photogrammetry => "Photogrammetry / SfM scan",
+            TabKind::Cosim => "Co-Simulation (FMI / HELICS)",
+            TabKind::Mbd => "Multibody dynamics (robot / contact)",
+            TabKind::TopOpt => "Topology optimization (SIMP)",
+            TabKind::NodeGraph => "Node graph (visual node editor)",
+            TabKind::BondGraph => "Bond graph (multi-domain systems)",
+            TabKind::Surrogate => "Surrogate model (ML solver emulator)",
+            TabKind::Optics => "Optics (thin lens)",
+            TabKind::Acoustics => "Acoustics (radiation)",
+            TabKind::Waveform => "Waveform (VCD viewer)",
         }
     }
 
@@ -343,11 +499,16 @@ impl TabKind {
             TabKind::Astro => app.show_astro_workbench = true,
             TabKind::Aero => app.show_aero_workbench = true,
             TabKind::Gasdynamics => app.show_gasdynamics_workbench = true,
+            TabKind::Rotor => app.show_rotor_workbench = true,
+            TabKind::BlackHole => app.show_blackhole_workbench = true,
             TabKind::Cfd => app.show_cfd_workbench = true,
             TabKind::Fem => app.show_fem_workbench = true,
             TabKind::Reactdyn => app.show_reactdyn_workbench = true,
             TabKind::Fields => app.show_fields_workbench = true,
+            TabKind::Thermo => app.show_thermo_workbench = true,
+            TabKind::Quantum => app.show_quantum_workbench = true,
             TabKind::Cad => app.show_cad_workbench = true,
+            TabKind::BrepCad => app.show_brep_workbench = true,
             TabKind::MeshToolbox => app.show_mesh_toolbox = true,
             TabKind::Sheetmetal => app.show_sheetmetal_workbench = true,
             TabKind::Reverse => app.show_reverse_workbench = true,
@@ -367,6 +528,28 @@ impl TabKind {
             TabKind::Genetics => app.show_genetics_workbench = true,
             TabKind::Neuro => app.show_neuro_workbench = true,
             TabKind::VariantEffect => app.show_variant_effect_workbench = true,
+            TabKind::Ppi => app.show_ppi_workbench = true,
+            TabKind::Morphogenesis => app.show_morphogenesis_workbench = true,
+            TabKind::Sensors => app.show_sensors_workbench = true,
+            TabKind::Autonomy => app.show_autonomy_workbench = true,
+            TabKind::Fluids => app.show_fluids_workbench = true,
+            TabKind::Ocean => app.show_ocean_workbench = true,
+            TabKind::Rom => app.show_rom_workbench = true,
+            TabKind::Uq => app.show_uq_workbench = true,
+            TabKind::Uas => app.show_uas_workbench = true,
+            TabKind::MissionSim => app.show_missionsim_workbench = true,
+            TabKind::MissionPlanner => app.show_mission_planner_workbench = true,
+            TabKind::Survivability => app.show_survivability_workbench = true,
+            TabKind::Photogrammetry => app.show_photogrammetry_workbench = true,
+            TabKind::Cosim => app.show_cosim_workbench = true,
+            TabKind::Mbd => app.show_mbd_workbench = true,
+            TabKind::TopOpt => app.show_topopt_workbench = true,
+            TabKind::NodeGraph => app.show_nodegraph_workbench = true,
+            TabKind::BondGraph => app.show_bondgraph_workbench = true,
+            TabKind::Surrogate => app.show_surrogate_workbench = true,
+            TabKind::Optics => app.show_optics_workbench = true,
+            TabKind::Acoustics => app.show_acoustics_workbench = true,
+            TabKind::Waveform => app.show_waveform_workbench = true,
         }
     }
 
@@ -387,11 +570,16 @@ impl TabKind {
             "astro" => Some(TabKind::Astro),
             "aero" => Some(TabKind::Aero),
             "gasdynamics" => Some(TabKind::Gasdynamics),
+            "rotor" => Some(TabKind::Rotor),
+            "blackhole" => Some(TabKind::BlackHole),
             "cfd" => Some(TabKind::Cfd),
             "fem" => Some(TabKind::Fem),
             "reactdyn" => Some(TabKind::Reactdyn),
             "fields" => Some(TabKind::Fields),
+            "thermo" | "thermodynamics" | "eos" => Some(TabKind::Thermo),
+            "quantum" | "qcircuit" | "qubit" => Some(TabKind::Quantum),
             "cad" => Some(TabKind::Cad),
+            "brep" | "brepcad" | "partbrep" | "solid" => Some(TabKind::BrepCad),
             "mesh" | "meshtoolbox" => Some(TabKind::MeshToolbox),
             "sheetmetal" => Some(TabKind::Sheetmetal),
             "reverse" => Some(TabKind::Reverse),
@@ -411,8 +599,38 @@ impl TabKind {
             "genetics" => Some(TabKind::Genetics),
             "neuro" => Some(TabKind::Neuro),
             "variant" | "varianteffect" => Some(TabKind::VariantEffect),
+            "ppi" | "interactome" | "network" => Some(TabKind::Ppi),
+            "morphogenesis" | "turing" | "reactiondiffusion" => Some(TabKind::Morphogenesis),
+            "sensors" => Some(TabKind::Sensors),
+            "autonomy" | "vnv" => Some(TabKind::Autonomy),
+            "fluids" | "sph" => Some(TabKind::Fluids),
+            "ocean" | "waves" => Some(TabKind::Ocean),
+            "rom" | "pod" => Some(TabKind::Rom),
+            "uq" | "uncertainty" => Some(TabKind::Uq),
+            "uas" | "drone" | "counteruas" => Some(TabKind::Uas),
+            "missionsim" | "mission" | "wargame" => Some(TabKind::MissionSim),
+            "missionplanner" | "planner" | "missionplan" => Some(TabKind::MissionPlanner),
+            "survivability" | "protection" | "blast" => Some(TabKind::Survivability),
+            "photogrammetry" | "sfm" | "scan" => Some(TabKind::Photogrammetry),
+            "cosim" | "co-simulation" | "cosimulation" | "fmi" => Some(TabKind::Cosim),
+            "mbd" | "multibody" | "robot" => Some(TabKind::Mbd),
+            "topopt" | "topology" | "simp" | "generative" => Some(TabKind::TopOpt),
+            "nodegraph" | "nodes" | "graph" | "pipeline" => Some(TabKind::NodeGraph),
+            "bondgraph" | "bond" | "bonds" => Some(TabKind::BondGraph),
+            "surrogate" | "emulator" | "rsm" | "metamodel" => Some(TabKind::Surrogate),
+            "optics" | "lens" | "thinlens" => Some(TabKind::Optics),
+            "acoustics" | "radiation" | "monopole" => Some(TabKind::Acoustics),
+            "waveform" | "vcd" | "logicanalyzer" => Some(TabKind::Waveform),
             _ => None,
         }
+    }
+
+    /// Convenience wrapper over [`crate::workbench_focus::in_focus`]: is this
+    /// kind shown under the domain-focus filter `focus` (`None` = "All" ⇒
+    /// always)? Lets the View-menu workbench toggles gate themselves with a
+    /// readable `TabKind::X.in_focus_of(vf)` instead of the free function.
+    pub fn in_focus_of(self, focus: Option<&str>) -> bool {
+        crate::workbench_focus::in_focus(self, focus)
     }
 
     /// The central viewport this kind prefers (genetics is the 2D DNA
@@ -1144,10 +1362,74 @@ pub const ALL_WORKBENCH_KINDS: &[&str] = &[
     "astro",
     "pipeflow",
     "rocket",
+    "rotor",
+    "blackhole",
     "batterypack",
     "engine",
     "heatexchanger",
     "car",
+    // Native sensor suite (LiDAR + radar) — surfaced by the Sensors workbench.
+    "sensors",
+    // Native autonomy V&V framework — surfaced by the Autonomy V&V workbench.
+    "autonomy",
+    // Native SPH particle fluid simulation — surfaced by the Fluids workbench.
+    "fluids",
+    // Native Gerstner ocean wave field + buoyancy — surfaced by the Ocean workbench.
+    "ocean",
+    // Native reduced-order modelling (POD / DMD / DEIM) — surfaced by the ROM workbench.
+    "rom",
+    // Native uncertainty quantification (MC propagation / Sobol / FORM) — surfaced by the UQ workbench.
+    "uq",
+    // Native small-UAS design + defensive counter-UAS intercept geometry (no weapon
+    // employment) — surfaced by the UAS workbench.
+    "uas",
+    // In-house general discrete-event / agent constructive-simulation framework
+    // (scheduler + analytic movers + range-based detection + ABSTRACT engagement:
+    // Pk input + Lanchester square-law ODE; no lethality / targeting / kill-chain)
+    // — surfaced by the Mission-Simulation workbench.
+    "missionsim",
+    // In-house visual mission planner (geographic lat/lon map + waypoint routes +
+    // real-time playback; movement only, no engagement / sensors / orbits) —
+    // surfaced by the Mission Planner workbench.
+    "missionplanner",
+    // In-house defensive survivability / protection (free-field blast loading +
+    // SDOF protective response + pressure-impulse iso-damage diagram + minimum-
+    // armor sizing + occupant tolerance screen; PROTECTIVE side only, no
+    // penetration / lethality) — surfaced by the Survivability / protection
+    // workbench.
+    "survivability",
+    // Native structure-from-motion / photogrammetry (COLMAP-style SfM) — surfaced by the Photogrammetry workbench.
+    "photogrammetry",
+    // In-house FMI / HELICS co-simulation coupling — surfaced by the Co-Simulation workbench.
+    "cosim",
+    // In-house planar multibody dynamics (constrained-DAE System + Featherstone
+    // ABA + penalty contact / Coulomb friction) — surfaced by the
+    // Multibody-dynamics (robot / contact) workbench.
+    "mbd",
+    // In-house sequence-first protein-protein interaction / interactome
+    // (coevolution MI -> fused PPI score -> ranked screen) — surfaced by the
+    // PPI / interactome workbench.
+    "ppi",
+    // In-house Turing morphogenesis (Gray–Scott reaction–diffusion; live 3-D
+    // organic-pattern growth) — surfaced by the Morphogenesis workbench.
+    "morphogenesis",
+    // In-house 2-D SIMP generative structural design (minimum-compliance
+    // topology optimization) — surfaced by the Topology Optimization workbench.
+    "topopt",
+    // In-house B-Rep solid modeling on the truck CAD kernel (NURBS
+    // primitives + boolean set-ops + tessellation, valenx-truck-cad) —
+    // surfaced by the Part B-Rep (CAD) workbench.
+    "brep",
+    // In-house industrial fluid thermodynamics (cubic EoS + vapor–liquid
+    // phase behavior, valenx-thermo) — surfaced by the Thermodynamics workbench.
+    "thermo",
+    // In-house state-vector quantum-circuit simulator (valenx-quantum) —
+    // surfaced by the Quantum circuit workbench.
+    "quantum",
+    // In-house Value Change Dump waveform parser (valenx-waveform) —
+    // surfaced by the Waveform (VCD viewer) workbench. ("optics" + "acoustics"
+    // are already registered above in the science / EE batches.)
+    "waveform",
     // The Mesh Toolbox is gated on `show_mesh_toolbox` (a `_toolbox`, not a
     // `_workbench`, field) but behaves like a per-tab workbench, so it is
     // mappable here under the same id the agent registry / `TabKind::from_id`
@@ -1199,7 +1481,7 @@ pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
         "thermistor" => app.show_thermistor_workbench = on,
         "straingauge" => app.show_straingauge_workbench = on,
         "drone" => app.show_drone_workbench = on,
-        "acoustics" => app.show_acoustics_workbench = on,
+        "acoustics" | "radiation" | "monopole" => app.show_acoustics_workbench = on,
         "acidbase" => app.show_acidbase_workbench = on,
         "bjt" => app.show_bjt_workbench = on,
         "bmr" => app.show_bmr_workbench = on,
@@ -1272,7 +1554,7 @@ pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
         "leverage" => app.show_leverage_workbench = on,
         "mohr" => app.show_mohr_workbench = on,
         "mosfet" => app.show_mosfet_workbench = on,
-        "optics" => app.show_optics_workbench = on,
+        "optics" | "lens" | "thinlens" => app.show_optics_workbench = on,
         "orifice" => app.show_orifice_workbench = on,
         "pressurevessel" => app.show_pressurevessel_workbench = on,
         "torsion" => app.show_torsion_workbench = on,
@@ -1299,10 +1581,35 @@ pub fn set_workbench_flag(app: &mut ValenxApp, kind: &str, on: bool) {
         "astro" => app.show_astro_workbench = on,
         "pipeflow" => app.show_pipeflow_workbench = on,
         "rocket" => app.show_rocket_workbench = on,
+        "rotor" => app.show_rotor_workbench = on,
+        "blackhole" => app.show_blackhole_workbench = on,
         "batterypack" => app.show_batterypack_workbench = on,
         "engine" => app.show_engine_workbench = on,
         "heatexchanger" => app.show_heatexchanger_workbench = on,
         "car" => app.show_car_workbench = on,
+        "sensors" => app.show_sensors_workbench = on,
+        "autonomy" | "vnv" => app.show_autonomy_workbench = on,
+        "fluids" | "sph" => app.show_fluids_workbench = on,
+        "ocean" | "waves" => app.show_ocean_workbench = on,
+        "rom" | "pod" => app.show_rom_workbench = on,
+        "uq" | "uncertainty" => app.show_uq_workbench = on,
+        // Note: "drone" stays mapped to the valenx-drone Drone workbench above;
+        // here only the UAS-specific ids route to the UAS workbench flag.
+        "uas" | "counteruas" => app.show_uas_workbench = on,
+        "missionsim" | "mission" | "wargame" => app.show_missionsim_workbench = on,
+        "missionplanner" | "planner" | "missionplan" => app.show_mission_planner_workbench = on,
+        "survivability" | "protection" | "blast" => app.show_survivability_workbench = on,
+        "photogrammetry" | "sfm" | "scan" => app.show_photogrammetry_workbench = on,
+        "cosim" | "co-simulation" | "cosimulation" | "fmi" => app.show_cosim_workbench = on,
+        "ppi" | "interactome" | "network" => app.show_ppi_workbench = on,
+        "morphogenesis" | "turing" | "reactiondiffusion" => app.show_morphogenesis_workbench = on,
+        "mbd" | "multibody" | "robot" => app.show_mbd_workbench = on,
+        "topopt" | "topology" | "simp" | "generative" => app.show_topopt_workbench = on,
+        "brep" | "brepcad" | "partbrep" | "solid" => app.show_brep_workbench = on,
+        "thermo" | "thermodynamics" | "eos" => app.show_thermo_workbench = on,
+        "quantum" | "qcircuit" | "qubit" => app.show_quantum_workbench = on,
+        "waveform" | "vcd" | "logicanalyzer" => app.show_waveform_workbench = on,
+        "bondgraph" | "bond" | "bonds" => app.show_bondgraph_workbench = on,
         // Mesh Toolbox (a `_toolbox` flag, mapped here for parity).
         "mesh" | "meshtoolbox" => app.show_mesh_toolbox = on,
         // Unknown kind: no-op — a stale/hostile registry string is ignored.
@@ -1322,18 +1629,26 @@ fn clear_all_workbenches(app: &mut ValenxApp) {
     for k in ALL_WORKBENCH_KINDS {
         set_workbench_flag(app, k, false);
     }
-    // The 29 TabKind template flags are a subset of the sweep above; clearing
+    // The 32 TabKind template flags are a subset of the sweep above; clearing
     // them again is a harmless no-op kept for explicitness / belt-and-braces.
     app.show_rocket_workbench = false;
     app.show_engine_workbench = false;
     app.show_astro_workbench = false;
     app.show_aero_workbench = false;
     app.show_gasdynamics_workbench = false;
+    app.show_rotor_workbench = false;
+    app.show_blackhole_workbench = false;
     app.show_cfd_workbench = false;
     app.show_fem_workbench = false;
     app.show_reactdyn_workbench = false;
     app.show_fields_workbench = false;
     app.show_cad_workbench = false;
+    app.show_brep_workbench = false;
+    app.show_thermo_workbench = false;
+    app.show_quantum_workbench = false;
+    app.show_optics_workbench = false;
+    app.show_acoustics_workbench = false;
+    app.show_waveform_workbench = false;
     app.show_mesh_toolbox = false;
     app.show_sheetmetal_workbench = false;
     app.show_reverse_workbench = false;
@@ -1353,6 +1668,23 @@ fn clear_all_workbenches(app: &mut ValenxApp) {
     app.show_genetics_workbench = false;
     app.show_neuro_workbench = false;
     app.show_variant_effect_workbench = false;
+    app.show_sensors_workbench = false;
+    app.show_autonomy_workbench = false;
+    app.show_fluids_workbench = false;
+    app.show_ocean_workbench = false;
+    app.show_rom_workbench = false;
+    app.show_uq_workbench = false;
+    app.show_uas_workbench = false;
+    app.show_missionsim_workbench = false;
+    app.show_mission_planner_workbench = false;
+    app.show_survivability_workbench = false;
+    app.show_photogrammetry_workbench = false;
+    app.show_cosim_workbench = false;
+    app.show_ppi_workbench = false;
+    app.show_mbd_workbench = false;
+    app.show_topopt_workbench = false;
+    app.show_nodegraph_workbench = false;
+    app.show_bondgraph_workbench = false;
 }
 
 /// Reconcile the visible workbench + central viewport with the active
@@ -1387,6 +1719,12 @@ pub fn sync_active(app: &mut ValenxApp) {
     if let Some(wk) = workbench_kind {
         set_workbench_flag(app, &wk, true);
     }
+    // Now that this tab's panels are reconciled, auto-organise them into a
+    // balanced grid if two or more are open (so an AI-set-up / multi-panel tab
+    // tidies itself instead of crushing the Assistant). Gated on
+    // `auto_tile_on_open` and a no-op for clean agent product tabs — see
+    // [`crate::dock_layout::ValenxApp::maybe_auto_tile_on_open`].
+    app.maybe_auto_tile_on_open();
 }
 
 /// Switch the active tab to `new_idx`, swapping the per-tab workspace
@@ -1551,6 +1889,10 @@ struct StripIntent {
     /// picked from the tab-strip "+ Workbench+Agent" placement dropdown.
     /// Routed to [`ValenxApp::add_workbench_agent_pair_at`].
     add_wb_agent_at: Option<crate::dock_layout::UnitAddTarget>,
+    /// Auto-tile: reflow the open central-workspace panels into a balanced grid
+    /// (the tab-strip **Tile** button). Routed to
+    /// [`ValenxApp::auto_tile_dock`].
+    auto_tile: bool,
 
     // -- Tab groups (Chrome-style coloured bands over the strip) --
     /// Create a fresh group around the tab at this index (auto-named, next
@@ -1601,6 +1943,30 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
                 .clicked()
             {
                 intent.open_blank = true;
+            }
+
+            // Auto-tile / organize: lay every open central-workspace panel
+            // (workbenches + the Assistant + any Workbench+Agent tiles) out as
+            // a balanced grid so they're ALL visible at once instead of the
+            // Assistant being crushed to a sliver. The count in the label tells
+            // the user how many panels are currently open. Plain-ASCII label
+            // (no glyph) so it never renders as a "tofu" box; a named button so
+            // the AI bridge can drive it too. Disabled when nothing is open.
+            let panel_count = app.open_tileable_count();
+            let tile_btn = ui.add_enabled(
+                panel_count >= 1,
+                egui::Button::new(format!("Tile ({panel_count})")),
+            );
+            if tile_btn
+                .on_hover_text(
+                    "Organize panels: arrange the open workspace panels \
+                     (workbenches, Assistant, agent units) into a balanced \
+                     grid so all of them are visible and legible at once. The \
+                     number is how many panels are open.",
+                )
+                .clicked()
+            {
+                intent.auto_tile = true;
             }
 
             // Paired "Workbench + Agent" unit — an empty workspace tile + a
@@ -1666,10 +2032,19 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
             // body is wrapped in `scrollable_menu` so the long category list
             // stays on-screen and scrolls instead of running off the bottom.
             // ASCII label (no glyph caret) so it never renders as tofu.
+            //
+            // Honours the **domain-focus filter**: when a focus category is
+            // set, only that domain's templates are listed (the launcher /
+            // View menu agree). "All" (`None`) lists everything.
+            let focus = app.focus_category.clone();
             ui.menu_button("From template", |ui| {
                 crate::menu_ui::scrollable_menu(ui, |ui| {
                     let mut last_group = "";
+                    let mut shown = 0usize;
                     for kind in TabKind::TEMPLATES {
+                        if !crate::workbench_focus::in_focus(kind, focus.as_deref()) {
+                            continue;
+                        }
                         let group = kind.group();
                         if group != last_group {
                             if !last_group.is_empty() {
@@ -1682,6 +2057,16 @@ pub fn draw_tab_strip(app: &mut ValenxApp, ctx: &egui::Context) {
                             intent.open_template = Some(kind);
                             ui.close_menu();
                         }
+                        shown += 1;
+                    }
+                    if shown == 0 {
+                        // Defensive: a focus with no templates (shouldn't happen
+                        // for a real category) still leaves the menu usable.
+                        ui.label(
+                            egui::RichText::new("(no templates in this focus)")
+                                .weak()
+                                .small(),
+                        );
                     }
                 });
             });
@@ -2721,6 +3106,11 @@ fn apply_intent(app: &mut ValenxApp, intent: StripIntent) {
         // left/right end). Also turns the dockable layout on.
         app.add_workbench_agent_pair_at(target);
     }
+    if intent.auto_tile {
+        // The toolbar "Tile" button: reflow the open central-workspace panels
+        // into a balanced grid (turns the dockable layout on, full-width).
+        app.auto_tile_dock();
+    }
 
     // -- Tab-group mutations. Each is a pure presentation-layer change over
     //    `tabs` (membership + group display attrs); none touches `docs` /
@@ -2815,11 +3205,16 @@ mod tests {
             ("astro", TabKind::Astro),
             ("aero", TabKind::Aero),
             ("gasdynamics", TabKind::Gasdynamics),
+            ("rotor", TabKind::Rotor),
+            ("blackhole", TabKind::BlackHole),
             ("cfd", TabKind::Cfd),
             ("fem", TabKind::Fem),
             ("reactdyn", TabKind::Reactdyn),
             ("fields", TabKind::Fields),
+            ("thermo", TabKind::Thermo),
+            ("quantum", TabKind::Quantum),
             ("cad", TabKind::Cad),
+            ("brep", TabKind::BrepCad),
             ("meshtoolbox", TabKind::MeshToolbox),
             ("sheetmetal", TabKind::Sheetmetal),
             ("reverse", TabKind::Reverse),
@@ -2839,6 +3234,28 @@ mod tests {
             ("genetics", TabKind::Genetics),
             ("neuro", TabKind::Neuro),
             ("varianteffect", TabKind::VariantEffect),
+            ("ppi", TabKind::Ppi),
+            ("morphogenesis", TabKind::Morphogenesis),
+            ("sensors", TabKind::Sensors),
+            ("autonomy", TabKind::Autonomy),
+            ("fluids", TabKind::Fluids),
+            ("ocean", TabKind::Ocean),
+            ("rom", TabKind::Rom),
+            ("uq", TabKind::Uq),
+            ("uas", TabKind::Uas),
+            ("missionsim", TabKind::MissionSim),
+            ("missionplanner", TabKind::MissionPlanner),
+            ("survivability", TabKind::Survivability),
+            ("photogrammetry", TabKind::Photogrammetry),
+            ("cosim", TabKind::Cosim),
+            ("mbd", TabKind::Mbd),
+            ("topopt", TabKind::TopOpt),
+            ("nodegraph", TabKind::NodeGraph),
+            ("bondgraph", TabKind::BondGraph),
+            ("surrogate", TabKind::Surrogate),
+            ("optics", TabKind::Optics),
+            ("acoustics", TabKind::Acoustics),
+            ("waveform", TabKind::Waveform),
         ];
         // Every TEMPLATES kind is covered by the canonical table above.
         assert_eq!(canonical.len(), TabKind::TEMPLATES.len());
@@ -2851,6 +3268,20 @@ mod tests {
         // Friendly aliases.
         assert_eq!(TabKind::from_id("mesh"), Some(TabKind::MeshToolbox));
         assert_eq!(TabKind::from_id("variant"), Some(TabKind::VariantEffect));
+        assert_eq!(TabKind::from_id("sfm"), Some(TabKind::Photogrammetry));
+        assert_eq!(TabKind::from_id("scan"), Some(TabKind::Photogrammetry));
+        assert_eq!(TabKind::from_id("co-simulation"), Some(TabKind::Cosim));
+        assert_eq!(TabKind::from_id("fmi"), Some(TabKind::Cosim));
+        assert_eq!(TabKind::from_id("interactome"), Some(TabKind::Ppi));
+        assert_eq!(TabKind::from_id("network"), Some(TabKind::Ppi));
+        assert_eq!(TabKind::from_id("multibody"), Some(TabKind::Mbd));
+        assert_eq!(TabKind::from_id("robot"), Some(TabKind::Mbd));
+        assert_eq!(TabKind::from_id("drone"), Some(TabKind::Uas));
+        assert_eq!(TabKind::from_id("counteruas"), Some(TabKind::Uas));
+        assert_eq!(TabKind::from_id("mission"), Some(TabKind::MissionSim));
+        assert_eq!(TabKind::from_id("wargame"), Some(TabKind::MissionSim));
+        assert_eq!(TabKind::from_id("protection"), Some(TabKind::Survivability));
+        assert_eq!(TabKind::from_id("blast"), Some(TabKind::Survivability));
         // Unknown ids (and Blank, which has no id) map to None.
         assert_eq!(TabKind::from_id("blank"), None);
         assert_eq!(TabKind::from_id("nope"), None);
@@ -4222,11 +4653,19 @@ mod tests {
             app.show_astro_workbench,
             app.show_aero_workbench,
             app.show_gasdynamics_workbench,
+            app.show_rotor_workbench,
+            app.show_blackhole_workbench,
             app.show_cfd_workbench,
             app.show_fem_workbench,
             app.show_reactdyn_workbench,
             app.show_fields_workbench,
             app.show_cad_workbench,
+            app.show_brep_workbench,
+            app.show_thermo_workbench,
+            app.show_quantum_workbench,
+            app.show_optics_workbench,
+            app.show_acoustics_workbench,
+            app.show_waveform_workbench,
             app.show_mesh_toolbox,
             app.show_sheetmetal_workbench,
             app.show_reverse_workbench,
@@ -4246,6 +4685,24 @@ mod tests {
             app.show_genetics_workbench,
             app.show_neuro_workbench,
             app.show_variant_effect_workbench,
+            app.show_sensors_workbench,
+            app.show_autonomy_workbench,
+            app.show_fluids_workbench,
+            app.show_ocean_workbench,
+            app.show_rom_workbench,
+            app.show_uq_workbench,
+            app.show_uas_workbench,
+            app.show_missionsim_workbench,
+            app.show_mission_planner_workbench,
+            app.show_survivability_workbench,
+            app.show_photogrammetry_workbench,
+            app.show_cosim_workbench,
+            app.show_ppi_workbench,
+            app.show_morphogenesis_workbench,
+            app.show_mbd_workbench,
+            app.show_topopt_workbench,
+            app.show_nodegraph_workbench,
+            app.show_bondgraph_workbench,
         ]
         .into_iter()
         .filter(|&b| b)
@@ -4265,11 +4722,16 @@ mod tests {
             TabKind::Gasdynamics => {
                 crate::gasdynamics_workbench::draw_gasdynamics_workbench(app, ctx)
             }
+            TabKind::Rotor => crate::rotor_workbench::draw_rotor_workbench(app, ctx),
+            TabKind::BlackHole => crate::blackhole_workbench::draw_blackhole_workbench(app, ctx),
             TabKind::Cfd => crate::cfd_workbench::draw_cfd_workbench(app, ctx),
             TabKind::Fem => crate::fem_workbench::draw_fem_workbench(app, ctx),
             TabKind::Reactdyn => crate::reactdyn_workbench::draw_reactdyn_workbench(app, ctx),
             TabKind::Fields => crate::fields_workbench::draw_fields_workbench(app, ctx),
             TabKind::Cad => crate::cad_workbench::draw_cad_workbench(app, ctx),
+            TabKind::BrepCad => crate::brep_workbench::draw_brep_workbench(app, ctx),
+            TabKind::Thermo => crate::thermo_workbench::draw_thermo_workbench(app, ctx),
+            TabKind::Quantum => crate::quantum_workbench::draw_quantum_workbench(app, ctx),
             TabKind::MeshToolbox => crate::mesh_toolbox::draw_mesh_toolbox(app, ctx),
             TabKind::Sheetmetal => crate::sheetmetal_workbench::draw_sheetmetal_workbench(app, ctx),
             TabKind::Reverse => crate::reverse_workbench::draw_reverse_workbench(app, ctx),
@@ -4293,6 +4755,36 @@ mod tests {
             TabKind::VariantEffect => {
                 crate::variant_effect_workbench::draw_variant_effect_workbench(app, ctx)
             }
+            TabKind::Sensors => crate::sensors_workbench::draw_sensors_workbench(app, ctx),
+            TabKind::Autonomy => crate::autonomy_workbench::draw_autonomy_workbench(app, ctx),
+            TabKind::Fluids => crate::fluids_workbench::draw_fluids_workbench(app, ctx),
+            TabKind::Ocean => crate::ocean_workbench::draw_ocean_workbench(app, ctx),
+            TabKind::Rom => crate::rom_workbench::draw_rom_workbench(app, ctx),
+            TabKind::Uq => crate::uq_workbench::draw_uq_workbench(app, ctx),
+            TabKind::Uas => crate::uas_workbench::draw_uas_workbench(app, ctx),
+            TabKind::MissionSim => crate::missionsim_workbench::draw_missionsim_workbench(app, ctx),
+            TabKind::MissionPlanner => {
+                crate::mission_planner_workbench::draw_mission_planner_workbench(app, ctx)
+            }
+            TabKind::Survivability => {
+                crate::survivability_workbench::draw_survivability_workbench(app, ctx)
+            }
+            TabKind::Photogrammetry => {
+                crate::photogrammetry_workbench::draw_photogrammetry_workbench(app, ctx)
+            }
+            TabKind::Cosim => crate::cosim_workbench::draw_cosim_workbench(app, ctx),
+            TabKind::Ppi => crate::ppi_workbench::draw_ppi_workbench(app, ctx),
+            TabKind::Morphogenesis => {
+                crate::morphogenesis_workbench::draw_morphogenesis_workbench(app, ctx)
+            }
+            TabKind::Mbd => crate::mbd_workbench::draw_mbd_workbench(app, ctx),
+            TabKind::TopOpt => crate::topopt_workbench::draw_topopt_workbench(app, ctx),
+            TabKind::NodeGraph => crate::nodegraph_workbench::draw_nodegraph_workbench(app, ctx),
+            TabKind::BondGraph => crate::bondgraph_workbench::draw_bondgraph_workbench(app, ctx),
+            TabKind::Surrogate => crate::surrogate_workbench::draw_surrogate_workbench(app, ctx),
+            TabKind::Optics => crate::optics_workbench::draw_optics_workbench(app, ctx),
+            TabKind::Acoustics => crate::acoustics_workbench::draw_acoustics_workbench(app, ctx),
+            TabKind::Waveform => crate::waveform_workbench::draw_waveform_workbench(app, ctx),
         });
     }
 
@@ -4312,6 +4804,80 @@ mod tests {
             );
             draw_kind(kind, &mut app);
         }
+    }
+
+    /// FIX B: opening a **calculator** workbench tab (Thermo — NO 3-D model)
+    /// must NOT auto-tile into an empty viewport grid. The form stays in the
+    /// central area (classic layout) and the Assistant takes a balanced side
+    /// width instead — so `dock_enabled` stays off and no `central_view` tile
+    /// is created. (Tileable count is just the Assistant = 1, below threshold.)
+    #[test]
+    fn opening_a_calculator_tab_stays_classic_no_empty_viewport() {
+        let mut app = ValenxApp::default();
+        app.show_assistant_panel = true;
+        app.auto_tile_on_open = true;
+        // Replicate the bridge / tab-strip NewTab(Thermo) open flow exactly.
+        park_active_doc(&mut app);
+        app.tab_bar.open(TabKind::Thermo);
+        install_active_doc(&mut app); // ends in sync_active → maybe_auto_tile
+
+        assert!(app.show_thermo_workbench, "Thermo workbench is on");
+        // No model loaded → no CENTRAL_VIEW tile; only the Assistant is tileable.
+        let ids = app.open_tileable_panels();
+        assert!(
+            !ids.contains(&"central_view".to_string()),
+            "a calculator tab must NOT get an empty viewport tile"
+        );
+        assert_eq!(app.open_tileable_count(), 1, "only the Assistant counts");
+        assert!(
+            !app.dock_enabled,
+            "calculator tab stays classic (no tiling)"
+        );
+        assert!(app.dock_tree.is_none(), "no grid tree for a calculator tab");
+    }
+
+    /// A minimal loaded mesh (3 nodes — enough for an AABB) for the 3-D-tab
+    /// test below. Mirrors the lib.rs test helper without reaching its private
+    /// module.
+    fn tiny_loaded_mesh() -> crate::types::LoadedMesh {
+        let mut mesh = valenx_mesh::Mesh::new("test-3d-tab");
+        mesh.nodes.push(nalgebra::Vector3::new(0.0, 0.0, 0.0));
+        mesh.nodes.push(nalgebra::Vector3::new(1.0, 1.0, 1.0));
+        mesh.nodes.push(nalgebra::Vector3::new(1.0, 0.0, 0.0));
+        let quality = valenx_mesh::quality_report(&mesh);
+        let aspect_hist =
+            valenx_mesh::aspect_ratio_histogram(&mesh, valenx_mesh::DEFAULT_AR_BUCKETS);
+        let skew_hist = valenx_mesh::skewness_histogram(&mesh, valenx_mesh::DEFAULT_SKEW_BUCKETS);
+        crate::types::LoadedMesh {
+            path: std::path::PathBuf::from("<test>/3d"),
+            mesh,
+            quality,
+            aspect_hist,
+            skew_hist,
+        }
+    }
+
+    /// FIX B counterpart: a tab **with** a 3-D model loaded DOES auto-tile into
+    /// the `[viewport | Assistant]` balanced grid (the viewport tile shows the
+    /// real model).
+    #[test]
+    fn opening_a_tab_with_a_model_tiles_viewport_and_assistant() {
+        let mut app = ValenxApp::default();
+        app.show_assistant_panel = true;
+        app.auto_tile_on_open = true;
+        // A loaded mesh = real 3-D central content.
+        app.mesh = Some(tiny_loaded_mesh());
+        app.maybe_auto_tile_on_open();
+
+        let ids = app.open_tileable_panels();
+        assert!(ids.contains(&"central_view".to_string()), "viewport tiled");
+        assert!(
+            ids.contains(&"valenx_assistant_panel".to_string()),
+            "assistant tiled"
+        );
+        assert_eq!(app.open_tileable_count(), 2);
+        assert!(app.dock_enabled, "a 3-D tab auto-tiles");
+        assert!(app.dock_tree.is_some());
     }
 }
 
@@ -4575,8 +5141,8 @@ mod headless_ui_tests {
     }
 
     #[test]
-    fn all_workbench_kinds_is_unique_and_covers_131_plus_mesh() {
-        // The registry list has no duplicate ids, and is the 131
+    fn all_workbench_kinds_is_unique_and_covers_135_plus_mesh() {
+        // The registry list has no duplicate ids, and is the
         // `show_*_workbench` fields plus the one `meshtoolbox` alias.
         let mut seen = std::collections::HashSet::new();
         for k in ALL_WORKBENCH_KINDS {
@@ -4587,8 +5153,8 @@ mod headless_ui_tests {
         }
         assert_eq!(
             ALL_WORKBENCH_KINDS.len(),
-            132,
-            "131 `show_*_workbench` fields + the meshtoolbox alias"
+            154,
+            "153 `show_*_workbench` fields + the meshtoolbox alias"
         );
         assert!(ALL_WORKBENCH_KINDS.contains(&"meshtoolbox"));
         // A couple of representative kinds are present.

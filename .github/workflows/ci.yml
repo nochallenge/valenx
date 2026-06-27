@@ -136,7 +136,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      # Pin to the repo's MSRV toolchain (rust-toolchain.toml) so CI rustfmt
+      # matches local `cargo fmt`. @stable installs a newer rustfmt whose
+      # line-wrapping differs at the 100-col boundary, causing false diffs.
+      - uses: dtolnay/rust-toolchain@1.88.0
         with:
           components: rustfmt
       - run: cargo fmt --all --check
@@ -148,13 +151,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.88.0
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
+      # `--all-features` pulls OpenCASCADE + the EGL/GL/Wayland GUI stack
+      # (khronos-egl needs egl.pc), which aren't on the runner by default.
+      - name: System deps (Ubuntu)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libocct-foundation-dev libocct-modeling-algorithms-dev \
+            libocct-modeling-data-dev libocct-ocaf-dev \
+            libgl1-mesa-dev libegl-dev libwayland-dev libxkbcommon-dev \
+            libasound2-dev libpipewire-0.3-dev libdbus-1-dev libudev-dev
       # Scoped to the changed crates on a PR (see the `changes` job);
       # `--workspace` on push-to-master and nightly.
-      - run: cargo clippy ${{ needs.changes.outputs.build_scope }} --all-targets --all-features -- -D warnings
+      # NOTE: no `--all-features`. It is a cross-platform footgun: it enables
+      # Linux-only optional-dep features (e.g. eframe/walkers EGL/PipeWire)
+      # that the Windows dev box can't lint, so lints stay invisible locally
+      # and every push surfaces a new failing crate. This matches the
+      # locally-reproducible default-feature `cargo clippy` check.
+      - run: cargo clippy ${{ needs.changes.outputs.build_scope }} --all-targets -- -D warnings
 
   # -------------------------------------------------------------------
   # Linux test — the REQUIRED merge gate (it is in `ci-ok`'s `needs`).
@@ -264,11 +282,26 @@ jobs:
       RUSTDOCFLAGS: "-D warnings"
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.88.0
       - uses: Swatinem/rust-cache@v2
+      # `--all-features` pulls OpenCASCADE + the EGL/GL/Wayland GUI stack
+      # (khronos-egl needs egl.pc), which aren't on the runner by default.
+      - name: System deps (Ubuntu)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libocct-foundation-dev libocct-modeling-algorithms-dev \
+            libocct-modeling-data-dev libocct-ocaf-dev \
+            libgl1-mesa-dev libegl-dev libwayland-dev libxkbcommon-dev \
+            libasound2-dev libpipewire-0.3-dev libdbus-1-dev libudev-dev
       # Scoped to the changed crates on a PR (see the `changes` job);
       # `--workspace` on push-to-master and nightly.
-      - run: cargo doc ${{ needs.changes.outputs.build_scope }} --no-deps --all-features
+      # NOTE: no `--all-features`. It is a cross-platform footgun: it enables
+      # Linux-only optional-dep features (e.g. eframe/walkers EGL/PipeWire)
+      # that the Windows dev box can't doc, so doc warnings stay invisible
+      # locally and every push surfaces a new broken-link crate. This matches
+      # the locally-reproducible default-feature `cargo doc` check.
+      - run: cargo doc ${{ needs.changes.outputs.build_scope }} --no-deps
 
   # -------------------------------------------------------------------
   # mdBook user manual — catches broken markdown links, bad code examples.

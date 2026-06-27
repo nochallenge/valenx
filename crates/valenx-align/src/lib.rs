@@ -69,6 +69,7 @@ pub mod limits;
 pub mod matrix;
 pub mod msa;
 pub mod pairwise;
+pub mod rust_bio;
 pub mod search;
 pub mod util;
 

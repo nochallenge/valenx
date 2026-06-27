@@ -210,26 +210,30 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
         .num_columns(2)
         .spacing([8.0, 4.0])
         .show(ui, |ui| {
-            ui.label(if p.engine == Engine::WrightFisher {
-                "Population size N"
-            } else {
-                "Sample size"
-            })
-            .on_hover_text(if p.engine == Engine::WrightFisher {
-                "Diploid effective population size."
-            } else {
-                "Number of haplotypes sampled from the coalescent."
-            });
+            let lbl = ui
+                .label(if p.engine == Engine::WrightFisher {
+                    "Population size N"
+                } else {
+                    "Sample size"
+                })
+                .on_hover_text(if p.engine == Engine::WrightFisher {
+                    "Diploid effective population size."
+                } else {
+                    "Number of haplotypes sampled from the coalescent."
+                });
             ui.add(egui::DragValue::new(&mut p.pop_size).range(2..=2000))
+                .labelled_by(lbl.id)
                 .on_hover_text("Integer population / sample size.");
             ui.end_row();
             if p.engine == Engine::WrightFisher {
-                ui.label("Generations")
+                let lbl = ui
+                    .label("Generations")
                     .on_hover_text("Number of forward-time generations to simulate.");
                 ui.add(egui::DragValue::new(&mut p.generations).range(1..=5000))
+                    .labelled_by(lbl.id)
                     .on_hover_text("Generations of Wright-Fisher iteration.");
                 ui.end_row();
-                ui.label("Mutation rate").on_hover_text(
+                let lbl = ui.label("Mutation rate").on_hover_text(
                     "Per-site, per-generation mutation rate μ (dimensionless 0..=1).",
                 );
                 ui.add(
@@ -237,26 +241,31 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
                         .speed(1.0e-4)
                         .range(0.0..=1.0),
                 )
+                .labelled_by(lbl.id)
                 .on_hover_text("Per-site μ.");
                 ui.end_row();
-                ui.label("Recombination rate")
+                let lbl = ui
+                    .label("Recombination rate")
                     .on_hover_text("Per-pair-of-sites, per-generation recombination probability.");
                 ui.add(
                     egui::DragValue::new(&mut p.recombination_rate)
                         .speed(1.0e-5)
                         .range(0.0..=1.0),
                 )
+                .labelled_by(lbl.id)
                 .on_hover_text("Per-pair-of-sites r.");
                 ui.end_row();
-                ui.label("Segment length").on_hover_text(
+                let lbl = ui.label("Segment length").on_hover_text(
                     "Genome segment length in base pairs (used to scale recombination).",
                 );
                 ui.add(egui::DragValue::new(&mut p.seq_length).range(1.0..=1.0e7))
+                    .labelled_by(lbl.id)
                     .on_hover_text("Segment length (bp).");
                 ui.end_row();
             }
-            ui.label("RNG seed");
-            ui.add(egui::DragValue::new(&mut p.seed));
+            let lbl = ui.label("RNG seed");
+            ui.add(egui::DragValue::new(&mut p.seed))
+                .labelled_by(lbl.id);
             ui.end_row();
         });
 
@@ -488,5 +497,39 @@ mod headless_ui_tests {
         // Either an error is surfaced or a result is produced — never
         // a panic, and never a half-built state.
         assert!(p.error.is_some() || !p.result.is_empty());
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::Role;
+        // WrightFisher renders more DragValues (generations, mutation rate, etc.).
+        let mut app = app_with_panel();
+        app.genetics.popgen.engine = Engine::WrightFisher;
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                super::draw(&mut app, ui);
+            });
+        });
+        let nodes = out
+            .platform_output
+            .accesskit_update
+            .expect("accesskit tree produced")
+            .nodes;
+        let spin_buttons: Vec<_> = nodes
+            .iter()
+            .filter(|(_, n)| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            !spin_buttons.is_empty(),
+            "popgen WrightFisher should expose at least one SpinButton"
+        );
+        assert!(
+            spin_buttons
+                .iter()
+                .all(|(_, n)| !n.labelled_by().is_empty()),
+            "every popgen DragValue must be labelled_by its caption (AI-drivable name)"
+        );
     }
 }

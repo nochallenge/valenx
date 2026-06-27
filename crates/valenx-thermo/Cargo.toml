@@ -1,0 +1,16 @@
+[package]
+name = "valenx-thermo"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+description = "Industrial fluid thermodynamics for Valenx — equations of state (PC-SAFT family), phase equilibria, and Helmholtz-energy property models."
+
+publish.workspace = true
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

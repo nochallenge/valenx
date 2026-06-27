@@ -10,18 +10,23 @@
 //! - [RFC 0002](../rfcs/0002-adapter-contract.md) — adapter contract
 //! - [RFC 0004](../rfcs/0004-results-and-fields.md) — `Results` type
 
-#![forbid(unsafe_code)]
+// `deny` rather than `forbid` so the single audited memory-mapping site
+// in `mmap.rs` can opt in via a scoped `#[allow(unsafe_code)]`. Every
+// other module is still an unsafe-free zone (deny == compile error).
+#![deny(unsafe_code)]
 // See valenx-fields/src/lib.rs for why `missing_docs` is relaxed
 // during pre-alpha.
 #![allow(missing_docs)]
 
 pub mod adapter;
 pub mod adapter_helpers;
+pub mod db;
 pub mod error;
 pub mod executor;
 pub mod init_templates;
 pub mod io_caps;
 pub mod license;
+pub mod mmap;
 pub mod physics;
 pub mod project;
 pub mod registry;
@@ -32,9 +37,11 @@ pub use adapter::{
     Adapter, AdapterInfo, CancellationToken, Capabilities, Case, LogLevel, LogSink, PreparedJob,
     ProbeReport, ProgressSink, ResidualSample, RunContext, RunReport, VersionRange,
 };
+pub use db::{FileValidationRecord, MaterialRecord, ProjectDb, ProjectRecord, RunRecord};
 pub use error::{AdapterError, RunPhase, TranslateError};
 pub use executor::{Executor, ExecutorError, ExecutorHandle, LocalExecutor, RunStatus};
 pub use license::{assert_spawn_allowed, LicenseMode, LicenseModeViolation};
+pub use mmap::MappedFile;
 pub use physics::{Capability, Physics};
 pub use project::{
     CaseDef, CaseHeader, LoadedProject, Project, ProjectHeader, ProjectLoadError, ProjectSaveError,

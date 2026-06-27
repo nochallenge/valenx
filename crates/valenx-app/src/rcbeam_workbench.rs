@@ -99,31 +99,41 @@ pub fn draw_rcbeam_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Section").strong());
+                    // Associate each numeric `DragValue` with its caption via
+                    // `labelled_by`, so the spin button carries the caption as
+                    // its accessibility / UI-Automation Name (egui clears a
+                    // DragValue's own Name otherwise, leaving it anonymous to a
+                    // screen reader / AI driver).
                     ui.horizontal(|ui| {
-                        ui.label("width b (mm)");
-                        ui.add(egui::DragValue::new(&mut s.width_mm).speed(1.0));
+                        let l = ui.label("width b (mm)");
+                        ui.add(egui::DragValue::new(&mut s.width_mm).speed(1.0))
+                            .labelled_by(l.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("effective depth d (mm)");
-                        ui.add(egui::DragValue::new(&mut s.effective_depth_mm).speed(1.0));
+                        let l = ui.label("effective depth d (mm)");
+                        ui.add(egui::DragValue::new(&mut s.effective_depth_mm).speed(1.0))
+                            .labelled_by(l.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Materials").strong());
                     ui.horizontal(|ui| {
-                        ui.label("concrete fc' (MPa)");
-                        ui.add(egui::DragValue::new(&mut s.fc_prime_mpa).speed(0.5));
+                        let l = ui.label("concrete fc' (MPa)");
+                        ui.add(egui::DragValue::new(&mut s.fc_prime_mpa).speed(0.5))
+                            .labelled_by(l.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("steel fy (MPa)");
-                        ui.add(egui::DragValue::new(&mut s.fy_mpa).speed(5.0));
+                        let l = ui.label("steel fy (MPa)");
+                        ui.add(egui::DragValue::new(&mut s.fy_mpa).speed(5.0))
+                            .labelled_by(l.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Reinforcement").strong());
                     ui.horizontal(|ui| {
-                        ui.label("tension steel As (mm²)");
-                        ui.add(egui::DragValue::new(&mut s.area_steel_mm2).speed(10.0));
+                        let l = ui.label("tension steel As (mm²)");
+                        ui.add(egui::DragValue::new(&mut s.area_steel_mm2).speed(10.0))
+                            .labelled_by(l.id);
                     });
 
                     ui.add_space(6.0);
@@ -724,12 +734,28 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_rcbeam_workbench(app, ctx);
         });
+    }
+
+    /// As [`draw_workbench`], but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_rcbeam_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -745,5 +771,41 @@ mod headless_ui_tests {
         app.show_rcbeam_workbench = true;
         run_beam(&mut app.rcbeam);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // Each numeric DragValue is a SpinButton; each must be `labelled_by`
+        // its caption (egui clears a DragValue's own Name), so an AI / screen
+        // reader can find the control by the caption text.
+        let mut app = ValenxApp::default();
+        app.show_rcbeam_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 5,
+            "expected the rcbeam numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every rcbeam DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in [
+            "width b (mm)",
+            "effective depth d (mm)",
+            "tension steel As (mm²)",
+        ] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

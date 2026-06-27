@@ -174,8 +174,20 @@ fn send_to_assistant(inbox: &Path, feed: &Path, msg: &str) {
 /// agent-drives-valenx bridge's `Note` command
 /// ([`crate::agent_commands`]) to post a visible summary into the panel.
 /// Best-effort (a write failure is swallowed, like the rest of the feed I/O).
+///
+/// **Channel `0` is the GLOBAL feed** (`valenx_chat_feed.jsonl`, the base
+/// [`AssistantWorkbenchState::feed_path`] with **no** `_u{n}` suffix), not a
+/// unit feed. Real Workbench+Agent units are always `1..=wb_agent_counter`, so
+/// `0` is free as the sentinel the agent-bridge's `apply_global` uses to ack
+/// global-channel commands into the global feed an agent reading the global
+/// channel watches. Any `n >= 1` resolves to that unit's [`unit_feed_path`] as
+/// before.
 pub(crate) fn append_feed_note(app: &ValenxApp, n: usize, title: &str, detail: &str, kind: &str) {
-    let feed = unit_feed_path(app, n);
+    let feed = if n == 0 {
+        app.assistant.feed_path.clone()
+    } else {
+        unit_feed_path(app, n)
+    };
     append_line(
         &feed,
         &serde_json::json!({ "title": title, "detail": detail, "kind": kind }).to_string(),
@@ -236,11 +248,21 @@ pub fn draw_assistant_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     // anything.
     ctx.request_repaint_after(Duration::from_millis(1000));
 
-    let close = crate::workbench_chrome::workbench_shell(
+    // FIX B — balanced width. This classic docked Assistant only renders for
+    // non-tiled (calculator-style) tabs: a 3-D tab hides it and hosts the
+    // Assistant as a grid tile instead (`!dock_enabled`, see update.rs). Here
+    // the active workbench form sits in the centre / a right SidePanel, so give
+    // the Assistant ~40% of the window width with a sane ~320px floor — both
+    // the form and the chat stay readable instead of the Assistant squishing to
+    // a sliver. The user can still drag it wider/narrower (down to the floor).
+    let screen_w = ctx.screen_rect().width();
+    let default_w = (screen_w * 0.40).clamp(320.0, 640.0);
+    let close = crate::workbench_chrome::workbench_shell_sized(
         app,
         ctx,
         "valenx_assistant_panel",
         "Assistant",
+        Some((default_w, 320.0)),
         assistant_workbench_body,
     );
     if close {
@@ -307,11 +329,17 @@ pub(crate) fn assistant_chat_ui(app: &mut ValenxApp, ui: &mut egui::Ui, channel:
                 None => &mut app.assistant.input,
                 Some(n) => app.unit_chat_inputs.entry(n).or_default(),
             };
-            let resp = ui.add(
-                egui::TextEdit::singleline(input)
-                    .hint_text("Message Claude…")
-                    .desired_width(f32::INFINITY),
-            );
+            // A caption associated via `labelled_by` so the chat input carries an
+            // accessible name (a bare TextEdit has none; its hint text is not a
+            // name) — addressable by a screen reader / AI driver.
+            let msg_cap = ui.label(egui::RichText::new("Message").weak().small());
+            let resp = ui
+                .add(
+                    egui::TextEdit::singleline(input)
+                        .hint_text("Message Claude…")
+                        .desired_width(f32::INFINITY),
+                )
+                .labelled_by(msg_cap.id);
             let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             if enter || ui.button("Send").clicked() {
                 let msg = input.trim().to_string();

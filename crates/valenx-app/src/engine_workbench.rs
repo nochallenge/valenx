@@ -85,12 +85,105 @@ impl Default for EngineWorkbenchState {
     }
 }
 
+impl EngineWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`
+    /// so an agent can discover the name space.
+    ///
+    /// These are the **settable design / chemistry knobs** — they match exactly
+    /// what the workbench body draws (and what each control is `labelled_by` /
+    /// captioned via a `Slider`/`ComboBox`). Output-only readouts (performance,
+    /// Bartz cooling, the staged-combustion cycle), the optimizer, and the
+    /// 3-D-geometry / STL-export buttons are actions, not settable values, and
+    /// are intentionally **not** listed here.
+    ///
+    /// Two captions carry display-unit conversions handled by [`agent_set`]:
+    /// `"chamber pressure"` is set in **bar** (stored internally in Pa) and
+    /// `"throat area"` is set in **cm²** (stored internally in m²), matching the
+    /// `DragValue` units a user edits.
+    ///
+    /// [`agent_set`]: Self::agent_set
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "chamber pressure",
+            "chamber temp",
+            "gas γ",
+            "molar mass",
+            "throat area",
+            "expansion ratio ε",
+            "target cooling margin",
+            "propellant",
+            "mixture ratio (O/F)",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. The caption strings match exactly what the workbench
+    /// body draws, so an agent can set a parameter by the same name a user reads.
+    ///
+    /// Fail-loud: an unknown caption or a value of the wrong type returns
+    /// `Err(String)` (the bridge turns it into a `warn` feed note) — never a
+    /// panic, and no field is written on error. Numeric captions read
+    /// `AgentValue::as_f64`; the one enum caption (`propellant`) reads
+    /// `AgentValue::as_str` and matches a small set of combo names.
+    ///
+    /// Unit handling mirrors the UI: `"chamber pressure"` is given in **bar**
+    /// (the field stores Pa, so it is multiplied by `1e5`) and `"throat area"`
+    /// is given in **cm²** (the field stores m², so it is multiplied by `1e-4`).
+    /// Output-only quantities (thrust / Isp / heat flux / cycle), the optimizer,
+    /// and the 3-D / export buttons are not settable and are rejected as unknown.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        match name {
+            // -- Design knobs (numeric DragValues) --
+            // Caption is in bar; the field stores Pa (UI multiplies by 1e5).
+            "chamber pressure" => self.design.chamber_pressure = value.as_f64()? * 1.0e5,
+            "chamber temp" => self.design.chamber_temperature = value.as_f64()?,
+            "gas γ" => self.design.gamma = value.as_f64()?,
+            "molar mass" => self.design.molar_mass = value.as_f64()?,
+            // Caption is in cm²; the field stores m² (UI multiplies by 1e-4).
+            "throat area" => self.design.throat_area = value.as_f64()? * 1.0e-4,
+            "expansion ratio ε" => self.design.expansion_ratio = value.as_f64()?,
+            // -- Verdict / optimizer constraint (Slider) --
+            "target cooling margin" => self.target_margin = value.as_f64()?,
+            // -- Combustion chemistry --
+            "propellant" => self.propellant = parse_propellant(value.as_str()?)?,
+            "mixture ratio (O/F)" => self.mixture_ratio = value.as_f64()?,
+            other => return Err(format!("unknown Engine control: {other:?}")),
+        }
+        Ok(())
+    }
+}
+
 /// Human-readable label for a propellant in the picker.
 fn propellant_label(p: Propellant) -> &'static str {
     match p {
         Propellant::H2Lox => "H₂ / LOX (hydrolox)",
         Propellant::Rp1Lox => "RP-1 / LOX (kerolox)",
         Propellant::Ch4Lox => "CH₄ / LOX (methalox)",
+    }
+}
+
+/// Parse a propellant-combo name (for the agent `SetControl` bridge) into a
+/// [`Propellant`]. Case-insensitive and tolerant of the common shorthand
+/// (the chemistry, the slang, and the picker words) so an agent can pick the
+/// combo by the same name a user reads. Fail-loud on an unrecognised name so
+/// a typo becomes a `warn` note, not a silent no-op.
+fn parse_propellant(s: &str) -> Result<Propellant, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "h2lox" | "h2/lox" | "h2 / lox" | "hydrolox" | "lh2/lox" | "h2" => Ok(Propellant::H2Lox),
+        "rp1lox" | "rp1/lox" | "rp-1/lox" | "rp-1 / lox" | "kerolox" | "rp1" | "rp-1" => {
+            Ok(Propellant::Rp1Lox)
+        }
+        "ch4lox" | "ch4/lox" | "ch4 / lox" | "methalox" | "ch4" | "methane" => {
+            Ok(Propellant::Ch4Lox)
+        }
+        other => Err(format!(
+            "unknown propellant '{other}' (expected 'hydrolox', 'kerolox', or 'methalox')"
+        )),
     }
 }
 
@@ -201,7 +294,7 @@ pub(crate) fn engine_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
             // ── Design knobs ─────────────────────────────────────
             ui.label(egui::RichText::new("Design point").strong());
             ui.horizontal(|ui| {
-                ui.label("chamber pressure");
+                let lbl = ui.label("chamber pressure");
                 let mut bar = s.design.chamber_pressure / 1.0e5;
                 if ui
                     .add(
@@ -210,39 +303,43 @@ pub(crate) fn engine_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .range(1.0..=400.0)
                             .suffix(" bar"),
                     )
+                    .labelled_by(lbl.id)
                     .changed()
                 {
                     s.design.chamber_pressure = bar * 1.0e5;
                 }
             });
             ui.horizontal(|ui| {
-                ui.label("chamber temp");
+                let lbl = ui.label("chamber temp");
                 ui.add(
                     egui::DragValue::new(&mut s.design.chamber_temperature)
                         .speed(10.0)
                         .range(1_000.0..=4_500.0)
                         .suffix(" K"),
-                );
+                )
+                .labelled_by(lbl.id);
             });
             ui.horizontal(|ui| {
-                ui.label("gas γ");
+                let lbl = ui.label("gas γ");
                 ui.add(
                     egui::DragValue::new(&mut s.design.gamma)
                         .speed(0.005)
                         .range(1.05..=1.40),
-                );
+                )
+                .labelled_by(lbl.id);
             });
             ui.horizontal(|ui| {
-                ui.label("molar mass");
+                let lbl = ui.label("molar mass");
                 ui.add(
                     egui::DragValue::new(&mut s.design.molar_mass)
                         .speed(0.2)
                         .range(5.0..=40.0)
                         .suffix(" g/mol"),
-                );
+                )
+                .labelled_by(lbl.id);
             });
             ui.horizontal(|ui| {
-                ui.label("throat area");
+                let lbl = ui.label("throat area");
                 let mut cm2 = s.design.throat_area * 1.0e4;
                 if ui
                     .add(
@@ -251,23 +348,29 @@ pub(crate) fn engine_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .range(1.0..=5_000.0)
                             .suffix(" cm²"),
                     )
+                    .labelled_by(lbl.id)
                     .changed()
                 {
                     s.design.throat_area = cm2 * 1.0e-4;
                 }
             });
             ui.horizontal(|ui| {
-                ui.label("expansion ratio ε");
+                let lbl = ui.label("expansion ratio ε");
                 ui.add(
                     egui::DragValue::new(&mut s.design.expansion_ratio)
                         .speed(0.5)
                         .range(1.0..=200.0),
-                );
+                )
+                .labelled_by(lbl.id);
             });
-            ui.horizontal(|ui| {
-                ui.label("target cooling margin");
-                ui.add(egui::Slider::new(&mut s.target_margin, 1.0..=4.0));
-            });
+            // Use the Slider's own `.text(..)` caption (not a separate
+            // `ui.label`) so egui links BOTH the slider node and its internal
+            // value DragValue (Role::SpinButton) to the caption — an external
+            // `.labelled_by` would only name the slider, leaving the embedded
+            // SpinButton unnamed.
+            ui.add(
+                egui::Slider::new(&mut s.target_margin, 1.0..=4.0).text("target cooling margin"),
+            );
 
             // ── Combustion chemistry (predict chamber conditions) ─
             ui.add_space(4.0);
@@ -280,10 +383,7 @@ pub(crate) fn engine_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                         ui.selectable_value(&mut s.propellant, p, propellant_label(p));
                     }
                 });
-            ui.horizontal(|ui| {
-                ui.label("mixture ratio (O/F)");
-                ui.add(egui::Slider::new(&mut s.mixture_ratio, 1.5..=8.0));
-            });
+            ui.add(egui::Slider::new(&mut s.mixture_ratio, 1.5..=8.0).text("mixture ratio (O/F)"));
             let comb = combust(
                 s.propellant,
                 s.mixture_ratio,
@@ -641,18 +741,138 @@ mod tests {
         assert!(cyc.closes, "97 bar should close on Raptor-class hardware");
         assert!(cyc.max_chamber_pressure / 1.0e5 > 250.0);
     }
+
+    // ---- agent bridge (SetControl) ----
+
+    #[test]
+    fn agent_set_sets_representative_params_verified_via_state() {
+        use crate::agent_commands::AgentValue;
+        let mut s = EngineWorkbenchState::default();
+
+        // Numeric, with the bar→Pa display-unit conversion.
+        s.agent_set("chamber pressure", &AgentValue::Float(250.0))
+            .expect("set chamber pressure");
+        assert!(
+            (s.design.chamber_pressure - 250.0 * 1.0e5).abs() < 1e-3,
+            "250 bar must store as 25 MPa, got {} Pa",
+            s.design.chamber_pressure
+        );
+
+        // Numeric, with the cm²→m² display-unit conversion.
+        s.agent_set("throat area", &AgentValue::Float(80.0))
+            .expect("set throat area");
+        assert!(
+            (s.design.throat_area - 80.0 * 1.0e-4).abs() < 1e-12,
+            "80 cm² must store as 0.008 m², got {} m²",
+            s.design.throat_area
+        );
+
+        // Plain numeric (no conversion).
+        s.agent_set("expansion ratio ε", &AgentValue::Float(40.0))
+            .expect("set expansion ratio");
+        assert!((s.design.expansion_ratio - 40.0).abs() < 1e-12);
+
+        s.agent_set("target cooling margin", &AgentValue::Float(2.5))
+            .expect("set target margin");
+        assert!((s.target_margin - 2.5).abs() < 1e-12);
+
+        // Enum combo by name.
+        s.agent_set("propellant", &AgentValue::Str("hydrolox".into()))
+            .expect("set propellant");
+        assert_eq!(s.propellant, Propellant::H2Lox);
+        s.agent_set("propellant", &AgentValue::Str("RP-1 / LOX".into()))
+            .expect("set propellant kerolox");
+        assert_eq!(s.propellant, Propellant::Rp1Lox);
+
+        s.agent_set("mixture ratio (O/F)", &AgentValue::Float(2.7))
+            .expect("set mixture ratio");
+        assert!((s.mixture_ratio - 2.7).abs() < 1e-12);
+    }
+
+    #[test]
+    fn agent_set_unknown_control_is_err_not_panic() {
+        use crate::agent_commands::AgentValue;
+        let mut s = EngineWorkbenchState::default();
+        assert!(
+            s.agent_set("no such knob", &AgentValue::Float(1.0))
+                .is_err(),
+            "an unknown caption must return Err, not panic"
+        );
+        // Output-only / action captions are deliberately NOT settable.
+        assert!(s.agent_set("vac Isp", &AgentValue::Float(330.0)).is_err());
+    }
+
+    #[test]
+    fn agent_set_type_mismatch_is_err_not_panic() {
+        use crate::agent_commands::AgentValue;
+        let mut s = EngineWorkbenchState::default();
+        // A numeric field given a string must fail-loud (no write).
+        let before = s.design.chamber_pressure;
+        assert!(
+            s.agent_set("chamber pressure", &AgentValue::Str("lots".into()))
+                .is_err(),
+            "a string for a numeric field must return Err"
+        );
+        assert_eq!(
+            s.design.chamber_pressure, before,
+            "no field is written on a type-mismatch error"
+        );
+        // An enum field given a number must fail-loud.
+        assert!(
+            s.agent_set("propellant", &AgentValue::Float(3.0)).is_err(),
+            "a number for the propellant enum must return Err"
+        );
+        // An unrecognised enum name must fail-loud.
+        assert!(
+            s.agent_set("propellant", &AgentValue::Str("plasma".into()))
+                .is_err(),
+            "an unknown propellant name must return Err"
+        );
+    }
+
+    #[test]
+    fn agent_control_names_are_all_settable() {
+        // Every advertised caption must be accepted by agent_set (with an
+        // appropriately-typed value) — no caption is listed but unhandled.
+        use crate::agent_commands::AgentValue;
+        for &name in EngineWorkbenchState::agent_control_names() {
+            let mut s = EngineWorkbenchState::default();
+            let v = if name == "propellant" {
+                AgentValue::Str("methalox".into())
+            } else {
+                AgentValue::Float(2.0)
+            };
+            assert!(
+                s.agent_set(name, &v).is_ok(),
+                "advertised control '{name}' must be settable via agent_set"
+            );
+        }
+    }
 }
 
 #[cfg(test)]
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_engine_workbench(app, ctx);
         });
+    }
+
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_engine_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -691,5 +911,43 @@ mod headless_ui_tests {
             "detailed engine mesh loaded into viewport"
         );
         assert!(!app.engine.show_engine_3d_request, "request flag cleared");
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        let mut app = ValenxApp::default();
+        app.show_engine_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 6,
+            "expected numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        // Each of the six design-knob `DragValue`s is associated with its
+        // caption via `labelled_by` (the AI-drivable name). The panel also
+        // hosts two `Slider`s whose inner value field is itself a spin button
+        // we do not caption, so require at least the six DragValues be
+        // labelled rather than every spin button in the tree.
+        let labelled = spin_buttons
+            .iter()
+            .filter(|n| !n.labelled_by().is_empty())
+            .count();
+        assert!(
+            labelled >= 6,
+            "every design-knob DragValue must be labelled_by its caption \
+             (AI-drivable name); only {labelled} of {} spin buttons are labelled",
+            spin_buttons.len()
+        );
+        for caption in ["chamber pressure", "chamber temp", "expansion ratio ε"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

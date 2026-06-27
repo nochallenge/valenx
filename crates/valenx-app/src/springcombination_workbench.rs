@@ -92,23 +92,27 @@ pub fn draw_springcombination_workbench(app: &mut ValenxApp, ctx: &egui::Context
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Spring rates").strong());
                     ui.horizontal(|ui| {
-                        ui.label("k₁ (N/m)");
-                        ui.add(egui::DragValue::new(&mut s.rate1_n_per_m).speed(5.0));
+                        let cap = ui.label("k₁ (N/m)");
+                        ui.add(egui::DragValue::new(&mut s.rate1_n_per_m).speed(5.0))
+                            .labelled_by(cap.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("k₂ (N/m)");
-                        ui.add(egui::DragValue::new(&mut s.rate2_n_per_m).speed(5.0));
+                        let cap = ui.label("k₂ (N/m)");
+                        ui.add(egui::DragValue::new(&mut s.rate2_n_per_m).speed(5.0))
+                            .labelled_by(cap.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("k₃ (N/m)");
-                        ui.add(egui::DragValue::new(&mut s.rate3_n_per_m).speed(5.0));
+                        let cap = ui.label("k₃ (N/m)");
+                        ui.add(egui::DragValue::new(&mut s.rate3_n_per_m).speed(5.0))
+                            .labelled_by(cap.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Loading").strong());
                     ui.horizontal(|ui| {
-                        ui.label("deflection x (m)");
-                        ui.add(egui::DragValue::new(&mut s.deflection_m).speed(0.005));
+                        let cap = ui.label("deflection x (m)");
+                        ui.add(egui::DragValue::new(&mut s.deflection_m).speed(0.005))
+                            .labelled_by(cap.id);
                     });
 
                     ui.add_space(4.0);
@@ -444,12 +448,25 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_springcombination_workbench(app, ctx);
         });
+    }
+
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_springcombination_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -465,5 +482,32 @@ mod headless_ui_tests {
         app.show_springcombination_workbench = true;
         run_springcombination(&mut app.springcombination);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        let mut app = ValenxApp::default();
+        app.show_springcombination_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 4,
+            "expected the numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+        for caption in ["k₁ (N/m)", "deflection x (m)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

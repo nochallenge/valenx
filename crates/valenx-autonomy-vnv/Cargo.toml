@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-autonomy-vnv"
+description = "In-house verification & validation (V&V) methodology framework for autonomous systems, layered on the valenx-sensors autonomy harness. Defines reusable Scenarios (an initial kinematic vehicle state, sensor configuration(s), an analytic Scene environment, and a finite command sequence) grouped into a ScenarioSuite; Requirements that are predicates over a run Trace (state history + per-tick SensorFrames) returning pass/fail plus a quantitative margin (MinClearance, DetectByTime, StayInBounds, NoCollision, …); a run_scenario that drives the valenx-sensors Harness step-by-step into a Trace; an evaluate that scores a RequirementSet against a Trace into a VnvReport; parameter-space and requirement coverage metrics over a swept suite; and a deterministic grid / seeded-Monte-Carlo sweep that aggregates pass-rate, worst-case margins, and coverage. Fails loud on bad configuration (empty suite, non-finite params, trace/requirement mismatch). This validates the FRAMEWORK logic over the analytic, model-grade valenx-sensors models — it is a defensive test-&-evaluation methodology, NOT a certified safety case or real-world autonomy assurance."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+readme.workspace       = true
+publish.workspace      = true
+
+[dependencies]
+valenx-sensors = { path = "../valenx-sensors" }
+nalgebra       = { workspace = true }
+thiserror      = { workspace = true }
+
+[lints.rust]
+missing_docs = "warn"

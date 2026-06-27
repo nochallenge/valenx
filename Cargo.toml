@@ -47,6 +47,15 @@ members = [
     "crates/valenx-a11y",
     "crates/valenx-bio",
     "crates/valenx-cad",
+    # Focused B-Rep solid-modeling V1 facade built DIRECTLY on the truck
+    # CAD kernel (primitives / boolean / tessellation), surfaced by the
+    # Part B-Rep (TabKind::BrepCad) workbench. Reuses valenx-cad's
+    # panic-guarded boolean path.
+    "crates/valenx-truck-cad",
+    "crates/valenx-thermo",
+    "crates/valenx-waveform",
+    "crates/valenx-quantum",
+    "crates/valenx-mpm",
     "crates/valenx-step-iges",
     "crates/valenx-surface",
     "crates/valenx-cam",
@@ -59,9 +68,11 @@ members = [
     "crates/valenx-addons",
     "crates/valenx-mesh-to-brep",
     "crates/valenx-fem",
+    "crates/valenx-topopt",
     "crates/valenx-rocket-demo",
     "crates/valenx-inspect",
     "crates/valenx-reverse",
+    "crates/valenx-photogrammetry",
     "crates/valenx-curves",
     "crates/valenx-lattice",
     "crates/valenx-animate",
@@ -77,6 +88,7 @@ members = [
     "crates/valenx-marine",
     "crates/valenx-marine-hydro",
     "crates/valenx-drone",
+    "crates/valenx-rotor",
     "crates/valenx-fixedwing",
     "crates/valenx-fasteners",
     "crates/valenx-symbols",
@@ -135,6 +147,16 @@ members = [
     "crates/valenx-reactdyn",
     "crates/valenx-neuro",
     "crates/valenx-vehicle",
+    # Defense M&S (M9 autonomy V&V, M1 UAS): simulated sensor models
+    # (LiDAR / camera / IMU / GPS) + a small autonomy step-harness that emits
+    # a SensorFrame per tick, for autonomy / RL testing. Analytic/graphics-grade
+    # models, not hardware-calibrated devices (clean-room, AirSim-inspired).
+    "crates/valenx-sensors",
+    # Defense M&S (M9 autonomy V&V): a V&V methodology framework layered on
+    # the valenx-sensors harness — Scenarios/Requirements/Traces, coverage
+    # metrics, and a deterministic grid/seeded-MC sweep. Validates the
+    # FRAMEWORK logic over the analytic sensor models; defensive T&E only.
+    "crates/valenx-autonomy-vnv",
     "crates/valenx-rail",
     "crates/valenx-mbd",
     "crates/valenx-muscle",
@@ -159,6 +181,8 @@ members = [
     "crates/valenx-projectile",
     "crates/valenx-vibration",
     "crates/valenx-fluid-statics",
+    "crates/valenx-fluids",
+    "crates/valenx-ocean",
     "crates/valenx-acoustics",
     "crates/valenx-controls",
     "crates/valenx-statics",
@@ -261,12 +285,15 @@ members = [
     "crates/valenx-safety",
     "crates/valenx-orchestrator",
     "crates/valenx-recipes",
+    "crates/valenx-meshgen",
     "crates/valenx-myostatin",
     "crates/valenx-score",
     "crates/valenx-developability",
     "crates/valenx-codon-optimize",
     "crates/valenx-epitope-map",
     "crates/valenx-binder-score",
+    "crates/valenx-ppi",
+    "crates/valenx-rom",
     "crates/valenx-fm-registry",
     "crates/valenx-lrp5",
     "crates/valenx-test-utils",
@@ -309,6 +336,8 @@ members = [
 
     # Multi-physics coupling meta-adapter
     "crates/valenx-adapters/coupling/valenx-adapter-precice",
+    # Native co-simulation master + FMI co-sim import + DIS PDU codec
+    "crates/valenx-adapters/coupling/valenx-adapter-fmi",
 
     # Biology adapters (Phase 17)
     "crates/valenx-adapters/bio/valenx-adapter-biopython",
@@ -516,6 +545,44 @@ members = [
     # Biology (Phase 45) — pharmacokinetics + RNA tertiary structure
     "crates/valenx-adapters/bio/valenx-adapter-pksim",
     "crates/valenx-adapters/bio/valenx-adapter-simrna",
+
+    # Defense / M&S (M4) — uncertainty quantification, surrogates, sensitivity.
+    # General numerical-methods enabler: wraps any model f: inputs → outputs.
+    "crates/valenx-uq",
+
+    # Defense / M&S (M1) — UAS / counter-UAS design → performance → trade study.
+    # Composes valenx-rotor (BEMT), valenx-drone (multirotor hover momentum
+    # theory), and valenx-fixedwing (parabolic-polar point performance) into a
+    # UasVehicle (multirotor + fixed-wing): hover power/endurance, range
+    # (electric-Breguet / cruise-power), payload margin, an N-parameter design
+    # sweep + Pareto front, and DEFENSIVE counter-UAS intercept GEOMETRY +
+    # detection timeline (pure kinematics; no weapon/targeting/lethality).
+    "crates/valenx-uas",
+
+    # Defense / M&S (M2) — general discrete-event / agent constructive-simulation
+    # framework (AFSIM-class), equally for logistics / epidemiology / traffic /
+    # policy wargaming. A deterministic min-heap event scheduler, entities with
+    # constant-velocity / waypoint movers, range-based sensor detection (reusing
+    # valenx-uas detection geometry), and ABSTRACT, PROBABILISTIC engagement:
+    # probability-of-kill (Pk) is an INPUT parameter (seeded draw) plus a
+    # Lanchester-square-law attrition ODE. Infrastructure + analysis only — NO
+    # detailed lethality, NO targeting / fire-control, NO kill chains.
+    "crates/valenx-mission-sim",
+
+    # Phone-as-2nd-screen companion: serves the live valenx window to a phone
+    # browser (PIN-gated, LAN-bound, frame-poll JPEG) and relays touch as OS
+    # mouse input. Default build is std-only (CI-green on headless Linux);
+    # real capture/input is behind the off-by-default `live-capture` feature.
+    "crates/valenx-remote",
+
+    # M7 track of the defense M&S roadmap (docs/design/2026-06-23-valenx-defense-
+    # ms-roadmap.md): survivability & protection — DEFENSIVE structural response
+    # to blast & impact. Free-field blast loading (overpressure/impulse vs scaled
+    # distance), SDOF protective-element response + pressure-impulse diagram,
+    # armor ballistic-limit sizing, and an occupant-injury screen. Reuses the
+    # valenx-fem Friedlander/Newmark SDOF transient core. Protective framing only
+    # ("minimum protection to survive threat X"); no lethality/penetration models.
+    "crates/valenx-survivability",
 ]
 
 # ---------------------------------------------------------------------------
@@ -562,6 +629,14 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Numerics
 ndarray   = "0.15"
 nalgebra  = { version = "0.33", features = ["serde-serialize"] }
+# High-performance pure-Rust dense + sparse linear algebra. Used by
+# valenx-fem as a selectable sparse-direct (sparse Cholesky / LLT)
+# backend alongside the legacy nalgebra-sparse CscCholesky path.
+faer      = { version = "0.24", default-features = false, features = ["std", "linalg"] }
+# Complex scalars for reduced-order modelling (valenx-rom DMD spectra need
+# complex eigenvalues). Pinned to 0.4 — the version nalgebra 0.33 already
+# resolves transitively, so no new tree is pulled in.
+num-complex = "0.4"
 byteorder = "1"
 
 # ZLIB / deflate codec — used by the JT reader for ZLIB-compressed
@@ -620,6 +695,28 @@ truck-modeling = "0.6"
 # Cargo.lock confirms lz4_flex 0.11.6 is the only version present.
 truck-meshalgo = "0.4"
 truck-shapeops = { version = "0.4", default-features = false }
+
+# ---------------------------------------------------------------------------
+# valenx-remote (phone-as-2nd-screen companion) — capture + input deps.
+#
+# These are pinned here but used ONLY by `valenx-remote`, and ONLY when its
+# off-by-default `live-capture` feature is enabled. The default `valenx-remote`
+# build is std-only (the `std::net` HTTP server + served page + PIN +
+# input validation) so it compiles on headless Linux CI with no GUI libs;
+# the real screen-capture + OS input-injection compiles only on the
+# Windows/desktop machine that turns the feature on. Mirrors PR3's
+# `binary-fmu` optional-dep pattern. See crates/valenx-remote/Cargo.toml.
+#
+# xcap   — cross-platform screen capture (X11/Wayland/Windows/macOS); 0.9.6 is
+#          the version the original (privately built) valenx-remote.exe linked.
+# image  — JPEG encoding of the captured frame; 0.25 is already resolved in
+#          Cargo.lock (transitive via eframe), so this adds no new tree.
+# enigo  — cross-platform mouse/keyboard injection; relays the phone touch as
+#          an OS mouse event. 0.6 is the API verified against here; the version
+#          the original binary linked is not recoverable from its strings.
+xcap  = "0.9"
+image = "0.25"
+enigo = "0.6"
 
 # ---------------------------------------------------------------------------
 # Release and dev profiles

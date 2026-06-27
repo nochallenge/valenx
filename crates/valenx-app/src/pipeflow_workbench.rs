@@ -89,36 +89,45 @@ pub fn draw_pipeflow_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
+                    // Associate each numeric `DragValue` with its caption via `labelled_by`, so
+                    // the spin button carries the caption as its accessibility / UI-Automation
+                    // Name (egui clears a DragValue's own Name otherwise).
                     ui.label(egui::RichText::new("Fluid").strong());
                     ui.horizontal(|ui| {
-                        ui.label("density ρ (kg/m³)");
-                        ui.add(egui::DragValue::new(&mut s.density_kg_m3).speed(1.0));
+                        let l = ui.label("density ρ (kg/m³)");
+                        ui.add(egui::DragValue::new(&mut s.density_kg_m3).speed(1.0))
+                            .labelled_by(l.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("viscosity μ (Pa·s)");
-                        ui.add(egui::DragValue::new(&mut s.viscosity_pa_s).speed(1.0e-4));
+                        let l = ui.label("viscosity μ (Pa·s)");
+                        ui.add(egui::DragValue::new(&mut s.viscosity_pa_s).speed(1.0e-4))
+                            .labelled_by(l.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Pipe").strong());
                     ui.horizontal(|ui| {
-                        ui.label("diameter D (m)");
-                        ui.add(egui::DragValue::new(&mut s.diameter_m).speed(0.005));
+                        let l = ui.label("diameter D (m)");
+                        ui.add(egui::DragValue::new(&mut s.diameter_m).speed(0.005))
+                            .labelled_by(l.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("length L (m)");
-                        ui.add(egui::DragValue::new(&mut s.length_m).speed(1.0));
+                        let l = ui.label("length L (m)");
+                        ui.add(egui::DragValue::new(&mut s.length_m).speed(1.0))
+                            .labelled_by(l.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("roughness ε (m)");
-                        ui.add(egui::DragValue::new(&mut s.roughness_m).speed(1.0e-5));
+                        let l = ui.label("roughness ε (m)");
+                        ui.add(egui::DragValue::new(&mut s.roughness_m).speed(1.0e-5))
+                            .labelled_by(l.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Flow").strong());
                     ui.horizontal(|ui| {
-                        ui.label("velocity V (m/s)");
-                        ui.add(egui::DragValue::new(&mut s.velocity_m_s).speed(0.05));
+                        let l = ui.label("velocity V (m/s)");
+                        ui.add(egui::DragValue::new(&mut s.velocity_m_s).speed(0.05))
+                            .labelled_by(l.id);
                     });
 
                     ui.add_space(6.0);
@@ -504,12 +513,28 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_pipeflow_workbench(app, ctx);
         });
+    }
+
+    /// As [`draw_workbench`], but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_pipeflow_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -525,5 +550,42 @@ mod headless_ui_tests {
         app.show_pipeflow_workbench = true;
         run_pipe(&mut app.pipeflow);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // Every numeric `DragValue` is a SpinButton that must be `labelled_by`
+        // its caption (egui clears a DragValue's own Name), so an AI / screen
+        // reader can find the control by the caption text.
+        let mut app = ValenxApp::default();
+        app.show_pipeflow_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 6,
+            "expected the numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["density ρ (kg/m³)", "diameter D (m)", "velocity V (m/s)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        assert!(
+            nodes.iter().any(|(_, n)| n.role() == Role::Button
+                && n.name().is_some_and(|s| s.contains("Analyze"))),
+            "the primary action button is a named, invokable node"
+        );
     }
 }

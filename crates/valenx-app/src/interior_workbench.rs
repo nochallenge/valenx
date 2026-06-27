@@ -10,6 +10,7 @@ use eframe::egui;
 use nalgebra::{Vector2, Vector3};
 use valenx_interior::{Furniture, InteriorPanelState, Room};
 
+use crate::agent_commands::AgentValue;
 use crate::ValenxApp;
 
 /// Persistent state for the interior workbench.
@@ -18,6 +19,44 @@ pub struct InteriorWorkbenchState {
     pan: egui::Vec2,
     scale: f32,
     selected: Furniture,
+}
+
+impl InteriorWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`.
+    ///
+    /// The furniture palette draws one selectable chip per [`Furniture`] kind,
+    /// each captioned by [`Furniture::name`]; the chosen kind is the workbench's
+    /// settable control. It is exposed under the stable name `"Furniture"`, set
+    /// by the chip's name (e.g. `"sofa"`, `"table"`).
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &["Furniture"]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. The single control is the furniture-kind palette,
+    /// named `"Furniture"` and set by the chip **name** (one of
+    /// [`Furniture::all`]'s [`Furniture::name`]s, e.g. `"chair"`/`"sofa"`).
+    ///
+    /// Fail-loud: an unknown caption, a value of the wrong type, or a furniture
+    /// name not in the catalog returns `Err(String)` — never a panic, and no
+    /// field is written on error. The kind reads [`AgentValue::as_str`] and is
+    /// matched case-insensitively against the catalog.
+    pub fn agent_set(&mut self, name: &str, value: &AgentValue) -> Result<(), String> {
+        match name {
+            "Furniture" => {
+                let want = value.as_str()?.trim();
+                let kind = Furniture::all()
+                    .iter()
+                    .copied()
+                    .find(|f| f.name().eq_ignore_ascii_case(want))
+                    .ok_or_else(|| format!("unknown furniture '{want}'"))?;
+                self.selected = kind;
+            }
+            other => return Err(format!("unknown interior control: {other:?}")),
+        }
+        Ok(())
+    }
 }
 
 impl Default for InteriorWorkbenchState {
@@ -276,5 +315,32 @@ mod tests {
             .click_to_place(Vector3::new(2.0, 2.0, 0.0), "room")
             .expect("place");
         assert_eq!(scene.placements.len(), before + 1);
+    }
+
+    #[test]
+    fn agent_set_picks_furniture_by_name_and_rejects_bad_input() {
+        let mut s = InteriorWorkbenchState::default();
+        assert_eq!(s.selected, Furniture::Table); // default
+
+        // The palette chip is set by its name.
+        s.agent_set("Furniture", &AgentValue::Str("chair".into()))
+            .expect("set furniture by name");
+        assert_eq!(s.selected, Furniture::Chair);
+        // Case-insensitive.
+        s.agent_set("Furniture", &AgentValue::Str("SOFA".into()))
+            .expect("case-insensitive furniture");
+        assert_eq!(s.selected, Furniture::Sofa);
+
+        // Unknown furniture name -> Err (field unchanged).
+        assert!(s
+            .agent_set("Furniture", &AgentValue::Str("spaceship".into()))
+            .is_err());
+        assert_eq!(s.selected, Furniture::Sofa);
+        // Unknown caption -> Err.
+        assert!(s
+            .agent_set("nope", &AgentValue::Str("chair".into()))
+            .is_err());
+        // Wrong type (furniture needs a string) -> Err.
+        assert!(s.agent_set("Furniture", &AgentValue::Int(3)).is_err());
     }
 }

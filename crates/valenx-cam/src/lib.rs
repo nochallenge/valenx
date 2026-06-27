@@ -74,6 +74,7 @@ pub mod engagement;
 pub mod error;
 pub mod feedrate;
 pub mod fixture;
+pub mod gcode;
 pub mod offset;
 pub mod op;
 pub mod operation;
@@ -96,6 +97,7 @@ pub use collision::{
 pub use engagement::{engagement_along, engagement_at, EngagementSample, StockGrid};
 pub use error::CamError;
 pub use feedrate::{FeedrateParams, FeedrateReport};
+pub use gcode::{to_gcode, to_gcode_checked, to_gcode_with, GcodeOptions};
 pub use op::adaptive_constant_engagement::{
     AdaptiveConstantEngagementParams, AdaptiveEngagementReport,
 };

@@ -1,0 +1,30 @@
+[package]
+name        = "valenx-survivability"
+description = "DEFENSIVE survivability & protection analysis for Valenx (M7 of the defense M&S roadmap). Free-field air-blast loading — peak side-on overpressure and positive-phase impulse versus Hopkinson-Cranz scaled distance Z = R/W^(1/3) via published empirical fits (Brode / Newmark–Hansen) plus the Friedlander positive-phase decay — feeding a single-degree-of-freedom protective-element (wall/plate/panel) response, a pressure–impulse (P–I) iso-damage diagram, armor / impact protection sizing (minimum areal density to defeat a threat's kinetic energy via a thin-plate ballistic-limit energy balance), and a simple occupant acceleration-injury screen. Reuses the valenx-fem Friedlander/Newmark SDOF transient solver. Strictly protective — it answers 'what minimum protection survives threat X', NOT how to penetrate or defeat protection; no warhead, lethality, or penetration-optimization models. Research/educational grade, validation-pending — implements well-established open-literature protective-design equations, NOT a certified blast/ballistic engineering tool."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+publish.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+nalgebra  = { workspace = true }
+
+# The Friedlander blast pulse + Newmark-β SDOF/MDOF transient survivability
+# solver already live in valenx-fem (transient.rs, framed defensively). We
+# reuse them for the structural-response side rather than reimplementing.
+valenx-fem = { path = "../valenx-fem" }
+
+[dev-dependencies]
+# Round-trip serialization tests for the public result structs.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

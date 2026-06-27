@@ -104,27 +104,32 @@ pub fn draw_screwthread_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Screw geometry").strong());
                     ui.horizontal(|ui| {
-                        ui.label("mean diameter dm (mm)");
-                        ui.add(egui::DragValue::new(&mut s.mean_diameter_mm).speed(0.5));
+                        let dm = ui.label("mean diameter dm (mm)");
+                        ui.add(egui::DragValue::new(&mut s.mean_diameter_mm).speed(0.5))
+                            .labelled_by(dm.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("pitch p (mm)");
-                        ui.add(egui::DragValue::new(&mut s.pitch_mm).speed(0.1));
+                        let pp = ui.label("pitch p (mm)");
+                        ui.add(egui::DragValue::new(&mut s.pitch_mm).speed(0.1))
+                            .labelled_by(pp.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("thread starts");
-                        ui.add(egui::DragValue::new(&mut s.starts).speed(0.1));
+                        let ts = ui.label("thread starts");
+                        ui.add(egui::DragValue::new(&mut s.starts).speed(0.1))
+                            .labelled_by(ts.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Friction & load").strong());
                     ui.horizontal(|ui| {
-                        ui.label("friction μ");
-                        ui.add(egui::DragValue::new(&mut s.friction).speed(0.005));
+                        let fr = ui.label("friction μ");
+                        ui.add(egui::DragValue::new(&mut s.friction).speed(0.005))
+                            .labelled_by(fr.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("axial load F (N)");
-                        ui.add(egui::DragValue::new(&mut s.axial_load_n).speed(10.0));
+                        let al = ui.label("axial load F (N)");
+                        ui.add(egui::DragValue::new(&mut s.axial_load_n).speed(10.0))
+                            .labelled_by(al.id);
                     });
 
                     ui.add_space(4.0);
@@ -467,12 +472,27 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_screwthread_workbench(app, ctx);
         });
+    }
+
+    /// Draw the panel once with accesskit enabled and return the emitted
+    /// accessibility-tree nodes, so the test can inspect names and roles.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_screwthread_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -488,5 +508,32 @@ mod headless_ui_tests {
         app.show_screwthread_workbench = true;
         run_screwthread(&mut app.screwthread);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        let mut app = ValenxApp::default();
+        app.show_screwthread_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 5,
+            "expected numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+        for caption in ["mean diameter dm (mm)", "pitch p (mm)", "thread starts"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

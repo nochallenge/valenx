@@ -29,6 +29,7 @@ use nalgebra::Vector3;
 use valenx_mesh::transform::{Axis, Plane};
 use valenx_viz::TriangleMesh;
 
+use crate::agent_commands::AgentValue;
 use crate::audit::emit_audit;
 use crate::types::LoadedMesh;
 use crate::ValenxApp;
@@ -200,6 +201,147 @@ impl Default for MeshToolboxState {
             arch: ArchPanelState::default(),
             spreadsheet: SpreadsheetPanelState::default(),
         }
+    }
+}
+
+impl MeshToolboxState {
+    /// The user-visible captions of every **top-level** Mesh-Toolbox control the
+    /// agent bridge can set via `SetControl` (see [`crate::agent_commands`]).
+    /// Returned by `ListControls` so an agent can discover the name space.
+    ///
+    /// Scope: the primary mesh-editing + Part-primitive numeric/enum/toggle
+    /// controls that live directly on [`MeshToolboxState`] — Transformations,
+    /// Cut plane, Repair, Mesh Tools (decimate / Laplacian / Taubin / remesh /
+    /// fill), and the Part primitive parameters + fillet. The many nested
+    /// sub-panel workbenches (Sketcher, Part Design, Assembly, Surface, CAM,
+    /// Arch, Draft, TechDraw, Spreadsheet, Dock) each carry their own large
+    /// forms and are **not** exposed here — they would need their own
+    /// `agent_set` surfaces. Multi-component vector fields are addressed
+    /// per-axis with composite captions (e.g. `Translate X`) since the form
+    /// shares one label across the three drag-values.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            // -- Transformations --
+            "Translate X",
+            "Translate Y",
+            "Translate Z",
+            "Scale (uniform)",
+            "Scale (axes) X",
+            "Scale (axes) Y",
+            "Scale (axes) Z",
+            "Rotate axis",
+            "Angle (deg)",
+            "Mirror plane",
+            // -- Cut plane --
+            "Cut point X",
+            "Cut point Y",
+            "Cut point Z",
+            "Cut normal X",
+            "Cut normal Y",
+            "Cut normal Z",
+            "Show cut overlay",
+            // -- Repair --
+            "Merge coincident — tolerance",
+            // -- Mesh Tools --
+            "Decimate fraction",
+            "Laplacian iter",
+            "Laplacian factor",
+            "Taubin iter",
+            "Taubin lambda",
+            "Taubin mu",
+            "Remesh target edge",
+            "Remesh iter",
+            "Fill holes — max boundary length",
+            // -- Part primitives --
+            "Shape",
+            "Box size X",
+            "Box size Y",
+            "Box size Z",
+            "Cylinder radius",
+            "Cylinder height",
+            "Sphere radius",
+            "Cone base radius",
+            "Cone top radius",
+            "Cone height",
+            "Torus major radius",
+            "Torus minor radius",
+            "Create as operand B",
+            "Fillet radius",
+        ]
+    }
+
+    /// Set one top-level Mesh-Toolbox control by its caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the wrong
+    /// type returns `Err(String)` (the bridge turns it into a `warn` feed note)
+    /// — never a panic, and no field is written on error. Float fields read
+    /// [`AgentValue::as_f64`]; integer-count fields read [`AgentValue::as_i64`]
+    /// (with a range check for the `u32` iteration counts); the `Rotate axis` /
+    /// `Mirror plane` / `Shape` enums read [`AgentValue::as_str`]; the two
+    /// toggles read [`AgentValue::as_bool`]. Physical range validation (e.g. a
+    /// non-positive radius) is left to the downstream CAD/mesh op, which already
+    /// surfaces its own error in-panel.
+    pub fn agent_set(&mut self, name: &str, value: &AgentValue) -> Result<(), String> {
+        // Helper: read a u32 iteration count, fail-loud out of range.
+        fn as_u32(value: &AgentValue, caption: &str) -> Result<u32, String> {
+            let n = value.as_i64()?;
+            if !(0..=i64::from(u32::MAX)).contains(&n) {
+                return Err(format!("{caption} must be in 0..=4294967295, got {n}"));
+            }
+            Ok(n as u32)
+        }
+
+        match name {
+            // -- Transformations --
+            "Translate X" => self.translate[0] = value.as_f64()?,
+            "Translate Y" => self.translate[1] = value.as_f64()?,
+            "Translate Z" => self.translate[2] = value.as_f64()?,
+            "Scale (uniform)" => self.scale_uniform = value.as_f64()?,
+            "Scale (axes) X" => self.scale_per_axis[0] = value.as_f64()?,
+            "Scale (axes) Y" => self.scale_per_axis[1] = value.as_f64()?,
+            "Scale (axes) Z" => self.scale_per_axis[2] = value.as_f64()?,
+            "Rotate axis" => self.rotate_axis = ToolboxAxis::from_name(value.as_str()?)?,
+            "Angle (deg)" => self.rotate_angle_deg = value.as_f64()?,
+            "Mirror plane" => self.mirror_plane = ToolboxAxis::from_name(value.as_str()?)?,
+            // -- Cut plane --
+            "Cut point X" => self.cut_point[0] = value.as_f64()?,
+            "Cut point Y" => self.cut_point[1] = value.as_f64()?,
+            "Cut point Z" => self.cut_point[2] = value.as_f64()?,
+            "Cut normal X" => self.cut_normal[0] = value.as_f64()?,
+            "Cut normal Y" => self.cut_normal[1] = value.as_f64()?,
+            "Cut normal Z" => self.cut_normal[2] = value.as_f64()?,
+            "Show cut overlay" => self.cut_show_overlay = value.as_bool()?,
+            // -- Repair --
+            "Merge coincident — tolerance" => self.repair_tolerance = value.as_f64()?,
+            // -- Mesh Tools --
+            "Decimate fraction" => self.mesh_tools_decimate_fraction = value.as_f64()?,
+            "Laplacian iter" => self.mesh_tools_laplacian_iter = as_u32(value, "Laplacian iter")?,
+            "Laplacian factor" => self.mesh_tools_laplacian_factor = value.as_f64()?,
+            "Taubin iter" => self.mesh_tools_taubin_iter = as_u32(value, "Taubin iter")?,
+            "Taubin lambda" => self.mesh_tools_taubin_lambda = value.as_f64()?,
+            "Taubin mu" => self.mesh_tools_taubin_mu = value.as_f64()?,
+            "Remesh target edge" => self.mesh_tools_remesh_target = value.as_f64()?,
+            "Remesh iter" => self.mesh_tools_remesh_iter = as_u32(value, "Remesh iter")?,
+            "Fill holes — max boundary length" => {
+                self.mesh_tools_fill_holes_max = value.as_f64()?
+            }
+            // -- Part primitives --
+            "Shape" => self.cad_primitive = CadPrimitiveKind::from_name(value.as_str()?)?,
+            "Box size X" => self.cad_box_dims[0] = value.as_f64()?,
+            "Box size Y" => self.cad_box_dims[1] = value.as_f64()?,
+            "Box size Z" => self.cad_box_dims[2] = value.as_f64()?,
+            "Cylinder radius" => self.cad_cyl_radius = value.as_f64()?,
+            "Cylinder height" => self.cad_cyl_height = value.as_f64()?,
+            "Sphere radius" => self.cad_sphere_radius = value.as_f64()?,
+            "Cone base radius" => self.cad_cone_base = value.as_f64()?,
+            "Cone top radius" => self.cad_cone_top = value.as_f64()?,
+            "Cone height" => self.cad_cone_height = value.as_f64()?,
+            "Torus major radius" => self.cad_torus_major = value.as_f64()?,
+            "Torus minor radius" => self.cad_torus_minor = value.as_f64()?,
+            "Create as operand B" => self.cad_create_as_second = value.as_bool()?,
+            "Fillet radius" => self.cad_fillet_radius = value.as_f64()?,
+            other => return Err(format!("unknown mesh-toolbox control: {other:?}")),
+        }
+        Ok(())
     }
 }
 
@@ -1991,6 +2133,23 @@ impl CadPrimitiveKind {
             CadPrimitiveKind::Torus => "cad.primitive.torus",
         }
     }
+
+    /// Parse a primitive-shape name (for the agent `SetControl` bridge) into a
+    /// [`CadPrimitiveKind`]. Case-insensitive; accepts the menu words.
+    /// Fail-loud on an unrecognised name.
+    fn from_name(s: &str) -> Result<CadPrimitiveKind, String> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "box" => Ok(CadPrimitiveKind::Box),
+            "cylinder" => Ok(CadPrimitiveKind::Cylinder),
+            "sphere" => Ok(CadPrimitiveKind::Sphere),
+            "cone" | "frustum" | "cone / frustum" => Ok(CadPrimitiveKind::Cone),
+            "torus" => Ok(CadPrimitiveKind::Torus),
+            other => Err(format!(
+                "unknown CAD primitive '{other}' (expected box / cylinder / sphere / \
+                 cone / torus)"
+            )),
+        }
+    }
 }
 
 /// Three-way radio enum shared by the rotate-axis and mirror-plane
@@ -2025,6 +2184,18 @@ impl ToolboxAxis {
             ToolboxAxis::X => "X",
             ToolboxAxis::Y => "Y",
             ToolboxAxis::Z => "Z",
+        }
+    }
+
+    /// Parse an axis / plane name (for the agent `SetControl` bridge) into a
+    /// [`ToolboxAxis`]. Case-insensitive; accepts `X` / `Y` / `Z`. Fail-loud on
+    /// an unrecognised name.
+    fn from_name(s: &str) -> Result<ToolboxAxis, String> {
+        match s.trim().to_ascii_uppercase().as_str() {
+            "X" => Ok(ToolboxAxis::X),
+            "Y" => Ok(ToolboxAxis::Y),
+            "Z" => Ok(ToolboxAxis::Z),
+            other => Err(format!("unknown axis '{other}' (expected X, Y, or Z)")),
         }
     }
 }
@@ -3199,25 +3370,29 @@ fn draw_transformations(app: &mut ValenxApp, ui: &mut egui::Ui) {
 
     let s = &mut app.mesh_toolbox;
     ui.horizontal(|ui| {
-        ui.label("Translate")
+        let lbl = ui
+            .label("Translate")
             .on_hover_text("XYZ displacement vector (model units, typically mm or m).");
         ui.add(
             egui::DragValue::new(&mut s.translate[0])
                 .speed(0.1)
                 .prefix("X "),
         )
+        .labelled_by(lbl.id)
         .on_hover_text("Translation along the X axis (model units).");
         ui.add(
             egui::DragValue::new(&mut s.translate[1])
                 .speed(0.1)
                 .prefix("Y "),
         )
+        .labelled_by(lbl.id)
         .on_hover_text("Translation along the Y axis (model units).");
         ui.add(
             egui::DragValue::new(&mut s.translate[2])
                 .speed(0.1)
                 .prefix("Z "),
         )
+        .labelled_by(lbl.id)
         .on_hover_text("Translation along the Z axis (model units).");
     });
     if ui
@@ -3229,13 +3404,15 @@ fn draw_transformations(app: &mut ValenxApp, ui: &mut egui::Ui) {
     }
 
     ui.horizontal(|ui| {
-        ui.label("Scale (uniform)")
+        let lbl = ui
+            .label("Scale (uniform)")
             .on_hover_text("Multiplier applied equally to X / Y / Z. 1.0 = no scaling.");
         ui.add(
             egui::DragValue::new(&mut s.scale_uniform)
                 .speed(0.05)
                 .range(0.0001..=1e9),
         )
+        .labelled_by(lbl.id)
         .on_hover_text("Uniform scale factor (dimensionless). 2.0 = doubles in every direction.");
     });
     if ui
@@ -3247,7 +3424,7 @@ fn draw_transformations(app: &mut ValenxApp, ui: &mut egui::Ui) {
     }
 
     ui.horizontal(|ui| {
-        ui.label("Scale (axes)").on_hover_text(
+        let __mtlbl1 = ui.label("Scale (axes)").on_hover_text(
             "Independent scale factor per axis — useful for squashing / stretching.",
         );
         ui.add(
@@ -3255,18 +3432,21 @@ fn draw_transformations(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .speed(0.05)
                 .prefix("X "),
         )
+        .labelled_by(__mtlbl1.id)
         .on_hover_text("Scale along X (dimensionless multiplier).");
         ui.add(
             egui::DragValue::new(&mut s.scale_per_axis[1])
                 .speed(0.05)
                 .prefix("Y "),
         )
+        .labelled_by(__mtlbl1.id)
         .on_hover_text("Scale along Y (dimensionless multiplier).");
         ui.add(
             egui::DragValue::new(&mut s.scale_per_axis[2])
                 .speed(0.05)
                 .prefix("Z "),
         )
+        .labelled_by(__mtlbl1.id)
         .on_hover_text("Scale along Z (dimensionless multiplier).");
     });
     if ui
@@ -3288,10 +3468,11 @@ fn draw_transformations(app: &mut ValenxApp, ui: &mut egui::Ui) {
             .on_hover_text("Rotate around the Z axis (yaw).");
     });
     ui.horizontal(|ui| {
-        ui.label("Angle (deg)").on_hover_text(
+        let __mtlbl2 = ui.label("Angle (deg)").on_hover_text(
             "Rotation amount in degrees. Positive = right-hand rule around the axis.",
         );
         ui.add(egui::DragValue::new(&mut s.rotate_angle_deg).speed(1.0))
+            .labelled_by(__mtlbl2.id)
             .on_hover_text("Rotation angle (degrees).");
     });
     if ui
@@ -3366,47 +3547,55 @@ fn draw_cut_plane(app: &mut ValenxApp, ui: &mut egui::Ui) {
     {
         let s = &mut app.mesh_toolbox;
         ui.horizontal(|ui| {
-            ui.label("Point  ")
+            let __mtlbl3 = ui
+                .label("Point  ")
                 .on_hover_text("A point in the cut plane (model units).");
             ui.add(
                 egui::DragValue::new(&mut s.cut_point[0])
                     .speed(0.1)
                     .prefix("X "),
             )
+            .labelled_by(__mtlbl3.id)
             .on_hover_text("Point X (model units).");
             ui.add(
                 egui::DragValue::new(&mut s.cut_point[1])
                     .speed(0.1)
                     .prefix("Y "),
             )
+            .labelled_by(__mtlbl3.id)
             .on_hover_text("Point Y (model units).");
             ui.add(
                 egui::DragValue::new(&mut s.cut_point[2])
                     .speed(0.1)
                     .prefix("Z "),
             )
+            .labelled_by(__mtlbl3.id)
             .on_hover_text("Point Z (model units).");
         });
         ui.horizontal(|ui| {
-            ui.label("Normal ")
+            let __mtlbl4 = ui
+                .label("Normal ")
                 .on_hover_text("The plane's outward-normal vector (need not be unit-length).");
             ui.add(
                 egui::DragValue::new(&mut s.cut_normal[0])
                     .speed(0.05)
                     .prefix("X "),
             )
+            .labelled_by(__mtlbl4.id)
             .on_hover_text("Normal X component.");
             ui.add(
                 egui::DragValue::new(&mut s.cut_normal[1])
                     .speed(0.05)
                     .prefix("Y "),
             )
+            .labelled_by(__mtlbl4.id)
             .on_hover_text("Normal Y component.");
             ui.add(
                 egui::DragValue::new(&mut s.cut_normal[2])
                     .speed(0.05)
                     .prefix("Z "),
             )
+            .labelled_by(__mtlbl4.id)
             .on_hover_text("Normal Z component.");
         });
         ui.checkbox(
@@ -3490,7 +3679,7 @@ fn draw_part_workbench(app: &mut ValenxApp, ui: &mut egui::Ui) {
             match s.cad_primitive {
                 CadPrimitiveKind::Box => {
                     ui.horizontal(|ui| {
-                        ui.label("Size")
+                        let __mtlbl5 = ui.label("Size")
                             .on_hover_text("Box edge lengths along X / Y / Z (model units).");
                         ui.add(
                             egui::DragValue::new(&mut s.cad_box_dims[0])
@@ -3498,6 +3687,7 @@ fn draw_part_workbench(app: &mut ValenxApp, ui: &mut egui::Ui) {
                                 .range(1e-6..=1e9)
                                 .prefix("dx "),
                         )
+                        .labelled_by(__mtlbl5.id)
                         .on_hover_text("Box width along X (model units).");
                         ui.add(
                             egui::DragValue::new(&mut s.cad_box_dims[1])
@@ -3505,6 +3695,7 @@ fn draw_part_workbench(app: &mut ValenxApp, ui: &mut egui::Ui) {
                                 .range(1e-6..=1e9)
                                 .prefix("dy "),
                         )
+                        .labelled_by(__mtlbl5.id)
                         .on_hover_text("Box depth along Y (model units).");
                         ui.add(
                             egui::DragValue::new(&mut s.cad_box_dims[2])
@@ -3512,12 +3703,13 @@ fn draw_part_workbench(app: &mut ValenxApp, ui: &mut egui::Ui) {
                                 .range(1e-6..=1e9)
                                 .prefix("dz "),
                         )
+                        .labelled_by(__mtlbl5.id)
                         .on_hover_text("Box height along Z (model units).");
                     });
                 }
                 CadPrimitiveKind::Cylinder => {
                     ui.horizontal(|ui| {
-                        ui.label("Cylinder")
+                        let __mtlbl6 = ui.label("Cylinder")
                             .on_hover_text("Solid cylinder, axis aligned with Z.");
                         ui.add(
                             egui::DragValue::new(&mut s.cad_cyl_radius)
@@ -3525,6 +3717,7 @@ fn draw_part_workbench(app: &mut ValenxApp, ui: &mut egui::Ui) {
                                 .range(1e-6..=1e9)
                                 .prefix("r "),
                         )
+                        .labelled_by(__mtlbl6.id)
                         .on_hover_text("Cylinder radius (model units).");
                         ui.add(
                             egui::DragValue::new(&mut s.cad_cyl_height)
@@ -3532,12 +3725,13 @@ fn draw_part_workbench(app: &mut ValenxApp, ui: &mut egui::Ui) {
                                 .range(1e-6..=1e9)
                                 .prefix("h "),
                         )
+                        .labelled_by(__mtlbl6.id)
                         .on_hover_text("Cylinder height along Z (model units).");
                     });
                 }
                 CadPrimitiveKind::Sphere => {
                     ui.horizontal(|ui| {
-                        ui.label("Sphere")
+                        let __mtlbl7 = ui.label("Sphere")
                             .on_hover_text("Solid sphere centred on the origin.");
                         ui.add(
                             egui::DragValue::new(&mut s.cad_sphere_radius)
@@ -3545,12 +3739,13 @@ fn draw_part_workbench(app: &mut ValenxApp, ui: &mut egui::Ui) {
                                 .range(1e-6..=1e9)
                                 .prefix("r "),
                         )
+                        .labelled_by(__mtlbl7.id)
                         .on_hover_text("Sphere radius (model units).");
                     });
                 }
                 CadPrimitiveKind::Cone => {
                     ui.horizontal(|ui| {
-                        ui.label("Cone")
+                        let __mtlbl8 = ui.label("Cone")
                             .on_hover_text("Solid cone / frustum aligned with Z.");
                         ui.add(
                             egui::DragValue::new(&mut s.cad_cone_base)
@@ -3558,6 +3753,7 @@ fn draw_part_workbench(app: &mut ValenxApp, ui: &mut egui::Ui) {
                                 .range(1e-6..=1e9)
                                 .prefix("base "),
                         )
+                        .labelled_by(__mtlbl8.id)
                         .on_hover_text("Base radius at z = 0 (model units).");
                         ui.add(
                             egui::DragValue::new(&mut s.cad_cone_top)
@@ -3565,6 +3761,7 @@ fn draw_part_workbench(app: &mut ValenxApp, ui: &mut egui::Ui) {
                                 .range(0.0..=1e9)
                                 .prefix("top "),
                         )
+                        .labelled_by(__mtlbl8.id)
                         .on_hover_text("Top radius at z = h. 0 → pointed cone; > 0 → frustum.");
                         ui.add(
                             egui::DragValue::new(&mut s.cad_cone_height)
@@ -3572,13 +3769,14 @@ fn draw_part_workbench(app: &mut ValenxApp, ui: &mut egui::Ui) {
                                 .range(1e-6..=1e9)
                                 .prefix("h "),
                         )
+                        .labelled_by(__mtlbl8.id)
                         .on_hover_text("Cone height along Z (model units).");
                     });
                     ui.small("top = 0 gives a pointed cone; top > 0 gives a frustum.");
                 }
                 CadPrimitiveKind::Torus => {
                     ui.horizontal(|ui| {
-                        ui.label("Torus")
+                        let __mtlbl9 = ui.label("Torus")
                             .on_hover_text("Donut shape — major radius around Z, minor radius is the tube cross-section.");
                         ui.add(
                             egui::DragValue::new(&mut s.cad_torus_major)
@@ -3586,6 +3784,7 @@ fn draw_part_workbench(app: &mut ValenxApp, ui: &mut egui::Ui) {
                                 .range(1e-6..=1e9)
                                 .prefix("major "),
                         )
+                        .labelled_by(__mtlbl9.id)
                         .on_hover_text("Major radius — centre of the tube to centre of the torus (model units).");
                         ui.add(
                             egui::DragValue::new(&mut s.cad_torus_minor)
@@ -3593,6 +3792,7 @@ fn draw_part_workbench(app: &mut ValenxApp, ui: &mut egui::Ui) {
                                 .range(1e-6..=1e9)
                                 .prefix("minor "),
                         )
+                        .labelled_by(__mtlbl9.id)
                         .on_hover_text("Minor radius — radius of the tube cross-section (model units).");
                     });
                     ui.small("minor must be strictly less than major.");
@@ -3660,12 +3860,12 @@ fn draw_part_workbench(app: &mut ValenxApp, ui: &mut egui::Ui) {
         {
             let s = &mut app.mesh_toolbox;
             ui.horizontal(|ui| {
-                ui.label("Radius");
+                let __mtlbl10 = ui.label("Radius");
                 ui.add(
                     egui::DragValue::new(&mut s.cad_fillet_radius)
                         .speed(0.01)
                         .range(1e-6..=1e9),
-                );
+                ).labelled_by(__mtlbl10.id);
             });
         }
         let fillet_enabled = app.current_solid.is_some();
@@ -3694,7 +3894,7 @@ fn draw_repair(app: &mut ValenxApp, ui: &mut egui::Ui) {
     {
         let s = &mut app.mesh_toolbox;
         ui.horizontal(|ui| {
-            ui.label("Merge coincident — tolerance").on_hover_text(
+            let __mtlbl11 = ui.label("Merge coincident — tolerance").on_hover_text(
                 "Welding distance — any two vertices closer than this collapse to one.",
             );
             ui.add(
@@ -3702,6 +3902,7 @@ fn draw_repair(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     .speed(1e-7)
                     .range(0.0..=1e9),
             )
+            .labelled_by(__mtlbl11.id)
             .on_hover_text("Coincident-vertex merge tolerance (model units).");
         });
         if ui
@@ -3810,17 +4011,21 @@ fn draw_mesh_tools(app: &mut ValenxApp, ui: &mut egui::Ui) {
             "Iterative vertex relaxation — Laplacian (shrinks) and Taubin (shrink-free).",
         );
         ui.horizontal(|ui| {
-            ui.label("Laplacian iter")
+            let __mtlbl12 = ui
+                .label("Laplacian iter")
                 .on_hover_text("Number of Laplacian smoothing passes.");
             ui.add(egui::DragValue::new(&mut s.mesh_tools_laplacian_iter).range(0..=200))
+                .labelled_by(__mtlbl12.id)
                 .on_hover_text("Smoothing iteration count (0 = no smoothing).");
-            ui.label("factor")
+            let __mtlbl13 = ui
+                .label("factor")
                 .on_hover_text("Per-iteration smoothing strength (0 = no move, 1 = full average).");
             ui.add(
                 egui::DragValue::new(&mut s.mesh_tools_laplacian_factor)
                     .speed(0.05)
                     .range(0.0..=1.0),
             )
+            .labelled_by(__mtlbl13.id)
             .on_hover_text("Laplacian factor λ (dimensionless 0..=1).");
         });
         if ui
@@ -3831,23 +4036,28 @@ fn draw_mesh_tools(app: &mut ValenxApp, ui: &mut egui::Ui) {
             do_laplacian = true;
         }
         ui.horizontal(|ui| {
-            ui.label("Taubin iter")
+            let __mtlbl14 = ui
+                .label("Taubin iter")
                 .on_hover_text("Number of Taubin (shrink-free) smoothing passes.");
             ui.add(egui::DragValue::new(&mut s.mesh_tools_taubin_iter).range(0..=200))
+                .labelled_by(__mtlbl14.id)
                 .on_hover_text("Taubin iteration count.");
-            ui.label("λ")
+            let __mtlbl15 = ui
+                .label("λ")
                 .on_hover_text("Taubin's positive-step weight.");
             ui.add(
                 egui::DragValue::new(&mut s.mesh_tools_taubin_lambda)
                     .speed(0.05)
                     .range(-2.0..=2.0),
-            );
-            ui.label("μ");
+            )
+            .labelled_by(__mtlbl15.id);
+            let __mtlbl16 = ui.label("μ");
             ui.add(
                 egui::DragValue::new(&mut s.mesh_tools_taubin_mu)
                     .speed(0.05)
                     .range(-2.0..=2.0),
-            );
+            )
+            .labelled_by(__mtlbl16.id);
         });
         if ui
             .button("Apply Taubin")
@@ -3862,14 +4072,16 @@ fn draw_mesh_tools(app: &mut ValenxApp, ui: &mut egui::Ui) {
 
         ui.separator();
         ui.horizontal(|ui| {
-            ui.label("Remesh target edge");
+            let __mtlbl17 = ui.label("Remesh target edge");
             ui.add(
                 egui::DragValue::new(&mut s.mesh_tools_remesh_target)
                     .speed(0.05)
                     .range(1e-6..=1e6),
-            );
-            ui.label("iter");
-            ui.add(egui::DragValue::new(&mut s.mesh_tools_remesh_iter).range(0..=50));
+            )
+            .labelled_by(__mtlbl17.id);
+            let __mtlbl18 = ui.label("iter");
+            ui.add(egui::DragValue::new(&mut s.mesh_tools_remesh_iter).range(0..=50))
+                .labelled_by(__mtlbl18.id);
         });
         if ui
             .button("Isotropic remesh")
@@ -3884,12 +4096,13 @@ fn draw_mesh_tools(app: &mut ValenxApp, ui: &mut egui::Ui) {
 
         ui.separator();
         ui.horizontal(|ui| {
-            ui.label("Fill holes — max boundary length");
+            let __mtlbl19 = ui.label("Fill holes — max boundary length");
             ui.add(
                 egui::DragValue::new(&mut s.mesh_tools_fill_holes_max)
                     .speed(0.1)
                     .range(0.0..=1e9),
-            );
+            )
+            .labelled_by(__mtlbl19.id);
         });
         if ui
             .button("Fill holes")
@@ -3957,6 +4170,17 @@ fn draw_external_editors(app: &mut ValenxApp, ui: &mut egui::Ui) {
     });
 }
 
+/// The axis-aligned bounding-box **extents** `(dx, dy, dz)` of the canonical
+/// valenx LV-1 rocket mesh — the SAME `canonical_aabb` the Mesh Toolbox
+/// Inspector reports for a loaded canonical mesh. Used by the product self-test
+/// ([`crate::self_test`]) to assert the mesh-inspection path against a known
+/// mesh's measured extents. `None` for an (impossible) empty LV-1 mesh.
+pub(crate) fn lv1_canonical_aabb_extents() -> Option<(f64, f64, f64)> {
+    let mesh = crate::rocket_mesh::lv1_rocket_mesh();
+    let (min, max) = canonical_aabb(&mesh)?;
+    Some((max.x - min.x, max.y - min.y, max.z - min.z))
+}
+
 /// Canonical-mesh AABB. Returns `None` for an empty mesh.
 fn canonical_aabb(mesh: &valenx_mesh::Mesh) -> Option<(Vector3<f64>, Vector3<f64>)> {
     let mut iter = mesh.nodes.iter();
@@ -4013,41 +4237,51 @@ pub fn draw_dock_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
         ui.text_edit_singleline(&mut s.output_path);
     });
     ui.separator();
-    ui.label("Search box centre (Å):");
+    let __mtlbl20 = ui.label("Search box centre (Å):");
     ui.horizontal(|ui| {
-        ui.add(egui::DragValue::new(&mut s.center[0]).speed(0.1));
-        ui.add(egui::DragValue::new(&mut s.center[1]).speed(0.1));
-        ui.add(egui::DragValue::new(&mut s.center[2]).speed(0.1));
+        ui.add(egui::DragValue::new(&mut s.center[0]).speed(0.1))
+            .labelled_by(__mtlbl20.id);
+        ui.add(egui::DragValue::new(&mut s.center[1]).speed(0.1))
+            .labelled_by(__mtlbl20.id);
+        ui.add(egui::DragValue::new(&mut s.center[2]).speed(0.1))
+            .labelled_by(__mtlbl20.id);
     });
-    ui.label("Search box size (Å):");
+    let __mtlbl21 = ui.label("Search box size (Å):");
     ui.horizontal(|ui| {
         ui.add(
             egui::DragValue::new(&mut s.size[0])
                 .speed(0.1)
                 .range(1.0..=80.0),
-        );
+        )
+        .labelled_by(__mtlbl21.id);
         ui.add(
             egui::DragValue::new(&mut s.size[1])
                 .speed(0.1)
                 .range(1.0..=80.0),
-        );
+        )
+        .labelled_by(__mtlbl21.id);
         ui.add(
             egui::DragValue::new(&mut s.size[2])
                 .speed(0.1)
                 .range(1.0..=80.0),
-        );
+        )
+        .labelled_by(__mtlbl21.id);
     });
     ui.horizontal(|ui| {
-        ui.label("Exhaustiveness:");
-        ui.add(egui::DragValue::new(&mut s.exhaustiveness).range(1..=32));
-        ui.label("Num modes:");
-        ui.add(egui::DragValue::new(&mut s.num_modes).range(1..=99));
+        let __mtlbl22 = ui.label("Exhaustiveness:");
+        ui.add(egui::DragValue::new(&mut s.exhaustiveness).range(1..=32))
+            .labelled_by(__mtlbl22.id);
+        let __mtlbl23 = ui.label("Num modes:");
+        ui.add(egui::DragValue::new(&mut s.num_modes).range(1..=99))
+            .labelled_by(__mtlbl23.id);
     });
     ui.horizontal(|ui| {
-        ui.label("Energy range:");
-        ui.add(egui::DragValue::new(&mut s.energy_range).speed(0.1));
-        ui.label("Seed:");
-        ui.add(egui::DragValue::new(&mut s.seed));
+        let __mtlbl24 = ui.label("Energy range:");
+        ui.add(egui::DragValue::new(&mut s.energy_range).speed(0.1))
+            .labelled_by(__mtlbl24.id);
+        let __mtlbl25 = ui.label("Seed:");
+        ui.add(egui::DragValue::new(&mut s.seed))
+            .labelled_by(__mtlbl25.id);
     });
     ui.separator();
     if ui.button("Dock now").clicked() {
@@ -4321,13 +4555,17 @@ pub fn draw_sketcher_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     ui.label(egui::RichText::new("Click input (MVP — numeric)").strong())
         .on_hover_text("Phase-1 numeric stand-in for viewport clicks. Enter (x, y) sketch-plane coordinates, then press the Add button.");
     ui.horizontal(|ui| {
-        ui.label("X")
+        let __mtlbl26 = ui
+            .label("X")
             .on_hover_text("Sketch-plane X coordinate (model units).");
         ui.add(egui::DragValue::new(&mut s.pending_click_x).speed(0.05))
+            .labelled_by(__mtlbl26.id)
             .on_hover_text("X coordinate of the next click.");
-        ui.label("Y")
+        let __mtlbl27 = ui
+            .label("Y")
             .on_hover_text("Sketch-plane Y coordinate (model units).");
         ui.add(egui::DragValue::new(&mut s.pending_click_y).speed(0.05))
+            .labelled_by(__mtlbl27.id)
             .on_hover_text("Y coordinate of the next click.");
     });
     let click_label = match s.tool {
@@ -4380,8 +4618,9 @@ pub fn draw_sketcher_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     ui.separator();
     ui.label(egui::RichText::new("Constraints").strong());
     ui.horizontal(|ui| {
-        ui.label("Numeric target (Distance / Angle / Radius):");
-        ui.add(egui::DragValue::new(&mut s.pending_target).speed(0.05));
+        let __mtlbl28 = ui.label("Numeric target (Distance / Angle / Radius):");
+        ui.add(egui::DragValue::new(&mut s.pending_target).speed(0.05))
+            .labelled_by(__mtlbl28.id);
     });
     ui.horizontal_wrapped(|ui| {
         if ui.button("Coincident").clicked() {
@@ -4784,8 +5023,9 @@ pub fn draw_sketcher_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     ui.separator();
     ui.label(egui::RichText::new("Pad (extrude)").strong());
     ui.horizontal(|ui| {
-        ui.label("Depth:");
-        ui.add(egui::DragValue::new(&mut s.pad_depth).speed(0.05));
+        let __mtlbl29 = ui.label("Depth:");
+        ui.add(egui::DragValue::new(&mut s.pad_depth).speed(0.05))
+            .labelled_by(__mtlbl29.id);
         if ui.button("Pad").clicked() {
             pad_request = Some(s.pad_depth);
         }
@@ -5176,8 +5416,9 @@ pub fn draw_part_design_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             );
         });
         ui.horizontal(|ui| {
-            ui.label("Depth:");
-            ui.add(egui::DragValue::new(&mut s.pad_depth).speed(0.1));
+            let __mtlbl30 = ui.label("Depth:");
+            ui.add(egui::DragValue::new(&mut s.pad_depth).speed(0.1))
+                .labelled_by(__mtlbl30.id);
         });
         ui.checkbox(
             &mut s.pad_direction_positive,
@@ -5222,8 +5463,9 @@ pub fn draw_part_design_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             );
         });
         ui.horizontal(|ui| {
-            ui.label("Depth:");
-            ui.add(egui::DragValue::new(&mut s.pocket_depth).speed(0.1));
+            let __mtlbl31 = ui.label("Depth:");
+            ui.add(egui::DragValue::new(&mut s.pocket_depth).speed(0.1))
+                .labelled_by(__mtlbl31.id);
         });
         ui.checkbox(
             &mut s.pocket_direction_positive,
@@ -5265,48 +5507,55 @@ pub fn draw_part_design_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             );
         });
         ui.horizontal(|ui| {
-            ui.label("Axis origin");
+            let __mtlbl32 = ui.label("Axis origin");
             ui.add(
                 egui::DragValue::new(&mut s.revolve_axis_origin[0])
                     .speed(0.1)
                     .prefix("X "),
-            );
+            )
+            .labelled_by(__mtlbl32.id);
             ui.add(
                 egui::DragValue::new(&mut s.revolve_axis_origin[1])
                     .speed(0.1)
                     .prefix("Y "),
-            );
+            )
+            .labelled_by(__mtlbl32.id);
             ui.add(
                 egui::DragValue::new(&mut s.revolve_axis_origin[2])
                     .speed(0.1)
                     .prefix("Z "),
-            );
+            )
+            .labelled_by(__mtlbl32.id);
         });
         ui.horizontal(|ui| {
-            ui.label("Axis direction");
+            let __mtlbl33 = ui.label("Axis direction");
             ui.add(
                 egui::DragValue::new(&mut s.revolve_axis_direction[0])
                     .speed(0.1)
                     .prefix("X "),
-            );
+            )
+            .labelled_by(__mtlbl33.id);
             ui.add(
                 egui::DragValue::new(&mut s.revolve_axis_direction[1])
                     .speed(0.1)
                     .prefix("Y "),
-            );
+            )
+            .labelled_by(__mtlbl33.id);
             ui.add(
                 egui::DragValue::new(&mut s.revolve_axis_direction[2])
                     .speed(0.1)
                     .prefix("Z "),
-            );
+            )
+            .labelled_by(__mtlbl33.id);
         });
         ui.horizontal(|ui| {
-            ui.label("Angle (deg):");
+            let __mtlbl34 = ui.label("Angle (deg):");
             ui.add(
                 egui::DragValue::new(&mut s.revolve_angle_deg)
                     .speed(1.0)
                     .range(-360.0..=360.0),
-            );
+            )
+            .labelled_by(__mtlbl34.id);
         });
         if ui.button("Add Revolve").clicked() {
             if s.tree.sketches.is_empty() {
@@ -5353,40 +5602,46 @@ pub fn draw_part_design_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             );
         });
         ui.horizontal(|ui| {
-            ui.label("Plane origin");
+            let __mtlbl35 = ui.label("Plane origin");
             ui.add(
                 egui::DragValue::new(&mut s.mirror_plane_origin[0])
                     .speed(0.1)
                     .prefix("X "),
-            );
+            )
+            .labelled_by(__mtlbl35.id);
             ui.add(
                 egui::DragValue::new(&mut s.mirror_plane_origin[1])
                     .speed(0.1)
                     .prefix("Y "),
-            );
+            )
+            .labelled_by(__mtlbl35.id);
             ui.add(
                 egui::DragValue::new(&mut s.mirror_plane_origin[2])
                     .speed(0.1)
                     .prefix("Z "),
-            );
+            )
+            .labelled_by(__mtlbl35.id);
         });
         ui.horizontal(|ui| {
-            ui.label("Plane normal");
+            let __mtlbl36 = ui.label("Plane normal");
             ui.add(
                 egui::DragValue::new(&mut s.mirror_plane_normal[0])
                     .speed(0.1)
                     .prefix("X "),
-            );
+            )
+            .labelled_by(__mtlbl36.id);
             ui.add(
                 egui::DragValue::new(&mut s.mirror_plane_normal[1])
                     .speed(0.1)
                     .prefix("Y "),
-            );
+            )
+            .labelled_by(__mtlbl36.id);
             ui.add(
                 egui::DragValue::new(&mut s.mirror_plane_normal[2])
                     .speed(0.1)
                     .prefix("Z "),
-            );
+            )
+            .labelled_by(__mtlbl36.id);
         });
         ui.checkbox(
             &mut s.mirror_keep_original,
@@ -5437,34 +5692,39 @@ pub fn draw_part_design_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             );
         });
         ui.horizontal(|ui| {
-            ui.label("Direction");
+            let __mtlbl37 = ui.label("Direction");
             ui.add(
                 egui::DragValue::new(&mut s.lp_direction[0])
                     .speed(0.1)
                     .prefix("X "),
-            );
+            )
+            .labelled_by(__mtlbl37.id);
             ui.add(
                 egui::DragValue::new(&mut s.lp_direction[1])
                     .speed(0.1)
                     .prefix("Y "),
-            );
+            )
+            .labelled_by(__mtlbl37.id);
             ui.add(
                 egui::DragValue::new(&mut s.lp_direction[2])
                     .speed(0.1)
                     .prefix("Z "),
-            );
+            )
+            .labelled_by(__mtlbl37.id);
         });
         ui.horizontal(|ui| {
-            ui.label("Count:");
+            let __mtlbl38 = ui.label("Count:");
             ui.add(
                 egui::DragValue::new(&mut s.lp_count)
                     .speed(1.0)
                     .range(1..=512),
-            );
+            )
+            .labelled_by(__mtlbl38.id);
         });
         ui.horizontal(|ui| {
-            ui.label("Spacing:");
-            ui.add(egui::DragValue::new(&mut s.lp_spacing).speed(0.1));
+            let __mtlbl39 = ui.label("Spacing:");
+            ui.add(egui::DragValue::new(&mut s.lp_spacing).speed(0.1))
+                .labelled_by(__mtlbl39.id);
         });
         if ui.button("Add Linear Pattern").clicked() {
             if s.tree.features.is_empty() {
@@ -5507,56 +5767,64 @@ pub fn draw_part_design_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             );
         });
         ui.horizontal(|ui| {
-            ui.label("Axis origin");
+            let __mtlbl40 = ui.label("Axis origin");
             ui.add(
                 egui::DragValue::new(&mut s.cp_axis_origin[0])
                     .speed(0.1)
                     .prefix("X "),
-            );
+            )
+            .labelled_by(__mtlbl40.id);
             ui.add(
                 egui::DragValue::new(&mut s.cp_axis_origin[1])
                     .speed(0.1)
                     .prefix("Y "),
-            );
+            )
+            .labelled_by(__mtlbl40.id);
             ui.add(
                 egui::DragValue::new(&mut s.cp_axis_origin[2])
                     .speed(0.1)
                     .prefix("Z "),
-            );
+            )
+            .labelled_by(__mtlbl40.id);
         });
         ui.horizontal(|ui| {
-            ui.label("Axis direction");
+            let __mtlbl41 = ui.label("Axis direction");
             ui.add(
                 egui::DragValue::new(&mut s.cp_axis_direction[0])
                     .speed(0.1)
                     .prefix("X "),
-            );
+            )
+            .labelled_by(__mtlbl41.id);
             ui.add(
                 egui::DragValue::new(&mut s.cp_axis_direction[1])
                     .speed(0.1)
                     .prefix("Y "),
-            );
+            )
+            .labelled_by(__mtlbl41.id);
             ui.add(
                 egui::DragValue::new(&mut s.cp_axis_direction[2])
                     .speed(0.1)
                     .prefix("Z "),
-            );
+            )
+            .labelled_by(__mtlbl41.id);
         });
         ui.horizontal(|ui| {
-            ui.label("Count:");
+            let __mtlbl42 = ui.label("Count:");
             ui.add(
                 egui::DragValue::new(&mut s.cp_count)
                     .speed(1.0)
                     .range(1..=512),
-            );
+            )
+            .labelled_by(__mtlbl42.id);
         });
         ui.horizontal(|ui| {
-            ui.label("Total angle (deg):");
+            let __mtlbl43 = ui.label("Total angle (deg):");
             ui.add(
                 egui::DragValue::new(&mut s.cp_total_angle_deg)
                     .speed(1.0)
                     .range(-360.0..=360.0),
-            );
+            )
+            .labelled_by(__mtlbl43.id);
         });
         if ui.button("Add Circular Pattern").clicked() {
             if s.tree.features.is_empty() {
@@ -5615,20 +5883,22 @@ pub fn draw_part_design_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             );
         });
         ui.horizontal(|ui| {
-            ui.label("Radius:");
+            let __mtlbl44 = ui.label("Radius:");
             ui.add(
                 egui::DragValue::new(&mut s.fillet_radius)
                     .speed(0.05)
                     .range(0.001..=1000.0),
-            );
+            )
+            .labelled_by(__mtlbl44.id);
         });
         ui.horizontal(|ui| {
-            ui.label("Edge angle threshold (deg):");
+            let __mtlbl45 = ui.label("Edge angle threshold (deg):");
             ui.add(
                 egui::DragValue::new(&mut s.fillet_threshold_deg)
                     .speed(1.0)
                     .range(0.0..=180.0),
-            );
+            )
+            .labelled_by(__mtlbl45.id);
         });
         ui.horizontal(|ui| {
             ui.label("Edges (BRep only, empty = auto):");
@@ -5684,20 +5954,22 @@ pub fn draw_part_design_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             );
         });
         ui.horizontal(|ui| {
-            ui.label("Distance:");
+            let __mtlbl46 = ui.label("Distance:");
             ui.add(
                 egui::DragValue::new(&mut s.chamfer_distance)
                     .speed(0.05)
                     .range(0.001..=1000.0),
-            );
+            )
+            .labelled_by(__mtlbl46.id);
         });
         ui.horizontal(|ui| {
-            ui.label("Edge angle threshold (deg):");
+            let __mtlbl47 = ui.label("Edge angle threshold (deg):");
             ui.add(
                 egui::DragValue::new(&mut s.chamfer_threshold_deg)
                     .speed(1.0)
                     .range(0.0..=180.0),
-            );
+            )
+            .labelled_by(__mtlbl47.id);
         });
         ui.horizontal(|ui| {
             ui.label("Edges (BRep only, empty = auto):");
@@ -5751,31 +6023,31 @@ pub fn draw_part_design_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
         });
         if s.hole_depth_mode_idx == 0 {
             ui.horizontal(|ui| {
-                ui.label("Blind depth (mm):");
-                ui.add(egui::DragValue::new(&mut s.hole_blind_depth).speed(0.1).range(0.01..=1000.0));
+                let __mtlbl48 = ui.label("Blind depth (mm):");
+                ui.add(egui::DragValue::new(&mut s.hole_blind_depth).speed(0.1).range(0.01..=1000.0)).labelled_by(__mtlbl48.id);
             });
         }
         ui.horizontal(|ui| {
-            ui.label("Drill diameter (mm):");
-            ui.add(egui::DragValue::new(&mut s.hole_drill_diameter).speed(0.1).range(0.01..=1000.0));
+            let __mtlbl49 = ui.label("Drill diameter (mm):");
+            ui.add(egui::DragValue::new(&mut s.hole_drill_diameter).speed(0.1).range(0.01..=1000.0)).labelled_by(__mtlbl49.id);
         });
         ui.checkbox(&mut s.hole_direction_negative, "Drill downward (-Z)");
         ui.checkbox(&mut s.hole_use_counterbore, "Counterbore");
         if s.hole_use_counterbore {
             ui.horizontal(|ui| {
-                ui.label("  Diameter:");
-                ui.add(egui::DragValue::new(&mut s.hole_counterbore_diameter).speed(0.1));
-                ui.label(" Depth:");
-                ui.add(egui::DragValue::new(&mut s.hole_counterbore_depth).speed(0.1));
+                let __mtlbl50 = ui.label("  Diameter:");
+                ui.add(egui::DragValue::new(&mut s.hole_counterbore_diameter).speed(0.1)).labelled_by(__mtlbl50.id);
+                let __mtlbl51 = ui.label(" Depth:");
+                ui.add(egui::DragValue::new(&mut s.hole_counterbore_depth).speed(0.1)).labelled_by(__mtlbl51.id);
             });
         }
         ui.checkbox(&mut s.hole_use_countersink, "Countersink");
         if s.hole_use_countersink {
             ui.horizontal(|ui| {
-                ui.label("  Diameter:");
-                ui.add(egui::DragValue::new(&mut s.hole_countersink_diameter).speed(0.1));
-                ui.label(" Angle (deg):");
-                ui.add(egui::DragValue::new(&mut s.hole_countersink_angle_deg).speed(1.0).range(10.0..=180.0));
+                let __mtlbl52 = ui.label("  Diameter:");
+                ui.add(egui::DragValue::new(&mut s.hole_countersink_diameter).speed(0.1)).labelled_by(__mtlbl52.id);
+                let __mtlbl53 = ui.label(" Angle (deg):");
+                ui.add(egui::DragValue::new(&mut s.hole_countersink_angle_deg).speed(1.0).range(10.0..=180.0)).labelled_by(__mtlbl53.id);
             });
         }
         ui.checkbox(&mut s.hole_use_thread, "Thread metadata");
@@ -5926,12 +6198,13 @@ pub fn draw_part_design_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             );
         });
         ui.horizontal(|ui| {
-            ui.label("Twist (deg):");
+            let __mtlbl54 = ui.label("Twist (deg):");
             ui.add(
                 egui::DragValue::new(&mut s.sweep_twist_deg)
                     .speed(1.0)
                     .range(-3600.0..=3600.0),
-            );
+            )
+            .labelled_by(__mtlbl54.id);
         });
         ui.checkbox(
             &mut s.sweep_keep_orientation,
@@ -5982,12 +6255,13 @@ pub fn draw_part_design_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             );
         });
         ui.horizontal(|ui| {
-            ui.label("Bend radius (mm, 0 = sharp):");
+            let __mtlbl55 = ui.label("Bend radius (mm, 0 = sharp):");
             ui.add(
                 egui::DragValue::new(&mut s.pipe_bend_radius)
                     .speed(0.05)
                     .range(0.0..=1000.0),
-            );
+            )
+            .labelled_by(__mtlbl55.id);
         });
         if ui.button("Add Pipe").clicked() {
             if s.tree.sketches.len() < 2 {
@@ -6027,62 +6301,71 @@ pub fn draw_part_design_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             );
         });
         ui.horizontal(|ui| {
-            ui.label("Pitch:");
+            let __mtlbl56 = ui.label("Pitch:");
             ui.add(
                 egui::DragValue::new(&mut s.helix_pitch)
                     .speed(0.1)
                     .range(0.001..=10000.0),
-            );
-            ui.label("Turns:");
+            )
+            .labelled_by(__mtlbl56.id);
+            let __mtlbl57 = ui.label("Turns:");
             ui.add(
                 egui::DragValue::new(&mut s.helix_turns)
                     .speed(0.1)
                     .range(0.001..=1000.0),
-            );
+            )
+            .labelled_by(__mtlbl57.id);
         });
         ui.horizontal(|ui| {
-            ui.label("Axis origin");
+            let __mtlbl58 = ui.label("Axis origin");
             ui.add(
                 egui::DragValue::new(&mut s.helix_axis_origin[0])
                     .speed(0.1)
                     .prefix("X "),
-            );
+            )
+            .labelled_by(__mtlbl58.id);
             ui.add(
                 egui::DragValue::new(&mut s.helix_axis_origin[1])
                     .speed(0.1)
                     .prefix("Y "),
-            );
+            )
+            .labelled_by(__mtlbl58.id);
             ui.add(
                 egui::DragValue::new(&mut s.helix_axis_origin[2])
                     .speed(0.1)
                     .prefix("Z "),
-            );
+            )
+            .labelled_by(__mtlbl58.id);
         });
         ui.horizontal(|ui| {
-            ui.label("Axis dir");
+            let __mtlbl59 = ui.label("Axis dir");
             ui.add(
                 egui::DragValue::new(&mut s.helix_axis_direction[0])
                     .speed(0.1)
                     .prefix("X "),
-            );
+            )
+            .labelled_by(__mtlbl59.id);
             ui.add(
                 egui::DragValue::new(&mut s.helix_axis_direction[1])
                     .speed(0.1)
                     .prefix("Y "),
-            );
+            )
+            .labelled_by(__mtlbl59.id);
             ui.add(
                 egui::DragValue::new(&mut s.helix_axis_direction[2])
                     .speed(0.1)
                     .prefix("Z "),
-            );
+            )
+            .labelled_by(__mtlbl59.id);
         });
         ui.horizontal(|ui| {
-            ui.label("Taper (deg):");
+            let __mtlbl60 = ui.label("Taper (deg):");
             ui.add(
                 egui::DragValue::new(&mut s.helix_taper_deg)
                     .speed(0.1)
                     .range(-89.0..=89.0),
-            );
+            )
+            .labelled_by(__mtlbl60.id);
         });
         ui.checkbox(
             &mut s.helix_left_handed,
@@ -6166,30 +6449,34 @@ pub fn draw_part_design_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             ui.text_edit_singleline(&mut s.draft_face_indices_csv);
         });
         ui.horizontal(|ui| {
-            ui.label("Neutral normal");
+            let __mtlbl61 = ui.label("Neutral normal");
             ui.add(
                 egui::DragValue::new(&mut s.draft_neutral_normal[0])
                     .speed(0.05)
                     .prefix("X "),
-            );
+            )
+            .labelled_by(__mtlbl61.id);
             ui.add(
                 egui::DragValue::new(&mut s.draft_neutral_normal[1])
                     .speed(0.05)
                     .prefix("Y "),
-            );
+            )
+            .labelled_by(__mtlbl61.id);
             ui.add(
                 egui::DragValue::new(&mut s.draft_neutral_normal[2])
                     .speed(0.05)
                     .prefix("Z "),
-            );
+            )
+            .labelled_by(__mtlbl61.id);
         });
         ui.horizontal(|ui| {
-            ui.label("Draft angle (deg):");
+            let __mtlbl62 = ui.label("Draft angle (deg):");
             ui.add(
                 egui::DragValue::new(&mut s.draft_angle_deg)
                     .speed(0.5)
                     .range(-89.0..=89.0),
-            );
+            )
+            .labelled_by(__mtlbl62.id);
         });
         if ui.button("Add Draft Angle").clicked() {
             if s.tree.features.is_empty() {
@@ -6234,12 +6521,13 @@ pub fn draw_part_design_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             ui.text_edit_singleline(&mut s.shell_face_indices_csv);
         });
         ui.horizontal(|ui| {
-            ui.label("Thickness:");
+            let __mtlbl63 = ui.label("Thickness:");
             ui.add(
                 egui::DragValue::new(&mut s.shell_thickness)
                     .speed(0.01)
                     .range(0.001..=1000.0),
-            );
+            )
+            .labelled_by(__mtlbl63.id);
         });
         ui.horizontal(|ui| {
             ui.label("Side:");
@@ -6292,20 +6580,22 @@ pub fn draw_part_design_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             );
         });
         ui.horizontal(|ui| {
-            ui.label("Face index:");
+            let __mtlbl64 = ui.label("Face index:");
             ui.add(
                 egui::DragValue::new(&mut s.thickness_face_index)
                     .speed(1.0)
                     .range(0..=100000),
-            );
+            )
+            .labelled_by(__mtlbl64.id);
         });
         ui.horizontal(|ui| {
-            ui.label("Thickness:");
+            let __mtlbl65 = ui.label("Thickness:");
             ui.add(
                 egui::DragValue::new(&mut s.thickness_thickness)
                     .speed(0.01)
                     .range(0.001..=1000.0),
-            );
+            )
+            .labelled_by(__mtlbl65.id);
         });
         if ui.button("Add Thickness").clicked() {
             if s.tree.features.is_empty() {
@@ -7010,12 +7300,13 @@ pub fn draw_draft_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
 
     ui.separator();
     ui.horizontal(|ui| {
-        ui.label("Grid spacing:");
+        let __mtlbl66 = ui.label("Grid spacing:");
         ui.add(
             egui::DragValue::new(&mut s.grid_spacing)
                 .speed(0.1)
                 .range(0.0..=1e6),
-        );
+        )
+        .labelled_by(__mtlbl66.id);
     });
     ui.separator();
 
@@ -7146,9 +7437,11 @@ fn draft_entity_summary(e: &valenx_draft::DraftEntity) -> String {
 
 fn xy_drag(ui: &mut egui::Ui, label: &str, value: &mut [f64; 2]) {
     ui.horizontal(|ui| {
-        ui.label(label);
-        ui.add(egui::DragValue::new(&mut value[0]).speed(0.05).prefix("x "));
-        ui.add(egui::DragValue::new(&mut value[1]).speed(0.05).prefix("y "));
+        let __mtlbl67 = ui.label(label);
+        ui.add(egui::DragValue::new(&mut value[0]).speed(0.05).prefix("x "))
+            .labelled_by(__mtlbl67.id);
+        ui.add(egui::DragValue::new(&mut value[1]).speed(0.05).prefix("y "))
+            .labelled_by(__mtlbl67.id);
     });
 }
 
@@ -7223,18 +7516,21 @@ fn draw_draft_arc_inputs(s: &mut DraftPanelState, ui: &mut egui::Ui) {
     ui.label(egui::RichText::new("Arc").strong());
     xy_drag(ui, "Centre", &mut s.arc_center);
     ui.horizontal(|ui| {
-        ui.label("Radius");
+        let __mtlbl68 = ui.label("Radius");
         ui.add(
             egui::DragValue::new(&mut s.arc_radius)
                 .speed(0.05)
                 .range(0.0..=1e9),
-        );
+        )
+        .labelled_by(__mtlbl68.id);
     });
     ui.horizontal(|ui| {
-        ui.label("Start °");
-        ui.add(egui::DragValue::new(&mut s.arc_start_angle_deg).speed(1.0));
-        ui.label("End °");
-        ui.add(egui::DragValue::new(&mut s.arc_end_angle_deg).speed(1.0));
+        let __mtlbl69 = ui.label("Start °");
+        ui.add(egui::DragValue::new(&mut s.arc_start_angle_deg).speed(1.0))
+            .labelled_by(__mtlbl69.id);
+        let __mtlbl70 = ui.label("End °");
+        ui.add(egui::DragValue::new(&mut s.arc_end_angle_deg).speed(1.0))
+            .labelled_by(__mtlbl70.id);
     });
     if ui.button("Place arc").clicked() {
         if s.arc_radius <= 0.0 {
@@ -7256,12 +7552,13 @@ fn draw_draft_circle_inputs(s: &mut DraftPanelState, ui: &mut egui::Ui) {
     ui.label(egui::RichText::new("Circle").strong());
     xy_drag(ui, "Centre", &mut s.circle_center);
     ui.horizontal(|ui| {
-        ui.label("Radius");
+        let __mtlbl71 = ui.label("Radius");
         ui.add(
             egui::DragValue::new(&mut s.circle_radius)
                 .speed(0.05)
                 .range(0.0..=1e9),
-        );
+        )
+        .labelled_by(__mtlbl71.id);
     });
     if ui.button("Place circle").clicked() {
         if s.circle_radius <= 0.0 {
@@ -7299,18 +7596,20 @@ fn draw_draft_polygon_inputs(s: &mut DraftPanelState, ui: &mut egui::Ui) {
     ui.label(egui::RichText::new("Regular polygon").strong());
     xy_drag(ui, "Centre", &mut s.polygon_center);
     ui.horizontal(|ui| {
-        ui.label("Radius");
+        let __mtlbl72 = ui.label("Radius");
         ui.add(
             egui::DragValue::new(&mut s.polygon_radius)
                 .speed(0.05)
                 .range(0.0..=1e9),
-        );
-        ui.label("Sides");
+        )
+        .labelled_by(__mtlbl72.id);
+        let __mtlbl73 = ui.label("Sides");
         ui.add(
             egui::DragValue::new(&mut s.polygon_sides)
                 .speed(1.0)
                 .range(3..=512),
-        );
+        )
+        .labelled_by(__mtlbl73.id);
     });
     if ui.button("Place polygon").clicked() {
         if s.polygon_radius <= 0.0 {
@@ -7334,8 +7633,9 @@ fn draw_draft_dim_inputs(s: &mut DraftPanelState, ui: &mut egui::Ui) {
     xy_drag(ui, "From", &mut s.dim_from);
     xy_drag(ui, "To", &mut s.dim_to);
     ui.horizontal(|ui| {
-        ui.label("Offset");
-        ui.add(egui::DragValue::new(&mut s.dim_offset).speed(0.05));
+        let __mtlbl74 = ui.label("Offset");
+        ui.add(egui::DragValue::new(&mut s.dim_offset).speed(0.05))
+            .labelled_by(__mtlbl74.id);
     });
     if ui.button("Place dimension").clicked() {
         s.document
@@ -7357,12 +7657,13 @@ fn draw_draft_text_inputs(s: &mut DraftPanelState, ui: &mut egui::Ui) {
         ui.text_edit_singleline(&mut s.text_content);
     });
     ui.horizontal(|ui| {
-        ui.label("Size");
+        let __mtlbl75 = ui.label("Size");
         ui.add(
             egui::DragValue::new(&mut s.text_size)
                 .speed(0.05)
                 .range(0.0..=1e6),
-        );
+        )
+        .labelled_by(__mtlbl75.id);
     });
     if ui.button("Place text").clicked() {
         if s.text_content.is_empty() {
@@ -7470,29 +7771,32 @@ pub fn draw_techdraw_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     // ----- Add View buttons -----
     ui.label(egui::RichText::new("Add view").strong());
     ui.horizontal(|ui| {
-        ui.label("Pos:")
+        let __mtlbl76 = ui.label("Pos:")
             .on_hover_text("Sheet-space position (mm) where the new view is anchored. Origin is the sheet's bottom-left corner.");
         ui.add(
             egui::DragValue::new(&mut s.new_view_position[0])
                 .speed(1.0)
                 .prefix("x "),
         )
+        .labelled_by(__mtlbl76.id)
         .on_hover_text("View anchor X (mm, sheet-space).");
         ui.add(
             egui::DragValue::new(&mut s.new_view_position[1])
                 .speed(1.0)
                 .prefix("y "),
         )
+        .labelled_by(__mtlbl76.id)
         .on_hover_text("View anchor Y (mm, sheet-space).");
     });
     ui.horizontal(|ui| {
-        ui.label("Scale:")
+        let __mtlbl77 = ui.label("Scale:")
             .on_hover_text("View magnification. 1.0 = 1:1, 0.5 = 1:2, 2.0 = 2:1, etc.");
         ui.add(
             egui::DragValue::new(&mut s.new_view_scale)
                 .speed(0.05)
                 .range(0.01..=100.0),
         )
+        .labelled_by(__mtlbl77.id)
         .on_hover_text("View scale factor (0.01..100).");
         // Task 4 — parametric checkbox toggling auto-update.
         ui.checkbox(&mut s.new_view_parametric, "Parametric (auto-update)")
@@ -7619,28 +7923,31 @@ pub fn draw_techdraw_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     }
     if let Some(idx) = s.selected_view {
         ui.horizontal(|ui| {
-            ui.label("Scale:");
+            let __mtlbl78 = ui.label("Scale:");
             if let Ok(v) = s.drawing.get_view_mut(idx) {
                 ui.add(
                     egui::DragValue::new(&mut v.scale)
                         .speed(0.05)
                         .range(0.01..=100.0),
-                );
+                )
+                .labelled_by(__mtlbl78.id);
             }
         });
         ui.horizontal(|ui| {
-            ui.label("Position:");
+            let __mtlbl79 = ui.label("Position:");
             if let Ok(v) = s.drawing.get_view_mut(idx) {
                 ui.add(
                     egui::DragValue::new(&mut v.position[0])
                         .speed(1.0)
                         .prefix("x "),
-                );
+                )
+                .labelled_by(__mtlbl79.id);
                 ui.add(
                     egui::DragValue::new(&mut v.position[1])
                         .speed(1.0)
                         .prefix("y "),
-                );
+                )
+                .labelled_by(__mtlbl79.id);
             }
         });
         ui.horizontal(|ui| {
@@ -7688,41 +7995,47 @@ pub fn draw_techdraw_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     // ----- Add Linear Dimension -----
     ui.label(egui::RichText::new("Add linear dimension").strong());
     ui.horizontal(|ui| {
-        ui.label("From:")
+        let __mtlbl80 = ui
+            .label("From:")
             .on_hover_text("Sheet-space start point of the dimension witness line.");
         ui.add(
             egui::DragValue::new(&mut s.dim_from[0])
                 .speed(1.0)
                 .prefix("x "),
         )
+        .labelled_by(__mtlbl80.id)
         .on_hover_text("From X (mm, sheet-space).");
         ui.add(
             egui::DragValue::new(&mut s.dim_from[1])
                 .speed(1.0)
                 .prefix("y "),
         )
+        .labelled_by(__mtlbl80.id)
         .on_hover_text("From Y (mm, sheet-space).");
     });
     ui.horizontal(|ui| {
-        ui.label("To:")
+        let __mtlbl81 = ui
+            .label("To:")
             .on_hover_text("Sheet-space end point of the dimension witness line.");
         ui.add(
             egui::DragValue::new(&mut s.dim_to[0])
                 .speed(1.0)
                 .prefix("x "),
         )
+        .labelled_by(__mtlbl81.id)
         .on_hover_text("To X (mm, sheet-space).");
         ui.add(
             egui::DragValue::new(&mut s.dim_to[1])
                 .speed(1.0)
                 .prefix("y "),
         )
+        .labelled_by(__mtlbl81.id)
         .on_hover_text("To Y (mm, sheet-space).");
     });
     ui.horizontal(|ui| {
-        ui.label("Offset:")
+        let __mtlbl82 = ui.label("Offset:")
             .on_hover_text("Perpendicular distance from the witness baseline to the dimension line. Positive = above/right.");
-        ui.add(egui::DragValue::new(&mut s.dim_offset).speed(0.5))
+        ui.add(egui::DragValue::new(&mut s.dim_offset).speed(0.5)).labelled_by(__mtlbl82.id)
             .on_hover_text("Dim line offset (mm).");
         if ui.button("Add dimension")
             .on_hover_text("Add a linear dimension between From and To with the chosen offset.")
@@ -7783,7 +8096,7 @@ pub fn draw_techdraw_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     // ----- Phase 18B: Dim chain -----
     ui.label(egui::RichText::new("Auto-dim chain (Phase 18B)").strong());
     ui.horizontal(|ui| {
-        ui.label("Kind:")
+        let __mtlbl83 = ui.label("Kind:")
             .on_hover_text("Dimension chain style: Ordinate = all measurements from one origin; Baseline = stacked offsets from baseline; Chain = end-to-end consecutive segments.");
         egui::ComboBox::from_id_source("techdraw_dim_chain_kind")
             .selected_text(s.chain_kind.label())
@@ -7806,6 +8119,7 @@ pub fn draw_techdraw_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                 .speed(0.5)
                 .prefix("offset "),
         )
+        .labelled_by(__mtlbl83.id)
         .on_hover_text("Distance from the entries baseline to the dimension line stack.");
     });
     ui.horizontal(|ui| {
@@ -7847,23 +8161,26 @@ pub fn draw_techdraw_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     // ----- Phase 18C: Balloons + Leaders -----
     ui.label(egui::RichText::new("Balloons + leaders (Phase 18C)").strong());
     ui.horizontal(|ui| {
-        ui.label("Balloon pos:")
+        let __mtlbl84 = ui
+            .label("Balloon pos:")
             .on_hover_text("Sheet-space position of the balloon shape (the labelled bubble).");
         ui.add(
             egui::DragValue::new(&mut s.balloon_position[0])
                 .speed(1.0)
                 .prefix("x "),
         )
+        .labelled_by(__mtlbl84.id)
         .on_hover_text("Balloon X (mm).");
         ui.add(
             egui::DragValue::new(&mut s.balloon_position[1])
                 .speed(1.0)
                 .prefix("y "),
         )
+        .labelled_by(__mtlbl84.id)
         .on_hover_text("Balloon Y (mm).");
     });
     ui.horizontal(|ui| {
-        ui.label("Target:").on_hover_text(
+        let __mtlbl85 = ui.label("Target:").on_hover_text(
             "Sheet-space point the balloon's leader arrow points to (the part being labelled).",
         );
         ui.add(
@@ -7871,12 +8188,14 @@ pub fn draw_techdraw_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                 .speed(1.0)
                 .prefix("x "),
         )
+        .labelled_by(__mtlbl85.id)
         .on_hover_text("Target X (mm).");
         ui.add(
             egui::DragValue::new(&mut s.balloon_target[1])
                 .speed(1.0)
                 .prefix("y "),
         )
+        .labelled_by(__mtlbl85.id)
         .on_hover_text("Target Y (mm).");
     });
     ui.horizontal(|ui| {
@@ -7925,35 +8244,41 @@ pub fn draw_techdraw_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     ui.label(format!("Balloons: {}", s.drawing.balloons.len()));
 
     ui.horizontal(|ui| {
-        ui.label("Leader start:")
+        let __mtlbl86 = ui
+            .label("Leader start:")
             .on_hover_text("Sheet-space text-end of the leader (where the callout text sits).");
         ui.add(
             egui::DragValue::new(&mut s.leader_start[0])
                 .speed(1.0)
                 .prefix("x "),
         )
+        .labelled_by(__mtlbl86.id)
         .on_hover_text("Leader text-end X (mm).");
         ui.add(
             egui::DragValue::new(&mut s.leader_start[1])
                 .speed(1.0)
                 .prefix("y "),
         )
+        .labelled_by(__mtlbl86.id)
         .on_hover_text("Leader text-end Y (mm).");
     });
     ui.horizontal(|ui| {
-        ui.label("Leader end:")
+        let __mtlbl87 = ui
+            .label("Leader end:")
             .on_hover_text("Sheet-space arrow-tip end of the leader (what's being pointed at).");
         ui.add(
             egui::DragValue::new(&mut s.leader_end[0])
                 .speed(1.0)
                 .prefix("x "),
         )
+        .labelled_by(__mtlbl87.id)
         .on_hover_text("Leader arrow-tip X (mm).");
         ui.add(
             egui::DragValue::new(&mut s.leader_end[1])
                 .speed(1.0)
                 .prefix("y "),
         )
+        .labelled_by(__mtlbl87.id)
         .on_hover_text("Leader arrow-tip Y (mm).");
     });
     ui.horizontal(|ui| {
@@ -8004,30 +8329,34 @@ pub fn draw_techdraw_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     // ----- Phase 18D: Weld symbols -----
     ui.label(egui::RichText::new("Weld symbol (Phase 18D, ISO 2553)").strong());
     ui.horizontal(|ui| {
-        ui.label("Ref pos:");
+        let __mtlbl88 = ui.label("Ref pos:");
         ui.add(
             egui::DragValue::new(&mut s.weld_position[0])
                 .speed(1.0)
                 .prefix("x "),
-        );
+        )
+        .labelled_by(__mtlbl88.id);
         ui.add(
             egui::DragValue::new(&mut s.weld_position[1])
                 .speed(1.0)
                 .prefix("y "),
-        );
+        )
+        .labelled_by(__mtlbl88.id);
     });
     ui.horizontal(|ui| {
-        ui.label("Arrow target:");
+        let __mtlbl89 = ui.label("Arrow target:");
         ui.add(
             egui::DragValue::new(&mut s.weld_target[0])
                 .speed(1.0)
                 .prefix("x "),
-        );
+        )
+        .labelled_by(__mtlbl89.id);
         ui.add(
             egui::DragValue::new(&mut s.weld_target[1])
                 .speed(1.0)
                 .prefix("y "),
-        );
+        )
+        .labelled_by(__mtlbl89.id);
     });
     ui.horizontal(|ui| {
         ui.label("Type:");
@@ -8088,18 +8417,21 @@ pub fn draw_techdraw_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     // ----- Phase 18E: Surface finish -----
     ui.label(egui::RichText::new("Surface finish (Phase 18E, ISO 1302)").strong());
     ui.horizontal(|ui| {
-        ui.label("Pos:");
+        let __mtlbl90 = ui.label("Pos:");
         ui.add(
             egui::DragValue::new(&mut s.sf_position[0])
                 .speed(1.0)
                 .prefix("x "),
-        );
+        )
+        .labelled_by(__mtlbl90.id);
         ui.add(
             egui::DragValue::new(&mut s.sf_position[1])
                 .speed(1.0)
                 .prefix("y "),
-        );
-        ui.add(egui::DragValue::new(&mut s.sf_ra).speed(0.1).prefix("Ra "));
+        )
+        .labelled_by(__mtlbl90.id);
+        ui.add(egui::DragValue::new(&mut s.sf_ra).speed(0.1).prefix("Ra "))
+            .labelled_by(__mtlbl90.id);
     });
     ui.horizontal(|ui| {
         egui::ComboBox::from_id_source("techdraw_sf_process")
@@ -8145,17 +8477,19 @@ pub fn draw_techdraw_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     // ----- Phase 18F: GD&T feature control frame + datum -----
     ui.label(egui::RichText::new("GD&T (Phase 18F, ASME Y14.5)").strong());
     ui.horizontal(|ui| {
-        ui.label("Pos:");
+        let __mtlbl91 = ui.label("Pos:");
         ui.add(
             egui::DragValue::new(&mut s.gdt_position[0])
                 .speed(1.0)
                 .prefix("x "),
-        );
+        )
+        .labelled_by(__mtlbl91.id);
         ui.add(
             egui::DragValue::new(&mut s.gdt_position[1])
                 .speed(1.0)
                 .prefix("y "),
-        );
+        )
+        .labelled_by(__mtlbl91.id);
     });
     ui.horizontal(|ui| {
         egui::ComboBox::from_id_source("techdraw_gdt_char")
@@ -8224,28 +8558,32 @@ pub fn draw_techdraw_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     ui.label(format!("GD&T frames: {}", s.drawing.gdt.len()));
 
     ui.horizontal(|ui| {
-        ui.label("Datum pos:");
+        let __mtlbl92 = ui.label("Datum pos:");
         ui.add(
             egui::DragValue::new(&mut s.datum_position[0])
                 .speed(1.0)
                 .prefix("x "),
-        );
+        )
+        .labelled_by(__mtlbl92.id);
         ui.add(
             egui::DragValue::new(&mut s.datum_position[1])
                 .speed(1.0)
                 .prefix("y "),
-        );
-        ui.label("Target:");
+        )
+        .labelled_by(__mtlbl92.id);
+        let __mtlbl93 = ui.label("Target:");
         ui.add(
             egui::DragValue::new(&mut s.datum_target[0])
                 .speed(1.0)
                 .prefix("x "),
-        );
+        )
+        .labelled_by(__mtlbl93.id);
         ui.add(
             egui::DragValue::new(&mut s.datum_target[1])
                 .speed(1.0)
                 .prefix("y "),
-        );
+        )
+        .labelled_by(__mtlbl93.id);
         ui.label("Letter:");
         ui.text_edit_singleline(&mut s.datum_letter);
         if ui.button("Add datum").clicked() {
@@ -8410,63 +8748,72 @@ pub fn draw_assembly_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
         match s.new_part_primitive {
             AssemblyPartPrimitive::Box => {
                 ui.horizontal(|ui| {
-                    ui.label("Dims:");
+                    let __mtlbl94 = ui.label("Dims:");
                     ui.add(
                         egui::DragValue::new(&mut s.new_part_box_dims[0])
                             .speed(0.1)
                             .prefix("dx "),
-                    );
+                    )
+                    .labelled_by(__mtlbl94.id);
                     ui.add(
                         egui::DragValue::new(&mut s.new_part_box_dims[1])
                             .speed(0.1)
                             .prefix("dy "),
-                    );
+                    )
+                    .labelled_by(__mtlbl94.id);
                     ui.add(
                         egui::DragValue::new(&mut s.new_part_box_dims[2])
                             .speed(0.1)
                             .prefix("dz "),
-                    );
+                    )
+                    .labelled_by(__mtlbl94.id);
                 });
             }
             AssemblyPartPrimitive::Cylinder => {
                 ui.horizontal(|ui| {
-                    ui.label("R / H:");
+                    let __mtlbl95 = ui.label("R / H:");
                     ui.add(
                         egui::DragValue::new(&mut s.new_part_cyl[0])
                             .speed(0.05)
                             .prefix("r "),
-                    );
+                    )
+                    .labelled_by(__mtlbl95.id);
                     ui.add(
                         egui::DragValue::new(&mut s.new_part_cyl[1])
                             .speed(0.05)
                             .prefix("h "),
-                    );
+                    )
+                    .labelled_by(__mtlbl95.id);
                 });
             }
             AssemblyPartPrimitive::Sphere => {
                 ui.horizontal(|ui| {
-                    ui.label("Radius:");
-                    ui.add(egui::DragValue::new(&mut s.new_part_sphere).speed(0.05));
+                    let __mtlbl96 = ui.label("Radius:");
+                    ui.add(egui::DragValue::new(&mut s.new_part_sphere).speed(0.05))
+                        .labelled_by(__mtlbl96.id);
                 });
             }
         }
         ui.horizontal(|ui| {
-            ui.label("Initial position:");
+            let __mtlbl97 = ui.label("Initial position:");
             ui.add(
                 egui::DragValue::new(&mut s.new_part_translation[0])
                     .speed(0.1)
                     .prefix("x "),
-            );
+            )
+            .labelled_by(__mtlbl97.id);
             ui.add(
                 egui::DragValue::new(&mut s.new_part_translation[1])
                     .speed(0.1)
                     .prefix("y "),
-            );
+            )
+            .labelled_by(__mtlbl97.id);
             ui.add(
                 egui::DragValue::new(&mut s.new_part_translation[2])
                     .speed(0.1)
                     .prefix("z "),
-            );
+            )
+            .labelled_by(__mtlbl97.id);
         });
     }
     let mut add_part_clicked = false;
@@ -8633,57 +8980,68 @@ pub fn draw_assembly_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                 }
             });
         ui.horizontal(|ui| {
-            ui.label("Part A id:")
+            let __mtlbl98 = ui
+                .label("Part A id:")
                 .on_hover_text("Numeric id of the first part participating in the mate.");
             ui.add(egui::DragValue::new(&mut s.mate_part_a).speed(1.0))
+                .labelled_by(__mtlbl98.id)
                 .on_hover_text("Part A id (matches the scene-tree entry).");
-            ui.label("Part B id:")
+            let __mtlbl99 = ui
+                .label("Part B id:")
                 .on_hover_text("Numeric id of the second part.");
             ui.add(egui::DragValue::new(&mut s.mate_part_b).speed(1.0))
+                .labelled_by(__mtlbl99.id)
                 .on_hover_text("Part B id.");
         });
         match s.mate_kind {
             AssemblyMateKindUi::Coincident | AssemblyMateKindUi::Distance => {
                 ui.horizontal(|ui| {
-                    ui.label("Point A:");
+                    let __mtlbl100 = ui.label("Point A:");
                     ui.add(
                         egui::DragValue::new(&mut s.mate_point_a[0])
                             .speed(0.05)
                             .prefix("x "),
-                    );
+                    )
+                    .labelled_by(__mtlbl100.id);
                     ui.add(
                         egui::DragValue::new(&mut s.mate_point_a[1])
                             .speed(0.05)
                             .prefix("y "),
-                    );
+                    )
+                    .labelled_by(__mtlbl100.id);
                     ui.add(
                         egui::DragValue::new(&mut s.mate_point_a[2])
                             .speed(0.05)
                             .prefix("z "),
-                    );
+                    )
+                    .labelled_by(__mtlbl100.id);
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Point B:");
+                    let __mtlbl101 = ui.label("Point B:");
                     ui.add(
                         egui::DragValue::new(&mut s.mate_point_b[0])
                             .speed(0.05)
                             .prefix("x "),
-                    );
+                    )
+                    .labelled_by(__mtlbl101.id);
                     ui.add(
                         egui::DragValue::new(&mut s.mate_point_b[1])
                             .speed(0.05)
                             .prefix("y "),
-                    );
+                    )
+                    .labelled_by(__mtlbl101.id);
                     ui.add(
                         egui::DragValue::new(&mut s.mate_point_b[2])
                             .speed(0.05)
                             .prefix("z "),
-                    );
+                    )
+                    .labelled_by(__mtlbl101.id);
                 });
                 if matches!(s.mate_kind, AssemblyMateKindUi::Distance) {
                     ui.horizontal(|ui| {
-                        ui.label("Distance:");
-                        ui.add(egui::DragValue::new(&mut s.mate_target).speed(0.1));
+                        let __mtlbl102 = ui.label("Distance:");
+                        ui.add(egui::DragValue::new(&mut s.mate_target).speed(0.1))
+                            .labelled_by(__mtlbl102.id);
                     });
                 }
             }
@@ -8691,126 +9049,147 @@ pub fn draw_assembly_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             | AssemblyMateKindUi::Parallel
             | AssemblyMateKindUi::Perpendicular => {
                 ui.horizontal(|ui| {
-                    ui.label("Vec A:");
+                    let __mtlbl103 = ui.label("Vec A:");
                     ui.add(
                         egui::DragValue::new(&mut s.mate_vec_a[0])
                             .speed(0.05)
                             .prefix("x "),
-                    );
+                    )
+                    .labelled_by(__mtlbl103.id);
                     ui.add(
                         egui::DragValue::new(&mut s.mate_vec_a[1])
                             .speed(0.05)
                             .prefix("y "),
-                    );
+                    )
+                    .labelled_by(__mtlbl103.id);
                     ui.add(
                         egui::DragValue::new(&mut s.mate_vec_a[2])
                             .speed(0.05)
                             .prefix("z "),
-                    );
+                    )
+                    .labelled_by(__mtlbl103.id);
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Vec B:");
+                    let __mtlbl104 = ui.label("Vec B:");
                     ui.add(
                         egui::DragValue::new(&mut s.mate_vec_b[0])
                             .speed(0.05)
                             .prefix("x "),
-                    );
+                    )
+                    .labelled_by(__mtlbl104.id);
                     ui.add(
                         egui::DragValue::new(&mut s.mate_vec_b[1])
                             .speed(0.05)
                             .prefix("y "),
-                    );
+                    )
+                    .labelled_by(__mtlbl104.id);
                     ui.add(
                         egui::DragValue::new(&mut s.mate_vec_b[2])
                             .speed(0.05)
                             .prefix("z "),
-                    );
+                    )
+                    .labelled_by(__mtlbl104.id);
                 });
                 if matches!(s.mate_kind, AssemblyMateKindUi::Angle) {
                     ui.horizontal(|ui| {
-                        ui.label("Angle (rad):");
-                        ui.add(egui::DragValue::new(&mut s.mate_target).speed(0.05));
+                        let __mtlbl105 = ui.label("Angle (rad):");
+                        ui.add(egui::DragValue::new(&mut s.mate_target).speed(0.05))
+                            .labelled_by(__mtlbl105.id);
                     });
                 }
             }
             AssemblyMateKindUi::Tangent => {
                 ui.horizontal(|ui| {
-                    ui.label("Axis A origin:");
+                    let __mtlbl106 = ui.label("Axis A origin:");
                     ui.add(
                         egui::DragValue::new(&mut s.mate_point_a[0])
                             .speed(0.05)
                             .prefix("x "),
-                    );
+                    )
+                    .labelled_by(__mtlbl106.id);
                     ui.add(
                         egui::DragValue::new(&mut s.mate_point_a[1])
                             .speed(0.05)
                             .prefix("y "),
-                    );
+                    )
+                    .labelled_by(__mtlbl106.id);
                     ui.add(
                         egui::DragValue::new(&mut s.mate_point_a[2])
                             .speed(0.05)
                             .prefix("z "),
-                    );
+                    )
+                    .labelled_by(__mtlbl106.id);
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Axis A dir:");
+                    let __mtlbl107 = ui.label("Axis A dir:");
                     ui.add(
                         egui::DragValue::new(&mut s.mate_vec_a[0])
                             .speed(0.05)
                             .prefix("x "),
-                    );
+                    )
+                    .labelled_by(__mtlbl107.id);
                     ui.add(
                         egui::DragValue::new(&mut s.mate_vec_a[1])
                             .speed(0.05)
                             .prefix("y "),
-                    );
+                    )
+                    .labelled_by(__mtlbl107.id);
                     ui.add(
                         egui::DragValue::new(&mut s.mate_vec_a[2])
                             .speed(0.05)
                             .prefix("z "),
-                    );
+                    )
+                    .labelled_by(__mtlbl107.id);
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Axis B origin:");
+                    let __mtlbl108 = ui.label("Axis B origin:");
                     ui.add(
                         egui::DragValue::new(&mut s.mate_point_b[0])
                             .speed(0.05)
                             .prefix("x "),
-                    );
+                    )
+                    .labelled_by(__mtlbl108.id);
                     ui.add(
                         egui::DragValue::new(&mut s.mate_point_b[1])
                             .speed(0.05)
                             .prefix("y "),
-                    );
+                    )
+                    .labelled_by(__mtlbl108.id);
                     ui.add(
                         egui::DragValue::new(&mut s.mate_point_b[2])
                             .speed(0.05)
                             .prefix("z "),
-                    );
+                    )
+                    .labelled_by(__mtlbl108.id);
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Axis B dir:");
+                    let __mtlbl109 = ui.label("Axis B dir:");
                     ui.add(
                         egui::DragValue::new(&mut s.mate_vec_b[0])
                             .speed(0.05)
                             .prefix("x "),
-                    );
+                    )
+                    .labelled_by(__mtlbl109.id);
                     ui.add(
                         egui::DragValue::new(&mut s.mate_vec_b[1])
                             .speed(0.05)
                             .prefix("y "),
-                    );
+                    )
+                    .labelled_by(__mtlbl109.id);
                     ui.add(
                         egui::DragValue::new(&mut s.mate_vec_b[2])
                             .speed(0.05)
                             .prefix("z "),
-                    );
+                    )
+                    .labelled_by(__mtlbl109.id);
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Radius A:");
-                    ui.add(egui::DragValue::new(&mut s.mate_radius_a).speed(0.05));
-                    ui.label("Radius B:");
-                    ui.add(egui::DragValue::new(&mut s.mate_radius_b).speed(0.05));
+                    let __mtlbl110 = ui.label("Radius A:");
+                    ui.add(egui::DragValue::new(&mut s.mate_radius_a).speed(0.05))
+                        .labelled_by(__mtlbl110.id);
+                    let __mtlbl111 = ui.label("Radius B:");
+                    ui.add(egui::DragValue::new(&mut s.mate_radius_b).speed(0.05))
+                        .labelled_by(__mtlbl111.id);
                 });
             }
         }
@@ -8944,13 +9323,17 @@ pub fn draw_assembly_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                 }
             });
         ui.horizontal(|ui| {
-            ui.label("Part A id:")
+            let __mtlbl112 = ui
+                .label("Part A id:")
                 .on_hover_text("Numeric id of the first part joined.");
             ui.add(egui::DragValue::new(&mut s.joint_part_a).speed(1.0))
+                .labelled_by(__mtlbl112.id)
                 .on_hover_text("Part A id.");
-            ui.label("Part B id:")
+            let __mtlbl113 = ui
+                .label("Part B id:")
                 .on_hover_text("Numeric id of the second part joined.");
             ui.add(egui::DragValue::new(&mut s.joint_part_b).speed(1.0))
+                .labelled_by(__mtlbl113.id)
                 .on_hover_text("Part B id.");
         });
         match s.joint_kind {
@@ -8959,118 +9342,136 @@ pub fn draw_assembly_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             }
             AssemblyJointKindUi::Revolute | AssemblyJointKindUi::Cylindrical => {
                 ui.horizontal(|ui| {
-                    ui.label("Axis origin:");
+                    let __mtlbl114 = ui.label("Axis origin:");
                     ui.add(
                         egui::DragValue::new(&mut s.joint_axis_origin[0])
                             .speed(0.05)
                             .prefix("x "),
-                    );
+                    )
+                    .labelled_by(__mtlbl114.id);
                     ui.add(
                         egui::DragValue::new(&mut s.joint_axis_origin[1])
                             .speed(0.05)
                             .prefix("y "),
-                    );
+                    )
+                    .labelled_by(__mtlbl114.id);
                     ui.add(
                         egui::DragValue::new(&mut s.joint_axis_origin[2])
                             .speed(0.05)
                             .prefix("z "),
-                    );
+                    )
+                    .labelled_by(__mtlbl114.id);
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Axis dir:");
+                    let __mtlbl115 = ui.label("Axis dir:");
                     ui.add(
                         egui::DragValue::new(&mut s.joint_axis_dir[0])
                             .speed(0.05)
                             .prefix("x "),
-                    );
+                    )
+                    .labelled_by(__mtlbl115.id);
                     ui.add(
                         egui::DragValue::new(&mut s.joint_axis_dir[1])
                             .speed(0.05)
                             .prefix("y "),
-                    );
+                    )
+                    .labelled_by(__mtlbl115.id);
                     ui.add(
                         egui::DragValue::new(&mut s.joint_axis_dir[2])
                             .speed(0.05)
                             .prefix("z "),
-                    );
+                    )
+                    .labelled_by(__mtlbl115.id);
                 });
             }
             AssemblyJointKindUi::Prismatic => {
                 ui.horizontal(|ui| {
-                    ui.label("Slide axis:");
+                    let __mtlbl116 = ui.label("Slide axis:");
                     ui.add(
                         egui::DragValue::new(&mut s.joint_axis_dir[0])
                             .speed(0.05)
                             .prefix("x "),
-                    );
+                    )
+                    .labelled_by(__mtlbl116.id);
                     ui.add(
                         egui::DragValue::new(&mut s.joint_axis_dir[1])
                             .speed(0.05)
                             .prefix("y "),
-                    );
+                    )
+                    .labelled_by(__mtlbl116.id);
                     ui.add(
                         egui::DragValue::new(&mut s.joint_axis_dir[2])
                             .speed(0.05)
                             .prefix("z "),
-                    );
+                    )
+                    .labelled_by(__mtlbl116.id);
                 });
             }
             AssemblyJointKindUi::Spherical => {
                 ui.horizontal(|ui| {
-                    ui.label("Pivot:");
+                    let __mtlbl117 = ui.label("Pivot:");
                     ui.add(
                         egui::DragValue::new(&mut s.joint_point[0])
                             .speed(0.05)
                             .prefix("x "),
-                    );
+                    )
+                    .labelled_by(__mtlbl117.id);
                     ui.add(
                         egui::DragValue::new(&mut s.joint_point[1])
                             .speed(0.05)
                             .prefix("y "),
-                    );
+                    )
+                    .labelled_by(__mtlbl117.id);
                     ui.add(
                         egui::DragValue::new(&mut s.joint_point[2])
                             .speed(0.05)
                             .prefix("z "),
-                    );
+                    )
+                    .labelled_by(__mtlbl117.id);
                 });
             }
             AssemblyJointKindUi::Planar => {
                 ui.horizontal(|ui| {
-                    ui.label("Plane origin:");
+                    let __mtlbl118 = ui.label("Plane origin:");
                     ui.add(
                         egui::DragValue::new(&mut s.joint_plane_origin[0])
                             .speed(0.05)
                             .prefix("x "),
-                    );
+                    )
+                    .labelled_by(__mtlbl118.id);
                     ui.add(
                         egui::DragValue::new(&mut s.joint_plane_origin[1])
                             .speed(0.05)
                             .prefix("y "),
-                    );
+                    )
+                    .labelled_by(__mtlbl118.id);
                     ui.add(
                         egui::DragValue::new(&mut s.joint_plane_origin[2])
                             .speed(0.05)
                             .prefix("z "),
-                    );
+                    )
+                    .labelled_by(__mtlbl118.id);
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Plane normal:");
+                    let __mtlbl119 = ui.label("Plane normal:");
                     ui.add(
                         egui::DragValue::new(&mut s.joint_plane_normal[0])
                             .speed(0.05)
                             .prefix("x "),
-                    );
+                    )
+                    .labelled_by(__mtlbl119.id);
                     ui.add(
                         egui::DragValue::new(&mut s.joint_plane_normal[1])
                             .speed(0.05)
                             .prefix("y "),
-                    );
+                    )
+                    .labelled_by(__mtlbl119.id);
                     ui.add(
                         egui::DragValue::new(&mut s.joint_plane_normal[2])
                             .speed(0.05)
                             .prefix("z "),
-                    );
+                    )
+                    .labelled_by(__mtlbl119.id);
                 });
             }
         }
@@ -10695,18 +11096,20 @@ fn draw_cam_animation(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     ui.label(egui::RichText::new("Simulation animation").strong());
     let s = &mut app.mesh_toolbox.cam;
     ui.horizontal(|ui| {
-        ui.label("Voxel resolution:");
+        let __mtlbl120 = ui.label("Voxel resolution:");
         ui.add(
             egui::DragValue::new(&mut s.animation_resolution)
                 .range(8u32..=256)
                 .speed(1.0),
-        );
-        ui.label("Frames:");
+        )
+        .labelled_by(__mtlbl120.id);
+        let __mtlbl121 = ui.label("Frames:");
         ui.add(
             egui::DragValue::new(&mut s.animation_n_frames)
                 .range(1u32..=128)
                 .speed(0.5),
-        );
+        )
+        .labelled_by(__mtlbl121.id);
     });
     if ui.button("Animate (voxel sim)").clicked() {
         app.cam_animate();
@@ -10759,37 +11162,43 @@ fn draw_cam_fixture(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
         let mut remove_idx: Option<usize> = None;
         for (i, f) in s.fixture.aabbs.iter_mut().enumerate() {
             ui.horizontal(|ui| {
-                ui.label(format!("#{i} {}: ", f.label));
+                let __mtlbl122 = ui.label(format!("#{i} {}: ", f.label));
                 ui.add(
                     egui::DragValue::new(&mut f.min.x)
                         .speed(0.5)
                         .prefix("xmin "),
-                );
+                )
+                .labelled_by(__mtlbl122.id);
                 ui.add(
                     egui::DragValue::new(&mut f.max.x)
                         .speed(0.5)
                         .prefix("xmax "),
-                );
+                )
+                .labelled_by(__mtlbl122.id);
                 ui.add(
                     egui::DragValue::new(&mut f.min.y)
                         .speed(0.5)
                         .prefix("ymin "),
-                );
+                )
+                .labelled_by(__mtlbl122.id);
                 ui.add(
                     egui::DragValue::new(&mut f.max.y)
                         .speed(0.5)
                         .prefix("ymax "),
-                );
+                )
+                .labelled_by(__mtlbl122.id);
                 ui.add(
                     egui::DragValue::new(&mut f.min.z)
                         .speed(0.5)
                         .prefix("zmin "),
-                );
+                )
+                .labelled_by(__mtlbl122.id);
                 ui.add(
                     egui::DragValue::new(&mut f.max.z)
                         .speed(0.5)
                         .prefix("zmax "),
-                );
+                )
+                .labelled_by(__mtlbl122.id);
                 if ui.small_button("Delete").clicked() {
                     remove_idx = Some(i);
                 }
@@ -10835,24 +11244,26 @@ fn draw_cam_stock(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     ui.label(egui::RichText::new("Stock").strong());
     let s = &mut app.mesh_toolbox.cam;
     ui.horizontal(|ui| {
-        ui.label("Origin:");
+        let __mtlbl123 = ui.label("Origin:");
         for (i, axis) in ["x", "y", "z"].iter().enumerate() {
             ui.add(
                 egui::DragValue::new(&mut s.stock_origin[i])
                     .speed(0.5)
                     .prefix(format!("{axis} ")),
-            );
+            )
+            .labelled_by(__mtlbl123.id);
         }
     });
     ui.horizontal(|ui| {
-        ui.label("Size:");
+        let __mtlbl124 = ui.label("Size:");
         for (i, axis) in ["x", "y", "z"].iter().enumerate() {
             ui.add(
                 egui::DragValue::new(&mut s.stock_size[i])
                     .speed(0.5)
                     .prefix(format!("{axis} "))
                     .range(0.001..=10000.0),
-            );
+            )
+            .labelled_by(__mtlbl124.id);
         }
     });
     ui.horizontal(|ui| {
@@ -10905,30 +11316,33 @@ fn draw_cam_tool_table(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             }
         });
         ui.horizontal(|ui| {
-            ui.label("Diameter:");
+            let __mtlbl125 = ui.label("Diameter:");
             ui.add(
                 egui::DragValue::new(&mut s.new_tool_diameter)
                     .range(0.01..=200.0)
                     .speed(0.1)
                     .suffix(" mm"),
-            );
+            )
+            .labelled_by(__mtlbl125.id);
         });
         ui.horizontal(|ui| {
-            ui.label("Length:");
+            let __mtlbl126 = ui.label("Length:");
             ui.add(
                 egui::DragValue::new(&mut s.new_tool_length)
                     .range(0.1..=500.0)
                     .speed(0.5)
                     .suffix(" mm"),
-            );
+            )
+            .labelled_by(__mtlbl126.id);
         });
         ui.horizontal(|ui| {
-            ui.label("Flutes:");
+            let __mtlbl127 = ui.label("Flutes:");
             ui.add(
                 egui::DragValue::new(&mut s.new_tool_flutes)
                     .range(1u32..=12)
                     .speed(0.05),
-            );
+            )
+            .labelled_by(__mtlbl127.id);
         });
         ui.horizontal(|ui| {
             ui.label("Material:");
@@ -10991,27 +11405,29 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             }
         });
         ui.horizontal(|ui| {
-            ui.label("Tool id:")
+            let __mtlbl128 = ui.label("Tool id:")
                 .on_hover_text("Which tool from the tools table to use. Each operation references a tool by T-number.");
             ui.add(
                 egui::DragValue::new(&mut s.new_op_tool_id)
                     .range(1u32..=999)
                     .speed(0.05),
             )
+            .labelled_by(__mtlbl128.id)
             .on_hover_text("Tool T-number (1..999).");
         });
         ui.horizontal(|ui| {
-            ui.label("Spindle RPM:")
+            let __mtlbl129 = ui.label("Spindle RPM:")
                 .on_hover_text("Spindle rotation speed in revolutions per minute. Picked from tool + material recommendations.");
             ui.add(
                 egui::DragValue::new(&mut s.new_op_spindle_rpm)
                     .range(100.0..=60000.0)
                     .speed(50.0),
             )
+            .labelled_by(__mtlbl129.id)
             .on_hover_text("Spindle RPM (rev/min).");
         });
         ui.horizontal(|ui| {
-            ui.label("Feed:")
+            let __mtlbl130 = ui.label("Feed:")
                 .on_hover_text("Cutting feedrate — XY motion speed when the tool is engaged.");
             ui.add(
                 egui::DragValue::new(&mut s.new_op_feed)
@@ -11019,8 +11435,9 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                     .speed(10.0)
                     .suffix(" mm/min"),
             )
+            .labelled_by(__mtlbl130.id)
             .on_hover_text("Cutting feedrate (mm/min).");
-            ui.label("Plunge feed:")
+            let __mtlbl131 = ui.label("Plunge feed:")
                 .on_hover_text("Z-axis plunge speed when entering material. Typically 30–50% of XY feed.");
             ui.add(
                 egui::DragValue::new(&mut s.new_op_plunge_feed)
@@ -11028,10 +11445,11 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                     .speed(10.0)
                     .suffix(" mm/min"),
             )
+            .labelled_by(__mtlbl131.id)
             .on_hover_text("Plunge feedrate (mm/min).");
         });
         ui.horizontal(|ui| {
-            ui.label("Safe Z:")
+            let __mtlbl132 = ui.label("Safe Z:")
                 .on_hover_text("Retract height above the stock — must clear every fixture / clamp.");
             ui.add(
                 egui::DragValue::new(&mut s.new_op_safe_z)
@@ -11039,12 +11457,13 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                     .speed(0.1)
                     .suffix(" mm"),
             )
+            .labelled_by(__mtlbl132.id)
             .on_hover_text("Safe Z height above stock (mm).");
         });
         match s.new_op_kind {
             CamOpKind::Profile => {
                 ui.horizontal(|ui| {
-                    ui.label("Step down:")
+                    let __mtlbl133 = ui.label("Step down:")
                         .on_hover_text("Z increment per pass. Typical = 50–100% of tool diameter for soft materials, less for hard ones.");
                     ui.add(
                         egui::DragValue::new(&mut s.new_op_step_down)
@@ -11052,8 +11471,9 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                             .speed(0.1)
                             .suffix(" mm"),
                     )
+                    .labelled_by(__mtlbl133.id)
                     .on_hover_text("Axial step-down per pass (mm).");
-                    ui.label("Depth:")
+                    let __mtlbl134 = ui.label("Depth:")
                         .on_hover_text("Total cut depth below the stock top.");
                     ui.add(
                         egui::DragValue::new(&mut s.new_op_depth)
@@ -11061,6 +11481,7 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                             .speed(0.5)
                             .suffix(" mm"),
                     )
+                    .labelled_by(__mtlbl134.id)
                     .on_hover_text("Total depth of cut (mm).");
                 });
                 ui.checkbox(&mut s.new_op_climb, "Climb cut")
@@ -11068,7 +11489,7 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             }
             CamOpKind::Pocket => {
                 ui.horizontal(|ui| {
-                    ui.label("Step down:")
+                    let __mtlbl135 = ui.label("Step down:")
                         .on_hover_text("Z increment per pass — 50–100% of tool diameter for soft material, less for hard.");
                     ui.add(
                         egui::DragValue::new(&mut s.new_op_step_down)
@@ -11076,8 +11497,9 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                             .speed(0.1)
                             .suffix(" mm"),
                     )
+                    .labelled_by(__mtlbl135.id)
                     .on_hover_text("Axial step-down per pass (mm).");
-                    ui.label("Step over:")
+                    let __mtlbl136 = ui.label("Step over:")
                         .on_hover_text("XY step between adjacent passes — typically 40–80% of tool diameter.");
                     ui.add(
                         egui::DragValue::new(&mut s.new_op_step_over)
@@ -11085,10 +11507,11 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                             .speed(0.1)
                             .suffix(" mm"),
                     )
+                    .labelled_by(__mtlbl136.id)
                     .on_hover_text("Radial step-over between passes (mm).");
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Depth:")
+                    let __mtlbl137 = ui.label("Depth:")
                         .on_hover_text("Total pocket depth below the stock top.");
                     ui.add(
                         egui::DragValue::new(&mut s.new_op_depth)
@@ -11096,8 +11519,9 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                             .speed(0.5)
                             .suffix(" mm"),
                     )
+                    .labelled_by(__mtlbl137.id)
                     .on_hover_text("Total depth of cut (mm).");
-                    ui.label("Angle:")
+                    let __mtlbl138 = ui.label("Angle:")
                         .on_hover_text("Raster orientation for zig-zag / parallel strategies. 0 = passes along +X.");
                     ui.add(
                         egui::DragValue::new(&mut s.new_op_raster_angle)
@@ -11105,6 +11529,7 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                             .speed(1.0)
                             .suffix("°"),
                     )
+                    .labelled_by(__mtlbl138.id)
                     .on_hover_text("Raster pass angle in degrees.");
                 });
                 ui.horizontal(|ui| {
@@ -11128,7 +11553,7 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             }
             CamOpKind::Drill => {
                 ui.horizontal(|ui| {
-                    ui.label("Peck depth:")
+                    let __mtlbl139 = ui.label("Peck depth:")
                         .on_hover_text("Z increment per peck. The drill retracts to clear chips between pecks.");
                     ui.add(
                         egui::DragValue::new(&mut s.new_op_peck_depth)
@@ -11136,8 +11561,9 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                             .speed(0.1)
                             .suffix(" mm"),
                     )
+                    .labelled_by(__mtlbl139.id)
                     .on_hover_text("Single peck depth (mm).");
-                    ui.label("Total depth:")
+                    let __mtlbl140 = ui.label("Total depth:")
                         .on_hover_text("Total hole depth from the stock top.");
                     ui.add(
                         egui::DragValue::new(&mut s.new_op_drill_total_depth)
@@ -11145,10 +11571,11 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                             .speed(0.5)
                             .suffix(" mm"),
                     )
+                    .labelled_by(__mtlbl140.id)
                     .on_hover_text("Total drill depth (mm).");
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Retract clearance:")
+                    let __mtlbl141 = ui.label("Retract clearance:")
                         .on_hover_text("How far above the hole the drill retracts between pecks — must clear chip evacuation.");
                     ui.add(
                         egui::DragValue::new(&mut s.new_op_retract_clearance)
@@ -11156,16 +11583,17 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                             .speed(0.1)
                             .suffix(" mm"),
                     )
+                    .labelled_by(__mtlbl141.id)
                     .on_hover_text("Retract clearance above hole (mm).");
                 });
                 ui.collapsing("Hole positions", |ui| {
                     let mut remove_hole: Option<usize> = None;
                     for (j, h) in s.new_op_hole_positions.iter_mut().enumerate() {
                         ui.horizontal(|ui| {
-                            ui.label(format!("#{j}:"));
-                            ui.add(egui::DragValue::new(&mut h[0]).speed(0.5).prefix("x "))
+                            let __mtlbl142 = ui.label(format!("#{j}:"));
+                            ui.add(egui::DragValue::new(&mut h[0]).speed(0.5).prefix("x ")).labelled_by(__mtlbl142.id)
                                 .on_hover_text("Hole centre X (mm, stock coordinates).");
-                            ui.add(egui::DragValue::new(&mut h[1]).speed(0.5).prefix("y "))
+                            ui.add(egui::DragValue::new(&mut h[1]).speed(0.5).prefix("y ")).labelled_by(__mtlbl142.id)
                                 .on_hover_text("Hole centre Y (mm, stock coordinates).");
                             if ui.small_button("Delete").clicked() {
                                 remove_hole = Some(j);
@@ -11182,7 +11610,7 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             }
             CamOpKind::Face => {
                 ui.horizontal(|ui| {
-                    ui.label("Step over:")
+                    let __mtlbl143 = ui.label("Step over:")
                         .on_hover_text("XY step between adjacent face-milling passes — typically 60–80% of cutter diameter.");
                     ui.add(
                         egui::DragValue::new(&mut s.new_op_step_over)
@@ -11190,8 +11618,9 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                             .speed(0.1)
                             .suffix(" mm"),
                     )
+                    .labelled_by(__mtlbl143.id)
                     .on_hover_text("Radial step-over (mm).");
-                    ui.label("Step down:")
+                    let __mtlbl144 = ui.label("Step down:")
                         .on_hover_text("Z increment per pass when facing in multiple passes.");
                     ui.add(
                         egui::DragValue::new(&mut s.new_op_step_down)
@@ -11199,10 +11628,11 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                             .speed(0.1)
                             .suffix(" mm"),
                     )
+                    .labelled_by(__mtlbl144.id)
                     .on_hover_text("Axial step-down per pass (mm).");
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Depth:")
+                    let __mtlbl145 = ui.label("Depth:")
                         .on_hover_text("Total stock removed below the top face.");
                     ui.add(
                         egui::DragValue::new(&mut s.new_op_depth)
@@ -11210,8 +11640,9 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                             .speed(0.5)
                             .suffix(" mm"),
                     )
+                    .labelled_by(__mtlbl145.id)
                     .on_hover_text("Total cut depth (mm).");
-                    ui.label("Angle:")
+                    let __mtlbl146 = ui.label("Angle:")
                         .on_hover_text("Raster orientation. 0 = passes along +X.");
                     ui.add(
                         egui::DragValue::new(&mut s.new_op_raster_angle)
@@ -11219,6 +11650,7 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                             .speed(1.0)
                             .suffix("°"),
                     )
+                    .labelled_by(__mtlbl146.id)
                     .on_hover_text("Raster pass angle in degrees.");
                 });
                 ui.checkbox(&mut s.new_op_climb, "Climb cut")
@@ -11259,25 +11691,27 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                     _ => "Radial step-over between passes (mm).",
                 };
                 ui.horizontal(|ui| {
-                    ui.label("Step down:").on_hover_text(step_down_tt);
+                    let __mtlbl147 = ui.label("Step down:").on_hover_text(step_down_tt);
                     ui.add(
                         egui::DragValue::new(&mut s.new_op_step_down)
                             .range(0.01..=50.0)
                             .speed(0.1)
                             .suffix(" mm"),
                     )
+                    .labelled_by(__mtlbl147.id)
                     .on_hover_text(step_down_tt);
-                    ui.label("Step over:").on_hover_text(step_over_tt);
+                    let __mtlbl148 = ui.label("Step over:").on_hover_text(step_over_tt);
                     ui.add(
                         egui::DragValue::new(&mut s.new_op_step_over)
                             .range(0.01..=50.0)
                             .speed(0.1)
                             .suffix(" mm"),
                     )
+                    .labelled_by(__mtlbl148.id)
                     .on_hover_text(step_over_tt);
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Depth:")
+                    let __mtlbl149 = ui.label("Depth:")
                         .on_hover_text("Total depth of cut below stock top.");
                     ui.add(
                         egui::DragValue::new(&mut s.new_op_depth)
@@ -11285,6 +11719,7 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                             .speed(0.5)
                             .suffix(" mm"),
                     )
+                    .labelled_by(__mtlbl149.id)
                     .on_hover_text("Total operation depth (mm).");
                 });
                 if matches!(s.new_op_kind, CamOpKind::TrochoidalSlot | CamOpKind::Slot) {
@@ -11292,10 +11727,10 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                         let mut remove_pt: Option<usize> = None;
                         for (j, h) in s.new_op_hole_positions.iter_mut().enumerate() {
                             ui.horizontal(|ui| {
-                                ui.label(format!("#{j}:"));
-                                ui.add(egui::DragValue::new(&mut h[0]).speed(0.5).prefix("x "))
+                                let __mtlbl150 = ui.label(format!("#{j}:"));
+                                ui.add(egui::DragValue::new(&mut h[0]).speed(0.5).prefix("x ")).labelled_by(__mtlbl150.id)
                                     .on_hover_text("Slot endpoint X (mm).");
-                                ui.add(egui::DragValue::new(&mut h[1]).speed(0.5).prefix("y "))
+                                ui.add(egui::DragValue::new(&mut h[1]).speed(0.5).prefix("y ")).labelled_by(__mtlbl150.id)
                                     .on_hover_text("Slot endpoint Y (mm).");
                                 if ui.small_button("Delete").clicked() {
                                     remove_pt = Some(j);
@@ -11314,7 +11749,7 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             // Plunge rough + peck drill full reuse the hole-position list.
             CamOpKind::PlungeRough | CamOpKind::PeckDrillFull => {
                 ui.horizontal(|ui| {
-                    ui.label("Depth:")
+                    let __mtlbl151 = ui.label("Depth:")
                         .on_hover_text("Plunge depth below stock top per position.");
                     ui.add(
                         egui::DragValue::new(&mut s.new_op_depth)
@@ -11322,11 +11757,12 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                             .speed(0.5)
                             .suffix(" mm"),
                     )
+                    .labelled_by(__mtlbl151.id)
                     .on_hover_text("Plunge depth (mm).");
                 });
                 if matches!(s.new_op_kind, CamOpKind::PeckDrillFull) {
                     ui.horizontal(|ui| {
-                        ui.label("Peck depth:")
+                        let __mtlbl152 = ui.label("Peck depth:")
                             .on_hover_text("Single-peck Z advance — retract between pecks to clear chips.");
                         ui.add(
                             egui::DragValue::new(&mut s.new_op_peck_depth)
@@ -11334,8 +11770,9 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                                 .speed(0.1)
                                 .suffix(" mm"),
                         )
+                        .labelled_by(__mtlbl152.id)
                         .on_hover_text("Peck depth per cycle (mm).");
-                        ui.label("Total depth:")
+                        let __mtlbl153 = ui.label("Total depth:")
                             .on_hover_text("Total drill depth from the stock top.");
                         ui.add(
                             egui::DragValue::new(&mut s.new_op_drill_total_depth)
@@ -11343,10 +11780,11 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                                 .speed(0.5)
                                 .suffix(" mm"),
                         )
+                        .labelled_by(__mtlbl153.id)
                         .on_hover_text("Total drill depth (mm).");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Retract clearance:")
+                        let __mtlbl154 = ui.label("Retract clearance:")
                             .on_hover_text("Retract height between pecks — large enough to evacuate chips.");
                         ui.add(
                             egui::DragValue::new(&mut s.new_op_retract_clearance)
@@ -11354,6 +11792,7 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                                 .speed(0.1)
                                 .suffix(" mm"),
                         )
+                        .labelled_by(__mtlbl154.id)
                         .on_hover_text("Retract clearance above hole (mm).");
                     });
                 }
@@ -11361,10 +11800,10 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                     let mut remove_pt: Option<usize> = None;
                     for (j, h) in s.new_op_hole_positions.iter_mut().enumerate() {
                         ui.horizontal(|ui| {
-                            ui.label(format!("#{j}:"));
-                            ui.add(egui::DragValue::new(&mut h[0]).speed(0.5).prefix("x "))
+                            let __mtlbl155 = ui.label(format!("#{j}:"));
+                            ui.add(egui::DragValue::new(&mut h[0]).speed(0.5).prefix("x ")).labelled_by(__mtlbl155.id)
                                 .on_hover_text("Position X (mm).");
-                            ui.add(egui::DragValue::new(&mut h[1]).speed(0.5).prefix("y "))
+                            ui.add(egui::DragValue::new(&mut h[1]).speed(0.5).prefix("y ")).labelled_by(__mtlbl155.id)
                                 .on_hover_text("Position Y (mm).");
                             if ui.small_button("Delete").clicked() {
                                 remove_pt = Some(j);
@@ -11392,18 +11831,19 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                     _ => "Operation depth (mm).",
                 };
                 ui.horizontal(|ui| {
-                    ui.label("Depth:").on_hover_text(depth_tt);
+                    let __mtlbl156 = ui.label("Depth:").on_hover_text(depth_tt);
                     ui.add(
                         egui::DragValue::new(&mut s.new_op_depth)
                             .range(0.01..=500.0)
                             .speed(0.5)
                             .suffix(" mm"),
                     )
+                    .labelled_by(__mtlbl156.id)
                     .on_hover_text(depth_tt);
                 });
                 if matches!(s.new_op_kind, CamOpKind::Contour2D) {
                     ui.horizontal(|ui| {
-                        ui.label("Step down:")
+                        let __mtlbl157 = ui.label("Step down:")
                             .on_hover_text("Z increment per contour pass when Depth requires multiple passes.");
                         ui.add(
                             egui::DragValue::new(&mut s.new_op_step_down)
@@ -11411,6 +11851,7 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                                 .speed(0.1)
                                 .suffix(" mm"),
                         )
+                        .labelled_by(__mtlbl157.id)
                         .on_hover_text("Axial step-down per pass (mm).");
                     });
                 }
@@ -11418,12 +11859,12 @@ fn draw_cam_operations(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                     let mut remove_pt: Option<usize> = None;
                     for (j, h) in s.new_op_hole_positions.iter_mut().enumerate() {
                         ui.horizontal(|ui| {
-                            ui.label(format!("#{j}:"));
-                            ui.add(egui::DragValue::new(&mut h[0]).speed(0.5).prefix("x "))
+                            let __mtlbl158 = ui.label(format!("#{j}:"));
+                            ui.add(egui::DragValue::new(&mut h[0]).speed(0.5).prefix("x ")).labelled_by(__mtlbl158.id)
                                 .on_hover_text("Curve point X (mm).");
-                            ui.add(egui::DragValue::new(&mut h[1]).speed(0.5).prefix("y "))
+                            ui.add(egui::DragValue::new(&mut h[1]).speed(0.5).prefix("y ")).labelled_by(__mtlbl158.id)
                                 .on_hover_text("Curve point Y (mm).");
-                            ui.add(egui::DragValue::new(&mut h[2]).speed(0.5).prefix("z "))
+                            ui.add(egui::DragValue::new(&mut h[2]).speed(0.5).prefix("z ")).labelled_by(__mtlbl158.id)
                                 .on_hover_text("Curve point Z (mm). Engrave/scribe usually use 0.");
                             if ui.small_button("Delete").clicked() {
                                 remove_pt = Some(j);
@@ -11637,7 +12078,7 @@ fn draw_surface_curve_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     {
         let s = &mut app.mesh_toolbox.surface;
         ui.horizontal(|ui| {
-            ui.label("Degree:").on_hover_text(
+            let __mtlbl159 = ui.label("Degree:").on_hover_text(
                 "Polynomial degree of the curve. 1 = polyline, 3 = cubic (typical), 5 = quintic.",
             );
             ui.add(
@@ -11645,10 +12086,11 @@ fn draw_surface_curve_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                     .range(1..=9)
                     .speed(0.1),
             )
+            .labelled_by(__mtlbl159.id)
             .on_hover_text("Curve degree (1..9).");
         });
         ui.horizontal(|ui| {
-            ui.label("N control points:").on_hover_text(
+            let __mtlbl160 = ui.label("N control points:").on_hover_text(
                 "Number of control points. Must be > degree. More points = more curvature freedom.",
             );
             ui.add(
@@ -11656,6 +12098,7 @@ fn draw_surface_curve_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                     .range(2..=20)
                     .speed(0.1),
             )
+            .labelled_by(__mtlbl160.id)
             .on_hover_text("Control point count.");
         });
         s.curve_cps.resize(s.curve_n_cps, [0.0, 0.0, 0.0]);
@@ -11663,30 +12106,34 @@ fn draw_surface_curve_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
         ui.collapsing("Control points", |ui| {
             for i in 0..s.curve_n_cps {
                 ui.horizontal(|ui| {
-                    ui.label(format!("#{i}:"));
+                    let __mtlbl161 = ui.label(format!("#{i}:"));
                     ui.add(
                         egui::DragValue::new(&mut s.curve_cps[i][0])
                             .speed(0.05)
                             .prefix("x "),
                     )
+                    .labelled_by(__mtlbl161.id)
                     .on_hover_text("Control point X (model units).");
                     ui.add(
                         egui::DragValue::new(&mut s.curve_cps[i][1])
                             .speed(0.05)
                             .prefix("y "),
                     )
+                    .labelled_by(__mtlbl161.id)
                     .on_hover_text("Control point Y (model units).");
                     ui.add(
                         egui::DragValue::new(&mut s.curve_cps[i][2])
                             .speed(0.05)
                             .prefix("z "),
                     )
+                    .labelled_by(__mtlbl161.id)
                     .on_hover_text("Control point Z (model units).");
                     ui.add(
                         egui::DragValue::new(&mut s.curve_weights[i])
                             .speed(0.05)
                             .prefix("w "),
                     )
+                    .labelled_by(__mtlbl161.id)
                     .on_hover_text("Rational weight — 1.0 = non-rational B-spline. >1 pulls curve toward the point.");
                 });
             }
@@ -11706,25 +12153,29 @@ fn draw_surface_surface_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     {
         let s = &mut app.mesh_toolbox.surface;
         ui.horizontal(|ui| {
-            ui.label("u_degree:")
+            let __mtlbl162 = ui
+                .label("u_degree:")
                 .on_hover_text("Degree along the u parameter direction (typically 3 for cubic).");
             ui.add(
                 egui::DragValue::new(&mut s.surface_u_degree)
                     .range(1..=9)
                     .speed(0.1),
             )
+            .labelled_by(__mtlbl162.id)
             .on_hover_text("u-direction degree (1..9).");
-            ui.label("v_degree:")
+            let __mtlbl163 = ui
+                .label("v_degree:")
                 .on_hover_text("Degree along the v parameter direction.");
             ui.add(
                 egui::DragValue::new(&mut s.surface_v_degree)
                     .range(1..=9)
                     .speed(0.1),
             )
+            .labelled_by(__mtlbl163.id)
             .on_hover_text("v-direction degree (1..9).");
         });
         ui.horizontal(|ui| {
-            ui.label("nu × nv:").on_hover_text(
+            let __mtlbl164 = ui.label("nu × nv:").on_hover_text(
                 "Control-point grid size: nu rows × nv columns. Each must be > respective degree.",
             );
             ui.add(
@@ -11732,12 +12183,14 @@ fn draw_surface_surface_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                     .range(2..=10)
                     .speed(0.1),
             )
+            .labelled_by(__mtlbl164.id)
             .on_hover_text("Number of control-point rows (u direction).");
             ui.add(
                 egui::DragValue::new(&mut s.surface_nv)
                     .range(2..=10)
                     .speed(0.1),
             )
+            .labelled_by(__mtlbl164.id)
             .on_hover_text("Number of control-point columns (v direction).");
         });
         s.surface_cps
@@ -11747,24 +12200,27 @@ fn draw_surface_surface_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                 for j in 0..s.surface_nv {
                     let k = i * s.surface_nv + j;
                     ui.horizontal(|ui| {
-                        ui.label(format!("[{i},{j}]:"));
+                        let __mtlbl165 = ui.label(format!("[{i},{j}]:"));
                         ui.add(
                             egui::DragValue::new(&mut s.surface_cps[k][0])
                                 .speed(0.05)
                                 .prefix("x "),
                         )
+                        .labelled_by(__mtlbl165.id)
                         .on_hover_text("Control point X.");
                         ui.add(
                             egui::DragValue::new(&mut s.surface_cps[k][1])
                                 .speed(0.05)
                                 .prefix("y "),
                         )
+                        .labelled_by(__mtlbl165.id)
                         .on_hover_text("Control point Y.");
                         ui.add(
                             egui::DragValue::new(&mut s.surface_cps[k][2])
                                 .speed(0.05)
                                 .prefix("z "),
                         )
+                        .labelled_by(__mtlbl165.id)
                         .on_hover_text("Control point Z.");
                     });
                 }
@@ -11799,13 +12255,14 @@ fn draw_surface_coons_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             .enumerate()
         {
             ui.horizontal(|ui| {
-                ui.label(format!("{name}:")).on_hover_text(descriptions[k]);
+                let __mtlbl166 = ui.label(format!("{name}:")).on_hover_text(descriptions[k]);
                 ui.add(
                     egui::DragValue::new(&mut s.coons_curves[k])
                         .range(0..=n_curves.saturating_sub(1).max(0))
                         .speed(0.2)
                         .prefix("#"),
                 )
+                .labelled_by(__mtlbl166.id)
                 .on_hover_text(descriptions[k]);
             });
         }
@@ -11826,13 +12283,14 @@ fn draw_surface_sew_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     {
         let s = &mut app.mesh_toolbox.surface;
         ui.horizontal(|ui| {
-            ui.label("A id:")
+            let __mtlbl167 = ui.label("A id:")
                 .on_hover_text("First surface to sew. Edge `A.edge_a` will be matched against `B.edge_b`.");
             ui.add(
                 egui::DragValue::new(&mut s.sew_surface_a)
                     .range(0..=n_surf.saturating_sub(1).max(0))
                     .speed(0.2),
             )
+            .labelled_by(__mtlbl167.id)
             .on_hover_text("Surface A index in the surfaces list.");
             ui.label("A edge:")
                 .on_hover_text("Which parametric edge of surface A is joined to B. UMin/UMax = u=0 / u=1, VMin/VMax = v=0 / v=1.");
@@ -11851,13 +12309,15 @@ fn draw_surface_sew_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                 });
         });
         ui.horizontal(|ui| {
-            ui.label("B id:")
+            let __mtlbl168 = ui
+                .label("B id:")
                 .on_hover_text("Second surface to sew against surface A.");
             ui.add(
                 egui::DragValue::new(&mut s.sew_surface_b)
                     .range(0..=n_surf.saturating_sub(1).max(0))
                     .speed(0.2),
             )
+            .labelled_by(__mtlbl168.id)
             .on_hover_text("Surface B index.");
             ui.label("B edge:")
                 .on_hover_text("Which parametric edge of surface B is joined to A.");
@@ -11870,7 +12330,7 @@ fn draw_surface_sew_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                 });
         });
         ui.horizontal(|ui| {
-            ui.label("Tolerance:").on_hover_text(
+            let __mtlbl169 = ui.label("Tolerance:").on_hover_text(
                 "Geometric distance below which the two edges are considered coincident.",
             );
             ui.add(
@@ -11878,6 +12338,7 @@ fn draw_surface_sew_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                     .speed(0.0001)
                     .range(1e-9..=1.0),
             )
+            .labelled_by(__mtlbl169.id)
             .on_hover_text("Sew tolerance (model units).");
         });
         // Phase 19C — continuity toggle (G2 default; uncheck for the
@@ -11907,22 +12368,24 @@ fn draw_surface_trim_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     {
         let s = &mut app.mesh_toolbox.surface;
         ui.horizontal(|ui| {
-            ui.label("Surface id:").on_hover_text("Surface to trim.");
+            let __mtlbl170 = ui.label("Surface id:").on_hover_text("Surface to trim.");
             ui.add(
                 egui::DragValue::new(&mut s.trim_surface)
                     .range(0..=n_surf.saturating_sub(1).max(0))
                     .speed(0.2),
             )
+            .labelled_by(__mtlbl170.id)
             .on_hover_text("Surface index in the surfaces list.");
         });
         ui.horizontal(|ui| {
-            ui.label("Curve id:")
+            let __mtlbl171 = ui.label("Curve id:")
                 .on_hover_text("Boundary curve that defines the trim region (typically a closed loop on the surface).");
             ui.add(
                 egui::DragValue::new(&mut s.trim_curve)
                     .range(0..=n_curves.saturating_sub(1).max(0))
                     .speed(0.2),
             )
+            .labelled_by(__mtlbl171.id)
             .on_hover_text("Curve index in the curves list.");
         });
         ui.horizontal(|ui| {
@@ -11935,7 +12398,7 @@ fn draw_surface_trim_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                 .on_hover_text("Keep the surface region outside the curve loop.");
         });
         ui.horizontal(|ui| {
-            ui.label("Resolution:").on_hover_text(
+            let __mtlbl172 = ui.label("Resolution:").on_hover_text(
                 "Tessellation resolution for the trim output (higher = finer mesh).",
             );
             ui.add(
@@ -11943,6 +12406,7 @@ fn draw_surface_trim_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                     .range(8..=128)
                     .speed(0.2),
             )
+            .labelled_by(__mtlbl172.id)
             .on_hover_text("Trim mesh resolution (8..128 samples per direction).");
         });
         ui.checkbox(
@@ -11970,15 +12434,17 @@ fn draw_surface_knot_ops_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     {
         let s = &mut app.mesh_toolbox.surface;
         ui.horizontal(|ui| {
-            ui.label("Parameter u:")
+            let __mtlbl173 = ui
+                .label("Parameter u:")
                 .on_hover_text("Parameter value at which to insert / remove a knot. Range [0, 1].");
             ui.add(
                 egui::DragValue::new(&mut s.knot_op_u)
                     .speed(0.01)
                     .range(0.0..=1.0),
             )
+            .labelled_by(__mtlbl173.id)
             .on_hover_text("Knot insertion parameter (0..1).");
-            ui.label("Tolerance:").on_hover_text(
+            let __mtlbl174 = ui.label("Tolerance:").on_hover_text(
                 "How close a knot must be to `u` to be considered a match (for remove).",
             );
             ui.add(
@@ -11986,6 +12452,7 @@ fn draw_surface_knot_ops_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                     .speed(0.0001)
                     .range(1e-10..=1.0),
             )
+            .labelled_by(__mtlbl174.id)
             .on_hover_text("Knot match tolerance (parameter-space).");
         });
         ui.horizontal(|ui| {
@@ -11997,25 +12464,28 @@ fn draw_surface_knot_ops_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                 .on_hover_text("v-direction knot vector.");
         });
         ui.horizontal(|ui| {
-            ui.label("Elevate by:")
+            let __mtlbl175 = ui.label("Elevate by:")
                 .on_hover_text("How many degrees to raise (degree elevation preserves geometry but adds control points).");
             ui.add(
                 egui::DragValue::new(&mut s.elevate_degree_by)
                     .range(1..=6)
                     .speed(0.1),
             )
+            .labelled_by(__mtlbl175.id)
             .on_hover_text("Degree increment for the elevate op (1..6).");
         });
         ui.separator();
         ui.label("Curve ops:");
         ui.horizontal(|ui| {
-            ui.label("Curve id:")
+            let __mtlbl176 = ui
+                .label("Curve id:")
                 .on_hover_text("Index into the curves list — which curve to mutate.");
             ui.add(
                 egui::DragValue::new(&mut s.knot_op_curve)
                     .range(0..=n_curves.saturating_sub(1).max(0))
                     .speed(0.2),
             )
+            .labelled_by(__mtlbl176.id)
             .on_hover_text("Curve index.");
         });
     }
@@ -12044,13 +12514,15 @@ fn draw_surface_knot_ops_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     {
         let s = &mut app.mesh_toolbox.surface;
         ui.horizontal(|ui| {
-            ui.label("Surface id:")
+            let __mtlbl177 = ui
+                .label("Surface id:")
                 .on_hover_text("Index into the surfaces list — which surface to mutate.");
             ui.add(
                 egui::DragValue::new(&mut s.knot_op_surface)
                     .range(0..=n_surf.saturating_sub(1).max(0))
                     .speed(0.2),
             )
+            .labelled_by(__mtlbl177.id)
             .on_hover_text("Surface index.");
         });
     }
@@ -12079,25 +12551,29 @@ fn draw_surface_ssi_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     {
         let s = &mut app.mesh_toolbox.surface;
         ui.horizontal(|ui| {
-            ui.label("Surface A id:")
+            let __mtlbl178 = ui
+                .label("Surface A id:")
                 .on_hover_text("First surface to intersect.");
             ui.add(
                 egui::DragValue::new(&mut s.ssi_surface_a)
                     .range(0..=n_surf.saturating_sub(1).max(0))
                     .speed(0.2),
             )
+            .labelled_by(__mtlbl178.id)
             .on_hover_text("Surface A index.");
-            ui.label("Surface B id:")
+            let __mtlbl179 = ui
+                .label("Surface B id:")
                 .on_hover_text("Second surface to intersect with A.");
             ui.add(
                 egui::DragValue::new(&mut s.ssi_surface_b)
                     .range(0..=n_surf.saturating_sub(1).max(0))
                     .speed(0.2),
             )
+            .labelled_by(__mtlbl179.id)
             .on_hover_text("Surface B index.");
         });
         ui.horizontal(|ui| {
-            ui.label("Tolerance:").on_hover_text(
+            let __mtlbl180 = ui.label("Tolerance:").on_hover_text(
                 "Distance below which a point is considered to lie on both surfaces.",
             );
             ui.add(
@@ -12105,6 +12581,7 @@ fn draw_surface_ssi_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                     .speed(0.0001)
                     .range(1e-9..=1.0),
             )
+            .labelled_by(__mtlbl180.id)
             .on_hover_text("Intersection tolerance (model units).");
         });
     }
@@ -12121,25 +12598,29 @@ fn draw_surface_fit_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     {
         let s = &mut app.mesh_toolbox.surface;
         ui.horizontal(|ui| {
-            ui.label("Degree u:")
+            let __mtlbl181 = ui
+                .label("Degree u:")
                 .on_hover_text("Degree of the fitted curve / u-direction of the fitted surface.");
             ui.add(
                 egui::DragValue::new(&mut s.fit_degree_u)
                     .range(1..=9)
                     .speed(0.1),
             )
+            .labelled_by(__mtlbl181.id)
             .on_hover_text("u degree (1..9).");
-            ui.label("Degree v:")
+            let __mtlbl182 = ui
+                .label("Degree v:")
                 .on_hover_text("v-direction degree for surface fit (ignored for curve fit).");
             ui.add(
                 egui::DragValue::new(&mut s.fit_degree_v)
                     .range(1..=9)
                     .speed(0.1),
             )
+            .labelled_by(__mtlbl182.id)
             .on_hover_text("v degree (1..9).");
         });
         ui.horizontal(|ui| {
-            ui.label("nu CPs:").on_hover_text(
+            let __mtlbl183 = ui.label("nu CPs:").on_hover_text(
                 "Number of control points in u — more CPs = lower RMS, but risk of overfitting.",
             );
             ui.add(
@@ -12147,14 +12628,17 @@ fn draw_surface_fit_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                     .range(2..=32)
                     .speed(0.1),
             )
+            .labelled_by(__mtlbl183.id)
             .on_hover_text("u-direction control-point count (2..32).");
-            ui.label("nv CPs:")
+            let __mtlbl184 = ui
+                .label("nv CPs:")
                 .on_hover_text("Number of control points in v (surface fit only).");
             ui.add(
                 egui::DragValue::new(&mut s.fit_n_cps_v)
                     .range(2..=32)
                     .speed(0.1),
             )
+            .labelled_by(__mtlbl184.id)
             .on_hover_text("v-direction control-point count.");
         });
         ui.label("Points (one \"x,y,z\" per line; # for comments):");
@@ -12203,52 +12687,60 @@ fn draw_surface_ruled_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                 .on_hover_text("Rules from each point on curve A to the apex point — produces a generalized cone.");
         });
         ui.horizontal(|ui| {
-            ui.label("Curve A id:")
+            let __mtlbl185 = ui
+                .label("Curve A id:")
                 .on_hover_text("Index of the base curve.");
             ui.add(
                 egui::DragValue::new(&mut s.ruled_curve_a)
                     .range(0..=n_curves.saturating_sub(1).max(0))
                     .speed(0.2),
             )
+            .labelled_by(__mtlbl185.id)
             .on_hover_text("Curve A index.");
             if s.ruled_kind == 0 {
-                ui.label("Curve B id:")
+                let __mtlbl186 = ui
+                    .label("Curve B id:")
                     .on_hover_text("Index of the second curve (for Between-curves mode).");
                 ui.add(
                     egui::DragValue::new(&mut s.ruled_curve_b)
                         .range(0..=n_curves.saturating_sub(1).max(0))
                         .speed(0.2),
                 )
+                .labelled_by(__mtlbl186.id)
                 .on_hover_text("Curve B index.");
             }
         });
         if s.ruled_kind == 1 {
             ui.horizontal(|ui| {
-                ui.label("Vector:")
+                let __mtlbl187 = ui
+                    .label("Vector:")
                     .on_hover_text("Extrusion vector applied to every point on curve A.");
                 ui.add(
                     egui::DragValue::new(&mut s.ruled_extrude_vector[0])
                         .speed(0.05)
                         .prefix("x "),
                 )
+                .labelled_by(__mtlbl187.id)
                 .on_hover_text("Extrusion vector X component.");
                 ui.add(
                     egui::DragValue::new(&mut s.ruled_extrude_vector[1])
                         .speed(0.05)
                         .prefix("y "),
                 )
+                .labelled_by(__mtlbl187.id)
                 .on_hover_text("Extrusion vector Y component.");
                 ui.add(
                     egui::DragValue::new(&mut s.ruled_extrude_vector[2])
                         .speed(0.05)
                         .prefix("z "),
                 )
+                .labelled_by(__mtlbl187.id)
                 .on_hover_text("Extrusion vector Z component.");
             });
         }
         if s.ruled_kind == 2 {
             ui.horizontal(|ui| {
-                ui.label("Apex:").on_hover_text(
+                let __mtlbl188 = ui.label("Apex:").on_hover_text(
                     "Single apex point that all rule lines connect to from curve A.",
                 );
                 ui.add(
@@ -12256,18 +12748,21 @@ fn draw_surface_ruled_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                         .speed(0.05)
                         .prefix("x "),
                 )
+                .labelled_by(__mtlbl188.id)
                 .on_hover_text("Apex X.");
                 ui.add(
                     egui::DragValue::new(&mut s.ruled_apex[1])
                         .speed(0.05)
                         .prefix("y "),
                 )
+                .labelled_by(__mtlbl188.id)
                 .on_hover_text("Apex Y.");
                 ui.add(
                     egui::DragValue::new(&mut s.ruled_apex[2])
                         .speed(0.05)
                         .prefix("z "),
                 )
+                .labelled_by(__mtlbl188.id)
                 .on_hover_text("Apex Z.");
             });
         }
@@ -12331,12 +12826,13 @@ fn draw_surface_entity_lists(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
         }
     }
     ui.horizontal(|ui| {
-        ui.label("Tess resolution:");
+        let __mtlbl189 = ui.label("Tess resolution:");
         ui.add(
             egui::DragValue::new(&mut app.mesh_toolbox.surface.tess_resolution)
                 .range(4..=128)
                 .speed(0.2),
-        );
+        )
+        .labelled_by(__mtlbl189.id);
     });
 }
 
@@ -12761,7 +13257,8 @@ fn draw_arch_wall_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
             "Architectural wall from a start XYZ to an end XYZ, extruded upwards by Height.",
         );
     ui.horizontal(|ui| {
-        ui.label("Start:")
+        let __mtlbl190 = ui
+            .label("Start:")
             .on_hover_text("Start endpoint of the wall centreline (model units, typically m).");
         let prefixes = ["x ", "y ", "z "];
         let tooltips = [
@@ -12775,11 +13272,13 @@ fn draw_arch_wall_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                     .speed(0.1)
                     .prefix(prefixes[i]),
             )
+            .labelled_by(__mtlbl190.id)
             .on_hover_text(tooltips[i]);
         }
     });
     ui.horizontal(|ui| {
-        ui.label("End:")
+        let __mtlbl191 = ui
+            .label("End:")
             .on_hover_text("End endpoint of the wall centreline (model units).");
         let prefixes = ["x ", "y ", "z "];
         let tooltips = ["End X (m).", "End Y (m).", "End Z (m)."];
@@ -12789,11 +13288,13 @@ fn draw_arch_wall_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                     .speed(0.1)
                     .prefix(prefixes[i]),
             )
+            .labelled_by(__mtlbl191.id)
             .on_hover_text(tooltips[i]);
         }
     });
     ui.horizontal(|ui| {
-        ui.label("Height:")
+        let __mtlbl192 = ui
+            .label("Height:")
             .on_hover_text("Wall height above the base — typically the floor-to-ceiling height.");
         ui.add(
             egui::DragValue::new(&mut s.wall_height)
@@ -12801,8 +13302,9 @@ fn draw_arch_wall_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                 .speed(0.1)
                 .suffix(" m"),
         )
+        .labelled_by(__mtlbl192.id)
         .on_hover_text("Wall height (m).");
-        ui.label("Thickness:").on_hover_text(
+        let __mtlbl193 = ui.label("Thickness:").on_hover_text(
             "Wall cross-section thickness — typically 100..400 mm for partitions / exterior walls.",
         );
         ui.add(
@@ -12811,6 +13313,7 @@ fn draw_arch_wall_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                 .speed(0.01)
                 .suffix(" m"),
         )
+        .labelled_by(__mtlbl193.id)
         .on_hover_text("Wall thickness (m).");
     });
     ui.horizontal(|ui| {
@@ -12834,12 +13337,14 @@ fn draw_arch_slab_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     ui.label(egui::RichText::new("Slab").strong())
         .on_hover_text("Floor / ceiling slab — horizontal plate at the given Z, with the boundary polygon defined below.");
     ui.horizontal(|ui| {
-        ui.label("Z:").on_hover_text(
+        let __mtlbl194 = ui.label("Z:").on_hover_text(
             "Slab elevation — height of the slab's top surface above the project origin (m).",
         );
         ui.add(egui::DragValue::new(&mut s.slab_z).speed(0.1).suffix(" m"))
+            .labelled_by(__mtlbl194.id)
             .on_hover_text("Slab Z (m).");
-        ui.label("Thickness:")
+        let __mtlbl195 = ui
+            .label("Thickness:")
             .on_hover_text("Slab depth — typical concrete slabs are 150..300 mm.");
         ui.add(
             egui::DragValue::new(&mut s.slab_thickness)
@@ -12847,6 +13352,7 @@ fn draw_arch_slab_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
                 .speed(0.01)
                 .suffix(" m"),
         )
+        .labelled_by(__mtlbl195.id)
         .on_hover_text("Slab thickness (m).");
     });
     ui.horizontal(|ui| {
@@ -12859,9 +13365,11 @@ fn draw_arch_slab_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
         let mut remove: Option<usize> = None;
         for (i, p) in s.slab_boundary.iter_mut().enumerate() {
             ui.horizontal(|ui| {
-                ui.label(format!("#{i}:"));
-                ui.add(egui::DragValue::new(&mut p[0]).speed(0.1).prefix("x "));
-                ui.add(egui::DragValue::new(&mut p[1]).speed(0.1).prefix("y "));
+                let __mtlbl196 = ui.label(format!("#{i}:"));
+                ui.add(egui::DragValue::new(&mut p[0]).speed(0.1).prefix("x "))
+                    .labelled_by(__mtlbl196.id);
+                ui.add(egui::DragValue::new(&mut p[1]).speed(0.1).prefix("y "))
+                    .labelled_by(__mtlbl196.id);
                 if ui.small_button("Delete").clicked() {
                     remove = Some(i);
                 }
@@ -12883,23 +13391,25 @@ fn draw_arch_column_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     let s = &mut app.mesh_toolbox.arch;
     ui.label(egui::RichText::new("Column").strong());
     ui.horizontal(|ui| {
-        ui.label("Base:");
+        let __mtlbl197 = ui.label("Base:");
         for i in 0..3 {
             ui.add(
                 egui::DragValue::new(&mut s.column_base[i])
                     .speed(0.1)
                     .prefix(["x ", "y ", "z "][i]),
-            );
+            )
+            .labelled_by(__mtlbl197.id);
         }
     });
     ui.horizontal(|ui| {
-        ui.label("Height:");
+        let __mtlbl198 = ui.label("Height:");
         ui.add(
             egui::DragValue::new(&mut s.column_height)
                 .range(0.01..=100.0)
                 .speed(0.1)
                 .suffix(" m"),
-        );
+        )
+        .labelled_by(__mtlbl198.id);
     });
     ui.horizontal(|ui| {
         ui.label("Section:");
@@ -12910,64 +13420,72 @@ fn draw_arch_column_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     match s.column_section_kind {
         0 => {
             ui.horizontal(|ui| {
-                ui.label("Width:");
+                let __mtlbl199 = ui.label("Width:");
                 ui.add(
                     egui::DragValue::new(&mut s.column_width)
                         .speed(0.01)
                         .suffix(" m"),
-                );
-                ui.label("Depth:");
+                )
+                .labelled_by(__mtlbl199.id);
+                let __mtlbl200 = ui.label("Depth:");
                 ui.add(
                     egui::DragValue::new(&mut s.column_depth)
                         .speed(0.01)
                         .suffix(" m"),
-                );
+                )
+                .labelled_by(__mtlbl200.id);
             });
         }
         1 => {
             ui.horizontal(|ui| {
-                ui.label("Radius:");
+                let __mtlbl201 = ui.label("Radius:");
                 ui.add(
                     egui::DragValue::new(&mut s.column_radius)
                         .speed(0.01)
                         .suffix(" m"),
-                );
-                ui.label("Segments:");
+                )
+                .labelled_by(__mtlbl201.id);
+                let __mtlbl202 = ui.label("Segments:");
                 ui.add(
                     egui::DragValue::new(&mut s.column_segments)
                         .range(3..=128)
                         .speed(0.5),
-                );
+                )
+                .labelled_by(__mtlbl202.id);
             });
         }
         _ => {
             ui.horizontal(|ui| {
-                ui.label("Width:");
+                let __mtlbl203 = ui.label("Width:");
                 ui.add(
                     egui::DragValue::new(&mut s.column_width)
                         .speed(0.01)
                         .suffix(" m"),
-                );
-                ui.label("Depth:");
+                )
+                .labelled_by(__mtlbl203.id);
+                let __mtlbl204 = ui.label("Depth:");
                 ui.add(
                     egui::DragValue::new(&mut s.column_depth)
                         .speed(0.01)
                         .suffix(" m"),
-                );
+                )
+                .labelled_by(__mtlbl204.id);
             });
             ui.horizontal(|ui| {
-                ui.label("Flange t:");
+                let __mtlbl205 = ui.label("Flange t:");
                 ui.add(
                     egui::DragValue::new(&mut s.column_flange_thickness)
                         .speed(0.005)
                         .suffix(" m"),
-                );
-                ui.label("Web t:");
+                )
+                .labelled_by(__mtlbl205.id);
+                let __mtlbl206 = ui.label("Web t:");
                 ui.add(
                     egui::DragValue::new(&mut s.column_web_thickness)
                         .speed(0.005)
                         .suffix(" m"),
-                );
+                )
+                .labelled_by(__mtlbl206.id);
             });
         }
     }
@@ -12984,23 +13502,25 @@ fn draw_arch_beam_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     let s = &mut app.mesh_toolbox.arch;
     ui.label(egui::RichText::new("Beam").strong());
     ui.horizontal(|ui| {
-        ui.label("Start:");
+        let __mtlbl207 = ui.label("Start:");
         for i in 0..3 {
             ui.add(
                 egui::DragValue::new(&mut s.beam_start[i])
                     .speed(0.1)
                     .prefix(["x ", "y ", "z "][i]),
-            );
+            )
+            .labelled_by(__mtlbl207.id);
         }
     });
     ui.horizontal(|ui| {
-        ui.label("End:");
+        let __mtlbl208 = ui.label("End:");
         for i in 0..3 {
             ui.add(
                 egui::DragValue::new(&mut s.beam_end[i])
                     .speed(0.1)
                     .prefix(["x ", "y ", "z "][i]),
-            );
+            )
+            .labelled_by(__mtlbl208.id);
         }
     });
     ui.horizontal(|ui| {
@@ -13010,44 +13530,49 @@ fn draw_arch_beam_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
         ui.selectable_value(&mut s.beam_section_kind, 2, "Channel");
     });
     ui.horizontal(|ui| {
-        ui.label("Width:");
+        let __mtlbl209 = ui.label("Width:");
         ui.add(
             egui::DragValue::new(&mut s.beam_width)
                 .speed(0.01)
                 .suffix(" m"),
-        );
-        ui.label("Depth:");
+        )
+        .labelled_by(__mtlbl209.id);
+        let __mtlbl210 = ui.label("Depth:");
         ui.add(
             egui::DragValue::new(&mut s.beam_depth)
                 .speed(0.01)
                 .suffix(" m"),
-        );
+        )
+        .labelled_by(__mtlbl210.id);
     });
     if matches!(s.beam_section_kind, 1 | 2) {
         ui.horizontal(|ui| {
-            ui.label("Flange/Wall t:");
+            let __mtlbl211 = ui.label("Flange/Wall t:");
             ui.add(
                 egui::DragValue::new(&mut s.beam_flange_thickness)
                     .speed(0.005)
                     .suffix(" m"),
-            );
+            )
+            .labelled_by(__mtlbl211.id);
             if s.beam_section_kind == 1 {
-                ui.label("Web t:");
+                let __mtlbl212 = ui.label("Web t:");
                 ui.add(
                     egui::DragValue::new(&mut s.beam_web_thickness)
                         .speed(0.005)
                         .suffix(" m"),
-                );
+                )
+                .labelled_by(__mtlbl212.id);
             }
         });
     }
     ui.horizontal(|ui| {
-        ui.label("Orientation:");
+        let __mtlbl213 = ui.label("Orientation:");
         ui.add(
             egui::DragValue::new(&mut s.beam_orientation)
                 .speed(0.05)
                 .suffix(" rad"),
-        );
+        )
+        .labelled_by(__mtlbl213.id);
         ui.label("Material:");
         ui.text_edit_singleline(&mut s.beam_material);
     });
@@ -13060,50 +13585,56 @@ fn draw_arch_window_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     let s = &mut app.mesh_toolbox.arch;
     ui.label(egui::RichText::new("Window").strong());
     ui.horizontal(|ui| {
-        ui.label("Host wall id:");
+        let __mtlbl214 = ui.label("Host wall id:");
         ui.add(
             egui::DragValue::new(&mut s.window_host)
                 .range(1..=u32::MAX as usize)
                 .speed(0.2),
-        );
+        )
+        .labelled_by(__mtlbl214.id);
     });
     ui.horizontal(|ui| {
-        ui.label("Position along:");
+        let __mtlbl215 = ui.label("Position along:");
         ui.add(
             egui::DragValue::new(&mut s.window_position_along)
                 .speed(0.1)
                 .suffix(" m"),
-        );
-        ui.label("Sill height:");
+        )
+        .labelled_by(__mtlbl215.id);
+        let __mtlbl216 = ui.label("Sill height:");
         ui.add(
             egui::DragValue::new(&mut s.window_position_height)
                 .speed(0.05)
                 .suffix(" m"),
-        );
+        )
+        .labelled_by(__mtlbl216.id);
     });
     ui.horizontal(|ui| {
-        ui.label("Width:");
+        let __mtlbl217 = ui.label("Width:");
         ui.add(
             egui::DragValue::new(&mut s.window_width)
                 .range(0.05..=10.0)
                 .speed(0.05)
                 .suffix(" m"),
-        );
-        ui.label("Height:");
+        )
+        .labelled_by(__mtlbl217.id);
+        let __mtlbl218 = ui.label("Height:");
         ui.add(
             egui::DragValue::new(&mut s.window_height)
                 .range(0.05..=10.0)
                 .speed(0.05)
                 .suffix(" m"),
-        );
+        )
+        .labelled_by(__mtlbl218.id);
     });
     ui.horizontal(|ui| {
-        ui.label("Frame t:");
+        let __mtlbl219 = ui.label("Frame t:");
         ui.add(
             egui::DragValue::new(&mut s.window_frame_thickness)
                 .speed(0.005)
                 .suffix(" m"),
-        );
+        )
+        .labelled_by(__mtlbl219.id);
     });
     ui.horizontal(|ui| {
         ui.label("Style:");
@@ -13121,36 +13652,40 @@ fn draw_arch_door_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     let s = &mut app.mesh_toolbox.arch;
     ui.label(egui::RichText::new("Door").strong());
     ui.horizontal(|ui| {
-        ui.label("Host wall id:");
+        let __mtlbl220 = ui.label("Host wall id:");
         ui.add(
             egui::DragValue::new(&mut s.door_host)
                 .range(1..=u32::MAX as usize)
                 .speed(0.2),
-        );
+        )
+        .labelled_by(__mtlbl220.id);
     });
     ui.horizontal(|ui| {
-        ui.label("Position along:");
+        let __mtlbl221 = ui.label("Position along:");
         ui.add(
             egui::DragValue::new(&mut s.door_position_along)
                 .speed(0.1)
                 .suffix(" m"),
-        );
+        )
+        .labelled_by(__mtlbl221.id);
     });
     ui.horizontal(|ui| {
-        ui.label("Width:");
+        let __mtlbl222 = ui.label("Width:");
         ui.add(
             egui::DragValue::new(&mut s.door_width)
                 .range(0.05..=10.0)
                 .speed(0.05)
                 .suffix(" m"),
-        );
-        ui.label("Height:");
+        )
+        .labelled_by(__mtlbl222.id);
+        let __mtlbl223 = ui.label("Height:");
         ui.add(
             egui::DragValue::new(&mut s.door_height)
                 .range(0.05..=10.0)
                 .speed(0.05)
                 .suffix(" m"),
-        );
+        )
+        .labelled_by(__mtlbl223.id);
     });
     ui.horizontal(|ui| {
         ui.label("Style:");
@@ -13173,55 +13708,61 @@ fn draw_arch_stair_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     let s = &mut app.mesh_toolbox.arch;
     ui.label(egui::RichText::new("Stair").strong());
     ui.horizontal(|ui| {
-        ui.label("Base:");
+        let __mtlbl224 = ui.label("Base:");
         for i in 0..3 {
             ui.add(
                 egui::DragValue::new(&mut s.stair_base[i])
                     .speed(0.1)
                     .prefix(["x ", "y ", "z "][i]),
-            );
+            )
+            .labelled_by(__mtlbl224.id);
         }
     });
     ui.horizontal(|ui| {
-        ui.label("Dir:");
+        let __mtlbl225 = ui.label("Dir:");
         for i in 0..3 {
             ui.add(
                 egui::DragValue::new(&mut s.stair_direction[i])
                     .speed(0.05)
                     .prefix(["x ", "y ", "z "][i]),
-            );
+            )
+            .labelled_by(__mtlbl225.id);
         }
     });
     ui.horizontal(|ui| {
-        ui.label("Rise:");
+        let __mtlbl226 = ui.label("Rise:");
         ui.add(
             egui::DragValue::new(&mut s.stair_total_rise)
                 .range(0.05..=50.0)
                 .speed(0.05)
                 .suffix(" m"),
-        );
-        ui.label("Run:");
+        )
+        .labelled_by(__mtlbl226.id);
+        let __mtlbl227 = ui.label("Run:");
         ui.add(
             egui::DragValue::new(&mut s.stair_total_run)
                 .range(0.05..=50.0)
                 .speed(0.05)
                 .suffix(" m"),
-        );
+        )
+        .labelled_by(__mtlbl227.id);
     });
     ui.horizontal(|ui| {
-        ui.label("Steps:");
+        let __mtlbl228 = ui.label("Steps:");
         ui.add(
             egui::DragValue::new(&mut s.stair_num_steps)
                 .range(1u32..=200)
                 .speed(0.1),
-        );
-        ui.label("Width:");
+        )
+        .labelled_by(__mtlbl228.id);
+        let __mtlbl229 = ui.label("Width:");
         ui.add(
             egui::DragValue::new(&mut s.stair_width)
                 .range(0.05..=10.0)
                 .speed(0.05)
                 .suffix(" m"),
-        );
+        )
+        .labelled_by(__mtlbl229.id);
     });
     if ui.button("Add Stair").clicked() {
         app.arch_add_stair();
@@ -13232,15 +13773,17 @@ fn draw_arch_roof_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
     let s = &mut app.mesh_toolbox.arch;
     ui.label(egui::RichText::new("Roof").strong());
     ui.horizontal(|ui| {
-        ui.label("Eave z:");
-        ui.add(egui::DragValue::new(&mut s.roof_z).speed(0.1).suffix(" m"));
-        ui.label("Peak h:");
+        let __mtlbl230 = ui.label("Eave z:");
+        ui.add(egui::DragValue::new(&mut s.roof_z).speed(0.1).suffix(" m"))
+            .labelled_by(__mtlbl230.id);
+        let __mtlbl231 = ui.label("Peak h:");
         ui.add(
             egui::DragValue::new(&mut s.roof_peak_height)
                 .range(0.0..=50.0)
                 .speed(0.1)
                 .suffix(" m"),
-        );
+        )
+        .labelled_by(__mtlbl231.id);
     });
     ui.horizontal(|ui| {
         ui.label("Type:");
@@ -13253,9 +13796,11 @@ fn draw_arch_roof_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
         let mut remove: Option<usize> = None;
         for (i, p) in s.roof_boundary.iter_mut().enumerate() {
             ui.horizontal(|ui| {
-                ui.label(format!("#{i}:"));
-                ui.add(egui::DragValue::new(&mut p[0]).speed(0.1).prefix("x "));
-                ui.add(egui::DragValue::new(&mut p[1]).speed(0.1).prefix("y "));
+                let __mtlbl232 = ui.label(format!("#{i}:"));
+                ui.add(egui::DragValue::new(&mut p[0]).speed(0.1).prefix("x "))
+                    .labelled_by(__mtlbl232.id);
+                ui.add(egui::DragValue::new(&mut p[1]).speed(0.1).prefix("y "))
+                    .labelled_by(__mtlbl232.id);
                 if ui.small_button("Delete").clicked() {
                     remove = Some(i);
                 }
@@ -13281,23 +13826,27 @@ fn draw_arch_space_inputs(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
         ui.text_edit_singleline(&mut s.space_name);
     });
     ui.horizontal(|ui| {
-        ui.label("Floor z:");
-        ui.add(egui::DragValue::new(&mut s.space_z).speed(0.1).suffix(" m"));
-        ui.label("Ceiling h:");
+        let __mtlbl233 = ui.label("Floor z:");
+        ui.add(egui::DragValue::new(&mut s.space_z).speed(0.1).suffix(" m"))
+            .labelled_by(__mtlbl233.id);
+        let __mtlbl234 = ui.label("Ceiling h:");
         ui.add(
             egui::DragValue::new(&mut s.space_ceiling_height)
                 .range(0.05..=10.0)
                 .speed(0.05)
                 .suffix(" m"),
-        );
+        )
+        .labelled_by(__mtlbl234.id);
     });
     ui.collapsing("Boundary (x, y)", |ui| {
         let mut remove: Option<usize> = None;
         for (i, p) in s.space_boundary.iter_mut().enumerate() {
             ui.horizontal(|ui| {
-                ui.label(format!("#{i}:"));
-                ui.add(egui::DragValue::new(&mut p[0]).speed(0.1).prefix("x "));
-                ui.add(egui::DragValue::new(&mut p[1]).speed(0.1).prefix("y "));
+                let __mtlbl235 = ui.label(format!("#{i}:"));
+                ui.add(egui::DragValue::new(&mut p[0]).speed(0.1).prefix("x "))
+                    .labelled_by(__mtlbl235.id);
+                ui.add(egui::DragValue::new(&mut p[1]).speed(0.1).prefix("y "))
+                    .labelled_by(__mtlbl235.id);
                 if ui.small_button("Delete").clicked() {
                     remove = Some(i);
                 }
@@ -13342,13 +13891,14 @@ fn draw_arch_render_and_schedule(app: &mut crate::ValenxApp, ui: &mut egui::Ui) 
     {
         let s = &mut app.mesh_toolbox.arch;
         ui.horizontal(|ui| {
-            ui.label("Tess tol:");
+            let __mtlbl236 = ui.label("Tess tol:");
             ui.add(
                 egui::DragValue::new(&mut s.render_tolerance)
                     .range(0.001..=10.0)
                     .speed(0.01)
                     .suffix(" m"),
-            );
+            )
+            .labelled_by(__mtlbl236.id);
         });
     }
     ui.horizontal(|ui| {
@@ -13453,13 +14003,13 @@ pub fn draw_spreadsheet_panel(app: &mut crate::ValenxApp, ui: &mut egui::Ui) {
         }
     });
     ui.horizontal(|ui| {
-        ui.label("Rows:")
+        let __mtlbl237 = ui.label("Rows:")
             .on_hover_text("How many rows of the active sheet are shown in the grid (cells beyond this still exist).");
-        ui.add(egui::DragValue::new(&mut s.view_rows).range(1..=64))
+        ui.add(egui::DragValue::new(&mut s.view_rows).range(1..=64)).labelled_by(__mtlbl237.id)
             .on_hover_text("Visible row count (1..64).");
-        ui.label("Cols:")
+        let __mtlbl238 = ui.label("Cols:")
             .on_hover_text("How many columns are shown.");
-        ui.add(egui::DragValue::new(&mut s.view_cols).range(1..=26))
+        ui.add(egui::DragValue::new(&mut s.view_cols).range(1..=26)).labelled_by(__mtlbl238.id)
             .on_hover_text("Visible column count (1..26, A through Z).");
     });
 
@@ -13671,10 +14221,7 @@ mod tests {
     #[test]
     fn apply_translate_with_stl_shifts_vertices() {
         let mut app = ValenxApp {
-            stl: Some(LoadedStl {
-                path: PathBuf::from("tri.stl"),
-                mesh: one_triangle(),
-            }),
+            stl: Some(LoadedStl::new(PathBuf::from("tri.stl"), one_triangle())),
             ..Default::default()
         };
         app.apply_translate(2.0, 3.0, 4.0);
@@ -13686,10 +14233,7 @@ mod tests {
     #[test]
     fn apply_scale_uniform_with_stl_multiplies_vertices() {
         let mut app = ValenxApp {
-            stl: Some(LoadedStl {
-                path: PathBuf::from("tri.stl"),
-                mesh: one_triangle(),
-            }),
+            stl: Some(LoadedStl::new(PathBuf::from("tri.stl"), one_triangle())),
             ..Default::default()
         };
         app.apply_scale_uniform(3.0);
@@ -13700,10 +14244,7 @@ mod tests {
     #[test]
     fn apply_scale_uniform_zero_or_nan_errors() {
         let mut app = ValenxApp {
-            stl: Some(LoadedStl {
-                path: PathBuf::from("tri.stl"),
-                mesh: one_triangle(),
-            }),
+            stl: Some(LoadedStl::new(PathBuf::from("tri.stl"), one_triangle())),
             ..Default::default()
         };
         app.apply_scale_uniform(0.0);
@@ -13713,10 +14254,7 @@ mod tests {
     #[test]
     fn apply_mirror_reverses_triangle_winding() {
         let mut app = ValenxApp {
-            stl: Some(LoadedStl {
-                path: PathBuf::from("tri.stl"),
-                mesh: one_triangle(),
-            }),
+            stl: Some(LoadedStl::new(PathBuf::from("tri.stl"), one_triangle())),
             ..Default::default()
         };
         app.apply_mirror(ToolboxAxis::Y);
@@ -13730,10 +14268,7 @@ mod tests {
     #[test]
     fn apply_cut_plane_with_zero_normal_errors() {
         let mut app = ValenxApp {
-            stl: Some(LoadedStl {
-                path: PathBuf::from("tri.stl"),
-                mesh: one_triangle(),
-            }),
+            stl: Some(LoadedStl::new(PathBuf::from("tri.stl"), one_triangle())),
             ..Default::default()
         };
         app.apply_cut_plane([0.0, 0.0, 0.0], [0.0, 0.0, 0.0]);
@@ -13748,10 +14283,7 @@ mod tests {
         // Centroid of the only triangle is (1/3, 1/3, 0). Plane at
         // origin with normal -x: dot = -1/3 < 0 → discard.
         let mut app = ValenxApp {
-            stl: Some(LoadedStl {
-                path: PathBuf::from("tri.stl"),
-                mesh: one_triangle(),
-            }),
+            stl: Some(LoadedStl::new(PathBuf::from("tri.stl"), one_triangle())),
             ..Default::default()
         };
         app.apply_cut_plane([0.0, 0.0, 0.0], [-1.0, 0.0, 0.0]);
@@ -13764,10 +14296,7 @@ mod tests {
         // operation surfaces an honest error instead of silently
         // no-op'ing.
         let mut app = ValenxApp {
-            stl: Some(LoadedStl {
-                path: PathBuf::from("tri.stl"),
-                mesh: one_triangle(),
-            }),
+            stl: Some(LoadedStl::new(PathBuf::from("tri.stl"), one_triangle())),
             ..Default::default()
         };
         app.apply_merge_coincident(1e-6);
@@ -14145,6 +14674,82 @@ mod tests {
             "expected `receptor read: ...cap...` got: {err}"
         );
         let _ = std::fs::remove_file(&tmp);
+    }
+
+    // ---- agent_set / agent_control_names (the SetControl bridge) ----
+
+    #[test]
+    fn agent_set_sets_toplevel_controls_and_rejects_unknown_and_typemismatch() {
+        let mut s = MeshToolboxState::default();
+
+        // A representative float component of a vector field, verified via state.
+        s.agent_set("Translate X", &AgentValue::Float(2.5))
+            .expect("set Translate X");
+        assert!((s.translate[0] - 2.5).abs() < 1e-12);
+        // A scalar float.
+        s.agent_set("Scale (uniform)", &AgentValue::Float(3.0))
+            .expect("set Scale (uniform)");
+        assert!((s.scale_uniform - 3.0).abs() < 1e-12);
+        // A u32 iteration count (Int widens; whole Float also accepted).
+        s.agent_set("Laplacian iter", &AgentValue::Int(7))
+            .expect("set Laplacian iter");
+        assert_eq!(s.mesh_tools_laplacian_iter, 7);
+        // The axis radio enum, by name.
+        s.agent_set("Rotate axis", &AgentValue::Str("y".into()))
+            .expect("set Rotate axis");
+        assert_eq!(s.rotate_axis, ToolboxAxis::Y);
+        // The Part-primitive Shape combo, by name.
+        s.agent_set("Shape", &AgentValue::Str("cylinder".into()))
+            .expect("set Shape");
+        assert_eq!(s.cad_primitive, CadPrimitiveKind::Cylinder);
+        // A boolean toggle.
+        s.agent_set("Show cut overlay", &AgentValue::Bool(true))
+            .expect("set Show cut overlay");
+        assert!(s.cut_show_overlay);
+        // A CAD numeric param.
+        s.agent_set("Cylinder radius", &AgentValue::Float(0.9))
+            .expect("set Cylinder radius");
+        assert!((s.cad_cyl_radius - 0.9).abs() < 1e-12);
+
+        // Unknown caption -> Err (not a panic).
+        assert!(s.agent_set("nope", &AgentValue::Int(1)).is_err());
+        // Type mismatch: a float caption fed a string -> Err.
+        assert!(s
+            .agent_set("Translate X", &AgentValue::Str("two".into()))
+            .is_err());
+        // Type mismatch: the enum caption fed a number -> Err.
+        assert!(s.agent_set("Rotate axis", &AgentValue::Int(1)).is_err());
+        // Type mismatch: the bool caption fed a number -> Err.
+        assert!(s
+            .agent_set("Show cut overlay", &AgentValue::Int(1))
+            .is_err());
+        // Out-of-range u32 iteration count -> Err (no silent truncation).
+        assert!(s.agent_set("Taubin iter", &AgentValue::Int(-1)).is_err());
+        assert!(s
+            .agent_set("Taubin iter", &AgentValue::Int(i64::from(u32::MAX) + 1))
+            .is_err());
+        // Unknown enum names -> Err.
+        assert!(s
+            .agent_set("Rotate axis", &AgentValue::Str("w".into()))
+            .is_err());
+        assert!(s
+            .agent_set("Shape", &AgentValue::Str("dodecahedron".into()))
+            .is_err());
+
+        // Every advertised control name is settable with a value of its type.
+        for name in MeshToolboxState::agent_control_names() {
+            let v = match *name {
+                "Rotate axis" | "Mirror plane" => AgentValue::Str("z".into()),
+                "Shape" => AgentValue::Str("box".into()),
+                "Show cut overlay" | "Create as operand B" => AgentValue::Bool(true),
+                "Laplacian iter" | "Taubin iter" | "Remesh iter" => AgentValue::Int(2),
+                _ => AgentValue::Float(1.0),
+            };
+            assert!(
+                s.agent_set(name, &v).is_ok(),
+                "advertised control '{name}' must be settable"
+            );
+        }
     }
 }
 
@@ -15137,5 +15742,131 @@ mod headless_ui_tests {
             app.mesh_toolbox.part_design.last_replay_error.is_some(),
             "a pad of a non-existent sketch should surface a replay error"
         );
+    }
+
+    // ===================================================================
+    // Accessibility / AI-drivability — every numeric DragValue must carry
+    // its caption as an accessible Name via `labelled_by`
+    // ===================================================================
+
+    /// Draw a representative set of CAD sub-panels once in a headless egui
+    /// context **with accesskit enabled**, and return the emitted
+    /// accessibility-tree nodes. This is the exact tree a screen reader or an
+    /// AI UI-Automation driver consumes, so asserting on it verifies the
+    /// panels are drivable by name. `accesskit` is re-exported by egui
+    /// (`egui::accesskit`), so no extra dependency is needed.
+    fn draw_panels_and_collect_a11y_nodes(
+        app: &mut ValenxApp,
+    ) -> Vec<(egui::accesskit::NodeId, egui::accesskit::Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    // Toolbox sections that render their numeric controls
+                    // unconditionally (no collapsed header gating them).
+                    draw_transformations(app, ui);
+                    draw_cut_plane(app, ui);
+                    draw_repair(app, ui);
+                    draw_mesh_tools(app, ui);
+                    // The eleven CAD sub-panels. Each draws its own form
+                    // (and the active-tool / active-op inputs we primed
+                    // below), exercising the broadest spread of DragValues.
+                    draw_dock_panel(app, ui);
+                    draw_sketcher_panel(app, ui);
+                    draw_part_design_panel(app, ui);
+                    draw_draft_panel(app, ui);
+                    draw_techdraw_panel(app, ui);
+                    draw_assembly_panel(app, ui);
+                    draw_cam_panel(app, ui);
+                    draw_surface_panel(app, ui);
+                    draw_arch_panel(app, ui);
+                    draw_spreadsheet_panel(app, ui);
+                    // The Part workbench lives behind a collapsing header;
+                    // drawing it keeps the test honest about the whole
+                    // toolbox even though its body is collapsed here.
+                    draw_part_workbench(app, ui);
+                });
+            });
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
+    }
+
+    /// True if some node in the tree carries `name` as its accessibility Name
+    /// (egui derives a label's Name from its text).
+    fn a11y_has_named_node(
+        nodes: &[(egui::accesskit::NodeId, egui::accesskit::Node)],
+        name: &str,
+    ) -> bool {
+        nodes.iter().any(|(_, n)| n.name() == Some(name))
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::Role;
+
+        // Every DragValue is rendered by egui as a `Role::SpinButton`. egui
+        // *clears* a DragValue's own Name, so without `.labelled_by(caption)`
+        // the control is anonymous to a screen reader / AI UI driver. This
+        // test asserts that EVERY spin button in the CAD toolbox is
+        // associated with a caption, and that the captions a driver searches
+        // for are present in the tree as named nodes.
+        let mut app = ValenxApp::default();
+        // Prime the tool-/op-gated sub-panels so their conditional numeric
+        // inputs render into this single frame.
+        app.mesh_toolbox.draft.tool = DraftTool::Rectangle;
+        app.mesh_toolbox.surface.tool = SurfaceTool::NurbsSurface;
+        app.mesh_toolbox.arch.tool = ArchTool::Beam;
+        app.mesh_toolbox.cam.new_op_kind = CamOpKind::Pocket;
+        app.mesh_toolbox.sketcher.tool = SketcherTool::Line;
+
+        let nodes = draw_panels_and_collect_a11y_nodes(&mut app);
+
+        let spin_buttons: Vec<&egui::accesskit::Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+
+        // The unconditional Transformations + Cut-plane forms alone draw a
+        // dozen-plus numeric spin buttons; the toolbox as a whole draws many
+        // more. A healthy lower bound guards against the panels silently
+        // failing to render their controls.
+        assert!(
+            spin_buttons.len() >= 12,
+            "expected the CAD numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+
+        // The load-bearing assertion: not one anonymous numeric control.
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every CAD-toolbox DragValue must be `labelled_by` its caption \
+             (an AI-drivable / screen-reader Name); {} of {} spin buttons \
+             are anonymous",
+            spin_buttons
+                .iter()
+                .filter(|n| n.labelled_by().is_empty())
+                .count(),
+            spin_buttons.len(),
+        );
+
+        // The captions a driver searches for are present as named nodes.
+        // These all come from `draw_transformations`, which renders its
+        // controls unconditionally, so they are always in the tree.
+        for caption in [
+            "Translate",
+            "Scale (uniform)",
+            "Scale (axes)",
+            "Angle (deg)",
+        ] {
+            assert!(
+                a11y_has_named_node(&nodes, caption),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

@@ -26,8 +26,9 @@ use std::f64::consts::TAU;
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
 
-use crate::constants::{EARTH_ORBITAL_RATE, J2_EARTH, MU_EARTH, R_EARTH};
+use crate::constants::{EARTH_ORBITAL_RATE, J2_EARTH, MU_EARTH, OMEGA_EARTH, R_EARTH};
 use crate::error::AstroError;
+use crate::reentry_hypersonic::ExponentialAtmosphere;
 use crate::sim::check_step_count;
 
 /// A 3-D inertial state vector (position + velocity).
@@ -1121,6 +1122,187 @@ pub fn sun_synchronous_inclination(semi_major_axis: f64, eccentricity: f64) -> O
         return None;
     }
     Some(cos_i.acos())
+}
+
+/// The **ballistic drag term** `B = C_d·A/m` (m²/kg) of a spacecraft — the
+/// single lumped parameter that scales atmospheric drag for orbit decay.
+///
+/// Drag acceleration is `a_drag = ½·ρ·v_rel²·B` in magnitude (opposing the
+/// air-relative velocity), so this term carries the drag coefficient `C_d`,
+/// the reference area `A` and the mass `m` together. It is the *reciprocal*
+/// of the classical **ballistic coefficient** `β = m/(C_d·A)` used by the
+/// re-entry models ([`crate::reentry_hypersonic::BallisticEntry`]): a larger
+/// `B` (light, draggy body) decays faster, a smaller `B` (dense, sleek body)
+/// decays slower. Validated on construction so a bad value cannot silently
+/// poison the propagator.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct BallisticTerm(f64);
+
+impl BallisticTerm {
+    /// Build a validated ballistic term `B = C_d·A/m` (m²/kg).
+    ///
+    /// `B = 0` is allowed and means **no drag** (an idealised drag-free body,
+    /// or a way to switch drag off while keeping the same code path).
+    ///
+    /// # Errors
+    ///
+    /// [`AstroError::InvalidParameter`] if `cd_a_over_m` is non-finite or
+    /// negative — a negative term would make drag *add* energy (a silent
+    /// anti-physical thrust) and a `NaN` would poison the whole trajectory.
+    pub fn new(cd_a_over_m: f64) -> Result<Self, AstroError> {
+        if !cd_a_over_m.is_finite() || cd_a_over_m < 0.0 {
+            return Err(AstroError::InvalidParameter(
+                "ballistic term Cd*A/m must be finite and >= 0",
+            ));
+        }
+        Ok(Self(cd_a_over_m))
+    }
+
+    /// Construct from a body's drag coefficient `cd`, reference area `area`
+    /// (m²) and `mass` (kg): `B = C_d·A/m`.
+    ///
+    /// # Errors
+    ///
+    /// [`AstroError::InvalidParameter`] if `mass` is non-finite or
+    /// non-positive (it divides), or if any input is non-finite/negative such
+    /// that the resulting term fails [`BallisticTerm::new`].
+    pub fn from_cd_area_mass(cd: f64, area: f64, mass: f64) -> Result<Self, AstroError> {
+        if !mass.is_finite() || mass <= 0.0 {
+            return Err(AstroError::InvalidParameter("mass must be finite and > 0"));
+        }
+        if !cd.is_finite() || cd < 0.0 || !area.is_finite() || area < 0.0 {
+            return Err(AstroError::InvalidParameter(
+                "cd and area must be finite and >= 0",
+            ));
+        }
+        Self::new(cd * area / mass)
+    }
+
+    /// The raw value `C_d·A/m` (m²/kg).
+    #[must_use]
+    pub fn value(self) -> f64 {
+        self.0
+    }
+}
+
+/// Velocity of the **co-rotating atmosphere** at an ECI point (m/s): `ω × r`,
+/// with Earth's spin `ω = ω_⊕·ẑ`. This is the velocity the air itself has in
+/// the inertial frame, so the air-relative velocity that drives drag is
+/// `v_rel = v − ω × r`. Returns `ω_⊕·(−y, x, 0)`.
+pub fn atmosphere_velocity_eci(position: Vector3<f64>) -> Vector3<f64> {
+    Vector3::new(-OMEGA_EARTH * position.y, OMEGA_EARTH * position.x, 0.0)
+}
+
+/// **Atmospheric drag** perturbing acceleration in the ECI frame (m/s²):
+///
+/// ```text
+/// a_drag = −½·ρ(h)·|v_rel|·(C_d·A/m)·v_rel
+/// ```
+///
+/// where `v_rel` is the velocity relative to the atmosphere and `ρ(h)` comes
+/// from the supplied [`ExponentialAtmosphere`] at the geometric altitude
+/// `h = |r| − R_⊕`. The vector form `−B·½ρ|v_rel|·v_rel` is the textbook
+/// `−½ρv²·B` magnitude carried along `−v̂_rel`, so drag always *opposes* the
+/// air-relative motion and does negative work, draining orbital energy.
+///
+/// With `co_rotating = true` the air spins with Earth (`v_rel = v − ω × r`);
+/// with `false` the atmosphere is taken at rest in the inertial frame
+/// (`v_rel = v`), the simpler non-rotating idealisation. Returns zero when
+/// there is no drag to apply — zero density (e.g. effectively vacuum at high
+/// altitude), a zero ballistic term, or a (near-)zero relative speed — so the
+/// result is always finite and the divide by `|v_rel|` is guarded.
+pub fn drag_accel(
+    position: Vector3<f64>,
+    velocity: Vector3<f64>,
+    ballistic_term: BallisticTerm,
+    atmosphere: &ExponentialAtmosphere,
+    co_rotating: bool,
+) -> Vector3<f64> {
+    let b = ballistic_term.value();
+    if b <= 0.0 {
+        return Vector3::zeros();
+    }
+    let altitude = position.norm() - R_EARTH;
+    let rho = atmosphere.density(altitude);
+    if !rho.is_finite() || rho <= 0.0 {
+        // Zero or non-finite density => no drag. (The `is_finite` guard also
+        // traps a NaN that a pathological altitude might produce.)
+        return Vector3::zeros();
+    }
+    let v_rel = if co_rotating {
+        velocity - atmosphere_velocity_eci(position)
+    } else {
+        velocity
+    };
+    let speed = v_rel.norm();
+    if speed < 1e-9 {
+        return Vector3::zeros();
+    }
+    // −½·ρ·|v_rel|·B · v_rel  ==  −(½·ρ·v²·B) · v̂_rel.
+    -0.5 * rho * speed * b * v_rel
+}
+
+/// Propagate a 3-D state forward by `steps` RK4 steps of size `dt` under
+/// two-body gravity, **optionally J2**, **plus atmospheric drag** — the
+/// drag-perturbed companion to [`propagate`].
+///
+/// This composes the *same* gravitational accelerations as [`propagate`]
+/// ([`two_body_accel`] and, when `with_j2`, [`j2_accel`]) with the
+/// [`drag_accel`] perturbation, integrating the full second-order system
+/// `ṙ = v`, `v̇ = a(r, v)` with RK4. Because drag depends on velocity (through
+/// `v_rel`), the right-hand side is evaluated at each RK4 sub-state's `(r, v)`,
+/// not position alone.
+///
+/// `ballistic_term` is the body's `C_d·A/m` ([`BallisticTerm`]); `atmosphere`
+/// supplies `ρ(h)`; `co_rotating` selects the co-rotating vs. inertial air
+/// model (see [`drag_accel`]).
+///
+/// Drag does negative work, so over time a closed orbit **loses energy and
+/// its semi-major axis shrinks** — orbital decay. With a zero ballistic term
+/// or an atmosphere that is vacuum at the orbit's altitude, the drag term is
+/// identically zero and this reproduces [`propagate`] **exactly** (same RK4,
+/// same gravity, bit-for-bit).
+///
+/// # Errors
+///
+/// Returns [`AstroError::OutOfRange`] if `steps` exceeds
+/// [`crate::sim::MAX_SIM_STEPS`].
+pub fn propagate_with_drag(
+    state: &StateVector,
+    dt: f64,
+    steps: u64,
+    with_j2: bool,
+    ballistic_term: BallisticTerm,
+    atmosphere: &ExponentialAtmosphere,
+    co_rotating: bool,
+) -> Result<StateVector, AstroError> {
+    check_step_count(steps)?;
+
+    // v̇ = gravity (+ J2) + drag, as a function of (position, velocity).
+    let accel = |pos: Vector3<f64>, vel: Vector3<f64>| {
+        let gravity = if with_j2 {
+            two_body_accel(pos) + j2_accel(pos)
+        } else {
+            two_body_accel(pos)
+        };
+        gravity + drag_accel(pos, vel, ballistic_term, atmosphere, co_rotating)
+    };
+
+    let mut s = *state;
+    for _ in 0..steps {
+        // RK4 on (r, v) with ṙ = v, v̇ = a(r, v).
+        let k1r = s.velocity;
+        let k1v = accel(s.position, s.velocity);
+        let k2r = s.velocity + 0.5 * dt * k1v;
+        let k2v = accel(s.position + 0.5 * dt * k1r, s.velocity + 0.5 * dt * k1v);
+        let k3r = s.velocity + 0.5 * dt * k2v;
+        let k3v = accel(s.position + 0.5 * dt * k2r, s.velocity + 0.5 * dt * k2v);
+        let k4r = s.velocity + dt * k3v;
+        let k4v = accel(s.position + dt * k3r, s.velocity + dt * k3v);
+        s.position += dt / 6.0 * (k1r + 2.0 * k2r + 2.0 * k3r + k4r);
+        s.velocity += dt / 6.0 * (k1v + 2.0 * k2v + 2.0 * k3v + k4v);
+    }
+    Ok(s)
 }
 
 #[cfg(test)]
@@ -2963,5 +3145,240 @@ mod tests {
         assert!(parabolic.hyperbolic_anomaly_from_mean(0.5).is_nan());
         // Non-finite input → NaN.
         assert!(coe.hyperbolic_anomaly_from_mean(f64::NAN).is_nan());
+    }
+
+    // ----------------------------------------------------------------
+    // Atmospheric-drag perturbation (BallisticTerm, drag_accel,
+    // propagate_with_drag).
+    // ----------------------------------------------------------------
+
+    /// Specific orbital energy `ε = v²/2 − μ/r` (J/kg) of a state vector.
+    fn specific_energy(s: &StateVector) -> f64 {
+        s.velocity.norm_squared() / 2.0 - MU_EARTH / s.position.norm()
+    }
+
+    /// A circular LEO state at the given altitude (m), in the equatorial
+    /// plane, moving prograde (+y) at the local circular speed.
+    fn circular_leo(altitude_m: f64) -> StateVector {
+        let r = R_EARTH + altitude_m;
+        let v = (MU_EARTH / r).sqrt();
+        StateVector {
+            position: Vector3::new(r, 0.0, 0.0),
+            velocity: Vector3::new(0.0, v, 0.0),
+        }
+    }
+
+    /// A representative thermospheric exponential atmosphere for the decay
+    /// tests: scale height 50 km, anchored so the density at 300 km altitude
+    /// is ≈ 1e-10 kg/m³ — the right order for low LEO. (Its `rho0` is a
+    /// fitting constant, not the literal sea-level value; see
+    /// [`ExponentialAtmosphere`].) Nonzero and finite at LEO so a circular
+    /// orbit measurably decays.
+    fn leo_test_atmosphere() -> ExponentialAtmosphere {
+        let scale_height = 50_000.0;
+        let rho_at_300km = 1.0e-10;
+        let rho0 = rho_at_300km * (300_000.0_f64 / scale_height).exp();
+        ExponentialAtmosphere::new(rho0, scale_height).expect("valid test atmosphere")
+    }
+
+    #[test]
+    fn ballistic_term_validates_and_constructs() {
+        // Good values.
+        assert!(BallisticTerm::new(0.0).is_ok());
+        assert!((BallisticTerm::new(0.02).unwrap().value() - 0.02).abs() < 1e-15);
+        // B = Cd·A/m.
+        let b = BallisticTerm::from_cd_area_mass(2.2, 5.0, 500.0).unwrap();
+        assert!((b.value() - 2.2 * 5.0 / 500.0).abs() < 1e-15);
+        // Fail-loud on bad config.
+        assert!(BallisticTerm::new(-1e-3).is_err());
+        assert!(BallisticTerm::new(f64::NAN).is_err());
+        assert!(BallisticTerm::new(f64::INFINITY).is_err());
+        assert!(BallisticTerm::from_cd_area_mass(2.2, 5.0, 0.0).is_err()); // m = 0 divides
+        assert!(BallisticTerm::from_cd_area_mass(2.2, 5.0, -1.0).is_err());
+        assert!(BallisticTerm::from_cd_area_mass(-1.0, 5.0, 500.0).is_err());
+    }
+
+    #[test]
+    fn pin_zero_drag_reproduces_unperturbed_propagator_exactly() {
+        // BENCHMARK-PIN (1): with no drag the drag-aware propagator must
+        // reproduce the plain two-body(+J2) RK4 propagator BIT-FOR-BIT.
+        let state = circular_leo(500_000.0);
+        let dt = 5.0;
+        let steps = 2_000;
+
+        // (a) Zero ballistic term → drag identically zero, any atmosphere.
+        let zero_b = BallisticTerm::new(0.0).unwrap();
+        let atmos = leo_test_atmosphere();
+        for with_j2 in [false, true] {
+            let plain = propagate(&state, dt, steps, with_j2).unwrap();
+            let dragged =
+                propagate_with_drag(&state, dt, steps, with_j2, zero_b, &atmos, true).unwrap();
+            assert_eq!(
+                plain.position, dragged.position,
+                "zero-B position must match exactly (j2={with_j2})"
+            );
+            assert_eq!(
+                plain.velocity, dragged.velocity,
+                "zero-B velocity must match exactly (j2={with_j2})"
+            );
+        }
+
+        // (b) Vacuum atmosphere (rho ≡ 0 everywhere) with a real ballistic
+        // term → also exactly the unperturbed result. A tiny rho0 with a
+        // huge altitude underflows to exactly 0.0; use an atmosphere whose
+        // density at the orbit is exactly zero by construction: rho0 set so
+        // exp underflows. Simpler: place the orbit far above, where the
+        // exponential is 0.0 in f64.
+        let real_b = BallisticTerm::new(0.02).unwrap();
+        let high = circular_leo(40_000_000.0); // ρ underflows to 0 at this altitude
+        let atmos_real = ExponentialAtmosphere::default(); // rho0=1.225, H=7200
+        assert_eq!(
+            atmos_real.density(high.position.norm() - R_EARTH),
+            0.0,
+            "atmosphere must be exact vacuum at test altitude"
+        );
+        let plain = propagate(&high, dt, steps, false).unwrap();
+        let dragged =
+            propagate_with_drag(&high, dt, steps, false, real_b, &atmos_real, true).unwrap();
+        assert_eq!(plain.position, dragged.position);
+        assert_eq!(plain.velocity, dragged.velocity);
+    }
+
+    #[test]
+    fn pin_circular_leo_decays_monotonically() {
+        // BENCHMARK-PIN (2): a circular LEO under drag must lose energy and
+        // shrink — semi-major axis (≈ radius) and specific orbital energy
+        // both DECREASE monotonically. Drag does negative work.
+        let mut state = circular_leo(300_000.0);
+        let atmos = leo_test_atmosphere();
+        let b = BallisticTerm::new(0.05).unwrap(); // light, draggy: visible decay
+        let dt = 2.0;
+        let chunk = 400; // steps between samples
+
+        let mut prev_energy = specific_energy(&state);
+        let mut prev_radius = state.position.norm();
+        let mut total_drop = 0.0_f64;
+        for _ in 0..40 {
+            state = propagate_with_drag(&state, dt, chunk, false, b, &atmos, true).unwrap();
+            let energy = specific_energy(&state);
+            let radius = state.position.norm();
+            // ε is negative for a bound orbit and must become MORE negative.
+            assert!(
+                energy < prev_energy,
+                "energy must decrease under drag: {prev_energy} -> {energy}"
+            );
+            // Smoothed (mean) radius shrinks; sample at the same phase-ish
+            // point so the small residual eccentricity doesn't mask it. Use
+            // energy as the clean monotone witness and check the radius trend
+            // over the whole run below.
+            total_drop += prev_radius - radius;
+            prev_energy = energy;
+            prev_radius = radius;
+        }
+        // Over the whole run the orbit has decayed by a clearly non-trivial,
+        // positive amount (net inward drift) — not numerical noise.
+        assert!(
+            total_drop > 1_000.0,
+            "orbit should have decayed measurably, net radius drop = {total_drop} m"
+        );
+    }
+
+    #[test]
+    fn pin_drag_force_magnitude_matches_half_rho_v2_cd_a() {
+        // BENCHMARK-PIN (3): the drag FORCE magnitude must equal
+        // F = ½·ρ·v²·(Cd·A) at a known (ρ, v). drag_accel returns the
+        // acceleration a = F/m = ½·ρ·v²·(Cd·A/m); multiply by m to recover F.
+        // Use the non-rotating model so v_rel = v exactly.
+        let altitude = 200_000.0;
+        let r = R_EARTH + altitude;
+        // Velocity purely tangential so |v_rel| = |v| is the value we control.
+        let v_mag = 7_788.0;
+        let state = StateVector {
+            position: Vector3::new(r, 0.0, 0.0),
+            velocity: Vector3::new(0.0, v_mag, 0.0),
+        };
+        let cd = 2.2;
+        let area = 4.0;
+        let mass = 350.0;
+        let b = BallisticTerm::from_cd_area_mass(cd, area, mass).unwrap();
+        let atmos = leo_test_atmosphere();
+        let rho = atmos.density(altitude);
+        assert!(rho > 0.0, "need nonzero density at test altitude");
+
+        let a = drag_accel(state.position, state.velocity, b, &atmos, false);
+        // Direction: opposes velocity (−y), no radial/out-of-plane component.
+        assert!(a.y < 0.0 && a.x.abs() < 1e-20 && a.z.abs() < 1e-20);
+
+        let force_mag = a.norm() * mass;
+        let expected = 0.5 * rho * v_mag * v_mag * cd * area;
+        assert!(
+            (force_mag - expected).abs() / expected < 1e-12,
+            "drag force {force_mag} vs analytic ½ρv²CdA {expected}"
+        );
+    }
+
+    #[test]
+    fn pin_higher_ballistic_term_decays_faster() {
+        // BENCHMARK-PIN (4): a larger Cd·A/m must decay the same orbit
+        // faster — the energy loss after a fixed time is monotone in B.
+        let atmos = leo_test_atmosphere();
+        let dt = 2.0;
+        let steps = 6_000;
+        let start = circular_leo(300_000.0);
+        let e0 = specific_energy(&start);
+
+        let mut prev_loss = -1.0_f64; // forces the first comparison to pass
+        for &bval in &[0.01_f64, 0.02, 0.05, 0.1] {
+            let b = BallisticTerm::new(bval).unwrap();
+            let end = propagate_with_drag(&start, dt, steps, false, b, &atmos, true).unwrap();
+            let loss = e0 - specific_energy(&end); // positive: energy shed
+            assert!(loss > 0.0, "B={bval}: orbit must lose energy, loss={loss}");
+            assert!(
+                loss > prev_loss,
+                "larger B must shed more energy: B={bval} loss={loss} <= prev {prev_loss}"
+            );
+            prev_loss = loss;
+        }
+    }
+
+    #[test]
+    fn pin_propagate_with_drag_guards_bad_step_count() {
+        // Fail-loud on an absurd step count (shared budget guard), like the
+        // unperturbed propagator.
+        let state = circular_leo(400_000.0);
+        let b = BallisticTerm::new(0.02).unwrap();
+        let atmos = leo_test_atmosphere();
+        let r = propagate_with_drag(&state, 1.0, u64::MAX, false, b, &atmos, true);
+        assert!(matches!(
+            r,
+            Err(AstroError::OutOfRange { what: "steps", .. })
+        ));
+        // A sane step count is fine.
+        assert!(propagate_with_drag(&state, 1.0, 10, false, b, &atmos, true).is_ok());
+    }
+
+    #[test]
+    fn co_rotating_vs_inertial_atmosphere_differ_for_prograde_orbit() {
+        // Sanity: for a prograde equatorial orbit the co-rotating air moves
+        // WITH the satellite, lowering v_rel and thus the drag — so the
+        // co-rotating model must shed LESS energy than the inertial (air at
+        // rest) model over the same span. Confirms the ω×r term is wired in.
+        let atmos = leo_test_atmosphere();
+        let b = BallisticTerm::new(0.05).unwrap();
+        let dt = 2.0;
+        let steps = 4_000;
+        let start = circular_leo(250_000.0);
+        let e0 = specific_energy(&start);
+
+        let co = propagate_with_drag(&start, dt, steps, false, b, &atmos, true).unwrap();
+        let inert = propagate_with_drag(&start, dt, steps, false, b, &atmos, false).unwrap();
+        let loss_co = e0 - specific_energy(&co);
+        let loss_inert = e0 - specific_energy(&inert);
+        assert!(loss_co > 0.0 && loss_inert > 0.0);
+        assert!(
+            loss_inert > loss_co,
+            "inertial-air drag should exceed co-rotating for a prograde orbit: \
+             inert {loss_inert} vs co {loss_co}"
+        );
     }
 }

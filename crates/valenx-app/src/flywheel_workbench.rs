@@ -117,34 +117,51 @@ pub fn draw_flywheel_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Geometry").strong());
+                    // Associate each numeric `DragValue` with its caption via
+                    // `labelled_by`, so the spin button carries the caption as
+                    // its accessibility / UI-Automation Name (egui clears a
+                    // DragValue's own Name, leaving it anonymous to a screen
+                    // reader / AI driver otherwise).
                     ui.horizontal(|ui| {
-                        ui.label("mass (kg)");
-                        ui.add(egui::DragValue::new(&mut s.mass_kg).speed(0.1));
+                        let mk = ui.label("mass (kg)");
+                        ui.add(egui::DragValue::new(&mut s.mass_kg).speed(0.1))
+                            .labelled_by(mk.id)
+                            .on_hover_text("Flywheel mass (kg)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("outer radius (m)");
-                        ui.add(egui::DragValue::new(&mut s.r_out_m).speed(0.01));
+                        let ro = ui.label("outer radius (m)");
+                        ui.add(egui::DragValue::new(&mut s.r_out_m).speed(0.01))
+                            .labelled_by(ro.id)
+                            .on_hover_text("Outer radius (m)");
                     });
                     if s.shape == RotorShape::AnnularDisk {
                         ui.horizontal(|ui| {
-                            ui.label("inner radius (m)");
-                            ui.add(egui::DragValue::new(&mut s.r_in_m).speed(0.01));
+                            let ri = ui.label("inner radius (m)");
+                            ui.add(egui::DragValue::new(&mut s.r_in_m).speed(0.01))
+                                .labelled_by(ri.id)
+                                .on_hover_text("Inner (bore) radius (m)");
                         });
                     }
                     ui.horizontal(|ui| {
-                        ui.label("density ρ (kg/m³)");
-                        ui.add(egui::DragValue::new(&mut s.density_kg_m3).speed(10.0));
+                        let de = ui.label("density ρ (kg/m³)");
+                        ui.add(egui::DragValue::new(&mut s.density_kg_m3).speed(10.0))
+                            .labelled_by(de.id)
+                            .on_hover_text("Material density ρ (kg/m³)");
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Operating band").strong());
                     ui.horizontal(|ui| {
-                        ui.label("upper speed (rpm)");
-                        ui.add(egui::DragValue::new(&mut s.rpm_max).speed(10.0));
+                        let rx = ui.label("upper speed (rpm)");
+                        ui.add(egui::DragValue::new(&mut s.rpm_max).speed(10.0))
+                            .labelled_by(rx.id)
+                            .on_hover_text("Upper operating speed (rpm)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("lower speed (rpm)");
-                        ui.add(egui::DragValue::new(&mut s.rpm_min).speed(10.0));
+                        let rn = ui.label("lower speed (rpm)");
+                        ui.add(egui::DragValue::new(&mut s.rpm_min).speed(10.0))
+                            .labelled_by(rn.id)
+                            .on_hover_text("Lower operating speed (rpm)");
                     });
 
                     ui.add_space(6.0);
@@ -561,12 +578,28 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_flywheel_workbench(app, ctx);
         });
+    }
+
+    /// As [`draw_workbench`], but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_flywheel_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -582,5 +615,46 @@ mod headless_ui_tests {
         app.show_flywheel_workbench = true;
         run_flywheel(&mut app.flywheel);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // The geometry + operating-band DragValues are SpinButtons; each must
+        // be `labelled_by` its caption (egui clears a DragValue's own Name), so
+        // an AI / screen reader can find the control by the caption text. The
+        // default shape is a solid disk, so the inner-radius control is hidden;
+        // mass, outer radius, density, upper speed and lower speed remain.
+        let mut app = ValenxApp::default();
+        app.show_flywheel_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // mass, outer radius, density, upper speed, lower speed.
+        assert!(
+            spin_buttons.len() >= 5,
+            "expected the flywheel numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every flywheel DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["mass (kg)", "outer radius (m)", "upper speed (rpm)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        // The Analyze button stays a named, invokable node.
+        assert!(
+            nodes.iter().any(|(_, n)| n.role() == Role::Button
+                && n.name().is_some_and(|s| s.contains("Analyze"))),
+            "the Analyze button is a named, invokable node"
+        );
     }
 }

@@ -117,13 +117,17 @@ pub fn draw_diffusion_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Medium").strong());
+                    // Associate each numeric `DragValue` with its caption via `labelled_by`, so
+                    // the spin button carries the caption as its accessibility / UI-Automation
+                    // Name (egui clears a DragValue's own Name otherwise).
                     ui.horizontal(|ui| {
-                        ui.label("diffusivity D (m²/s)");
+                        let l = ui.label("diffusivity D (m²/s)");
                         ui.add(
                             egui::DragValue::new(&mut s.diffusivity_m2_s)
                                 .speed(1.0e-10)
                                 .max_decimals(12),
-                        );
+                        )
+                        .labelled_by(l.id);
                     });
 
                     match s.mode {
@@ -131,32 +135,37 @@ pub fn draw_diffusion_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                             ui.add_space(4.0);
                             ui.label(egui::RichText::new("Slab").strong());
                             ui.horizontal(|ui| {
-                                ui.label("C left");
-                                ui.add(egui::DragValue::new(&mut s.c_left).speed(0.05));
+                                let l = ui.label("C left");
+                                ui.add(egui::DragValue::new(&mut s.c_left).speed(0.05))
+                                    .labelled_by(l.id);
                             });
                             ui.horizontal(|ui| {
-                                ui.label("C right");
-                                ui.add(egui::DragValue::new(&mut s.c_right).speed(0.05));
+                                let l = ui.label("C right");
+                                ui.add(egui::DragValue::new(&mut s.c_right).speed(0.05))
+                                    .labelled_by(l.id);
                             });
                             ui.horizontal(|ui| {
-                                ui.label("length L (m)");
+                                let l = ui.label("length L (m)");
                                 ui.add(
                                     egui::DragValue::new(&mut s.length_m)
                                         .speed(1.0e-4)
                                         .max_decimals(6),
-                                );
+                                )
+                                .labelled_by(l.id);
                             });
                         }
                         DiffusionMode::Spread => {
                             ui.add_space(4.0);
                             ui.label(egui::RichText::new("Point source").strong());
                             ui.horizontal(|ui| {
-                                ui.label("mass M (per area)");
-                                ui.add(egui::DragValue::new(&mut s.mass).speed(0.05));
+                                let l = ui.label("mass M (per area)");
+                                ui.add(egui::DragValue::new(&mut s.mass).speed(0.05))
+                                    .labelled_by(l.id);
                             });
                             ui.horizontal(|ui| {
-                                ui.label("time t (s)");
-                                ui.add(egui::DragValue::new(&mut s.time_s).speed(60.0));
+                                let l = ui.label("time t (s)");
+                                ui.add(egui::DragValue::new(&mut s.time_s).speed(60.0))
+                                    .labelled_by(l.id);
                             });
                         }
                     }
@@ -515,12 +524,28 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_diffusion_workbench(app, ctx);
         });
+    }
+
+    /// As [`draw_workbench`], but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_diffusion_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -536,5 +561,43 @@ mod headless_ui_tests {
         app.show_diffusion_workbench = true;
         run_diffusion(&mut app.diffusion);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // Every numeric `DragValue` is a SpinButton that must be `labelled_by`
+        // its caption (egui clears a DragValue's own Name), so an AI / screen
+        // reader can find the control by the caption text. The default mode is
+        // Gaussian spread: diffusivity D, mass M and time t render.
+        let mut app = ValenxApp::default();
+        app.show_diffusion_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 3,
+            "expected the numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["diffusivity D (m²/s)", "mass M (per area)", "time t (s)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        assert!(
+            nodes.iter().any(|(_, n)| n.role() == Role::Button
+                && n.name().is_some_and(|s| s.contains("Analyze"))),
+            "the primary action button is a named, invokable node"
+        );
     }
 }

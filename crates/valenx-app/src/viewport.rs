@@ -384,7 +384,20 @@ fn draw_shaded_wgpu(
     stl: &LoadedStl,
     ctx: &mut WgpuCtx<'_>,
 ) -> bool {
-    let vertices = triangles_to_vertices(&stl.mesh);
+    // Per-vertex-coloured path only when the STL carries a colour buffer
+    // AND it covers every surface vertex the renderer emits (3 per
+    // triangle); otherwise the plain brushed-metal path (byte-identical to
+    // the importer's original look). The length guard means a stale or
+    // wrong-length colour vec never produces a half-coloured mesh — it
+    // cleanly falls back to metal. Same convention the per-tile mini-view
+    // uses in `dock_layout::render_tile_mesh_3d`.
+    let expected_len = stl.mesh.triangle_count() * 3;
+    let vertices = match stl.colors.as_deref() {
+        Some(colors) if colors.len() == expected_len => {
+            crate::wgpu_renderer::triangles_to_vertices_colored(&stl.mesh, colors)
+        }
+        _ => triangles_to_vertices(&stl.mesh),
+    };
     render_wgpu_scene(painter, rect, camera, ctx, &vertices)
 }
 

@@ -39,6 +39,95 @@ impl Default for Draft2dWorkbenchState {
     }
 }
 
+impl Draft2dWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`
+    /// so an agent can discover the name space. These are the line-endpoint, the
+    /// circle, and the zoom captions the form draws — note the line captions use
+    /// the Unicode subscripts `x\u{2081}`/`y\u{2081}`/`x\u{2082}`/`y\u{2082}`, so
+    /// the agent must match them exactly (or read them from this list). Setting
+    /// these stages the next primitive to add (the `+` button reads them); they
+    /// are the drawing-input fields, distinct from the entities already drawn.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "x\u{2081}",
+            "y\u{2081}",
+            "x\u{2082}",
+            "y\u{2082}", // line endpoints
+            "cx",
+            "cy",
+            "r", // circle
+            "zoom",
+        ]
+    }
+
+    /// Add a straight **line** entity to the drawing by explicit endpoints, for
+    /// the agent `Add2dLine` bridge. Routes through the **same**
+    /// `Drawing2D::add(Entity2D::Line { .. })` path the form's `+` button uses
+    /// (layer `"0"`), so a bridge-added line is identical to a hand-added one —
+    /// the bridge just supplies the coordinates directly instead of the input
+    /// fields. The `drawing` field is module-private, so this is the public
+    /// seam the cross-module bridge writes through.
+    pub fn agent_add_line(&mut self, a: [f64; 2], b: [f64; 2]) {
+        self.drawing.add(Entity2D::Line {
+            layer: "0".to_string(),
+            a,
+            b,
+        });
+    }
+
+    /// Add a **circle** entity to the drawing by centre + radius, for the agent
+    /// `Add2dCircle` bridge. Routes through the **same**
+    /// `Drawing2D::add(Entity2D::Circle { .. })` path the form's `+` button uses
+    /// (layer `"0"`, radius floored at `0.1` exactly like the button), so a
+    /// bridge-added circle is identical to a hand-added one. The caller has
+    /// already validated `radius > 0`; the `0.1` floor is the same defensive
+    /// clamp the UI applies.
+    pub fn agent_add_circle(&mut self, centre: [f64; 2], radius: f64) {
+        self.drawing.add(Entity2D::Circle {
+            layer: "0".to_string(),
+            centre,
+            radius: radius.max(0.1),
+        });
+    }
+
+    /// The number of entities currently in the drawing — the public read the
+    /// agent bridge (and its tests) use to confirm an add landed, since the
+    /// `drawing` field itself is module-private.
+    pub fn entity_count(&self) -> usize {
+        self.drawing.entities.len()
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. The captions match exactly what the form draws (the
+    /// line endpoints are the Unicode-subscript captions). Fail-loud on an
+    /// unknown caption / wrong type (the bridge posts a `warn` note); no field is
+    /// written on error and nothing panics. The line / circle fields read
+    /// `AgentValue::as_f64`; `zoom` is the `f32` canvas scale and is clamped to
+    /// the same `0.5..=60.0` range the UI slider enforces.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        match name {
+            // Line endpoint inputs [x1, y1, x2, y2].
+            "x\u{2081}" => self.line[0] = value.as_f64()?,
+            "y\u{2081}" => self.line[1] = value.as_f64()?,
+            "x\u{2082}" => self.line[2] = value.as_f64()?,
+            "y\u{2082}" => self.line[3] = value.as_f64()?,
+            // Circle inputs [cx, cy, r].
+            "cx" => self.circle[0] = value.as_f64()?,
+            "cy" => self.circle[1] = value.as_f64()?,
+            "r" => self.circle[2] = value.as_f64()?,
+            // Canvas zoom (f32, matches the slider's 0.5..=60.0 range).
+            "zoom" => self.scale = (value.as_f64()? as f32).clamp(0.5, 60.0),
+            other => return Err(format!("unknown draft2d control: {other:?}")),
+        }
+        Ok(())
+    }
+}
+
 /// A small sample drawing: a closed rectangle, a circle, a diagonal, a label.
 fn demo_drawing() -> Drawing2D {
     let mut d = Drawing2D::new();
@@ -208,8 +297,14 @@ pub fn draw_draft2d_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
             });
             ui.horizontal(|ui| {
                 ui.label("line");
-                for v in &mut s.line {
-                    ui.add(egui::DragValue::new(v).speed(1.0));
+                // Each endpoint component gets a per-field caption associated
+                // via `labelled_by`, so the spin button is named for a screen
+                // reader / AI driver (egui clears a DragValue's own name).
+                const LINE_CAPS: [&str; 4] = ["x₁", "y₁", "x₂", "y₂"];
+                for (i, v) in s.line.iter_mut().enumerate() {
+                    let cap = ui.label(LINE_CAPS[i]);
+                    ui.add(egui::DragValue::new(v).speed(1.0))
+                        .labelled_by(cap.id);
                 }
                 if ui.small_button("+").clicked() {
                     s.drawing.add(Entity2D::Line {
@@ -221,8 +316,11 @@ pub fn draw_draft2d_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
             });
             ui.horizontal(|ui| {
                 ui.label("circle");
-                for v in &mut s.circle {
-                    ui.add(egui::DragValue::new(v).speed(1.0));
+                const CIRCLE_CAPS: [&str; 3] = ["cx", "cy", "r"];
+                for (i, v) in s.circle.iter_mut().enumerate() {
+                    let cap = ui.label(CIRCLE_CAPS[i]);
+                    ui.add(egui::DragValue::new(v).speed(1.0))
+                        .labelled_by(cap.id);
                 }
                 if ui.small_button("+").clicked() {
                     s.drawing.add(Entity2D::Circle {
@@ -235,12 +333,13 @@ pub fn draw_draft2d_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
             ui.horizontal(|ui| {
                 ui.label(format!("{} entities", s.drawing.entities.len()));
                 ui.separator();
-                ui.label("zoom");
+                let zoom = ui.label("zoom");
                 ui.add(
                     egui::DragValue::new(&mut s.scale)
                         .speed(0.2)
                         .range(0.5..=60.0),
-                );
+                )
+                .labelled_by(zoom.id);
             });
             if !s.status.is_empty() {
                 ui.label(egui::RichText::new(&s.status).small().weak());
@@ -370,5 +469,65 @@ mod tests {
             n,
             "entity count preserved through DXF round-trip"
         );
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
+mod headless_ui_tests {
+    use super::*;
+
+    #[test]
+    fn workbench_is_a_noop_when_hidden() {
+        let mut app = ValenxApp::default();
+        assert!(!app.show_draft2d_workbench);
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_draft2d_workbench(&mut app, ctx);
+        });
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::{Node, NodeId, Role};
+
+        // Render with accesskit enabled and read the emitted a11y tree — the
+        // same tree a screen reader / AI UI-Automation driver consumes. Every
+        // DragValue (Role::SpinButton) must carry a caption via `labelled_by`,
+        // since egui clears a DragValue's own Name.
+        let mut app = ValenxApp::default();
+        app.show_draft2d_workbench = true;
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_draft2d_workbench(&mut app, ctx);
+        });
+        let nodes: Vec<(NodeId, Node)> = out
+            .platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes;
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // line (4 components) + circle (3) + zoom (1) = 8 spin buttons.
+        assert!(
+            spin_buttons.len() >= 8,
+            "expected the draft2d numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every draft2d DragValue must be labelled_by its caption"
+        );
+        for caption in ["x₁", "y₁", "cx", "cy", "r", "zoom"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

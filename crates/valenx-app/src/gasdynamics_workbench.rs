@@ -100,6 +100,65 @@ fn compute_report(mach: f64, gamma: f64) -> Result<FlowReport, GasError> {
 /// Validate the form, evaluate the relations and format the monospace readout.
 /// Extracted from the draw closure so it is unit-testable. On any domain error
 /// (`M <= 0`, `gamma <= 1`, non-finite) it sets `error` and clears `result`.
+impl GasDynamicsWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`;
+    /// each string matches exactly the caption the form draws.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &["Mach M", "gamma"]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the
+    /// wrong type / out of range returns `Err(String)` — never a panic. Ranges
+    /// mirror the 1-D compressible-flow domain the report enforces: Mach `> 0`
+    /// and `gamma > 1`.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        match name {
+            "Mach M" => {
+                let v = value.as_f64()?;
+                if !(v.is_finite() && v > 0.0) {
+                    return Err(format!("Mach M must be > 0, got {v}"));
+                }
+                self.mach = v;
+            }
+            "gamma" => {
+                let v = value.as_f64()?;
+                if !(v.is_finite() && v > 1.0) {
+                    return Err(format!("gamma must be > 1, got {v}"));
+                }
+                self.gamma = v;
+            }
+            other => return Err(format!("unknown GasDynamics control: {other:?}")),
+        }
+        Ok(())
+    }
+
+    /// The current computed-result text for the agent `ReadReadout` bridge (see
+    /// [`crate::agent_commands`]): the same `Result` string the panel renders
+    /// once a case has been computed, else the last `error`, else `None` when it
+    /// has not been run yet. Read-only — lets an agent read the answer back after
+    /// driving a compute, closing the live-driving loop.
+    pub fn agent_readout(&self) -> Option<String> {
+        if !self.result.is_empty() {
+            Some(self.result.clone())
+        } else {
+            self.error.clone()
+        }
+    }
+}
+
+/// Run the compressible-flow compute (the in-panel **Compute** action).
+/// Factored out so the button, the panel's first-open auto-compute, and the
+/// product self-test ([`crate::self_test`]) share one path.
+pub(crate) fn run(app: &mut ValenxApp) {
+    run_gasdynamics(&mut app.gasdynamics);
+}
+
 fn run_gasdynamics(s: &mut GasDynamicsWorkbenchState) {
     s.error = None;
     match compute_report(s.mach, s.gamma) {
@@ -213,15 +272,17 @@ pub fn draw_gasdynamics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.label(egui::RichText::new("Inputs").strong());
                     let mut changed = false;
                     ui.horizontal(|ui| {
-                        ui.label("Mach M");
+                        let cap = ui.label("Mach M");
                         changed |= ui
                             .add(egui::DragValue::new(&mut s.mach).speed(0.01))
+                            .labelled_by(cap.id)
                             .changed();
                     });
                     ui.horizontal(|ui| {
-                        ui.label("gamma");
+                        let cap = ui.label("gamma");
                         changed |= ui
                             .add(egui::DragValue::new(&mut s.gamma).speed(0.005))
+                            .labelled_by(cap.id)
                             .changed();
                     });
 
@@ -284,9 +345,26 @@ pub(crate) fn gasdynamics_product() -> crate::WorkspaceProduct {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_commands::AgentValue;
 
     fn close(a: f64, b: f64, tol: f64) -> bool {
         (a - b).abs() < tol
+    }
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        let mut s = GasDynamicsWorkbenchState::default();
+        s.agent_set("Mach M", &AgentValue::Float(3.0)).unwrap();
+        assert_eq!(s.mach, 3.0);
+        // Unknown caption -> Err (no panic).
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (string into numeric) -> Err.
+        assert!(s
+            .agent_set("gamma", &AgentValue::Str("air".into()))
+            .is_err());
+        // Out-of-domain (gamma <= 1) -> Err, field untouched.
+        assert!(s.agent_set("gamma", &AgentValue::Float(1.0)).is_err());
+        assert_eq!(s.gamma, 1.4, "rejected set leaves field untouched");
     }
 
     #[test]
@@ -440,5 +518,44 @@ mod headless_ui_tests {
         app.show_gasdynamics_workbench = true;
         app.gasdynamics.gamma = 1.0; // invalid → error path
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::{Node, NodeId, Role};
+
+        let mut app = ValenxApp::default();
+        app.show_gasdynamics_workbench = true;
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_gasdynamics_workbench(&mut app, ctx);
+        });
+        let nodes: Vec<(NodeId, Node)> = out
+            .platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes;
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 2,
+            "expected the gasdynamics numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every gasdynamics DragValue must be labelled_by its caption"
+        );
+        for caption in ["Mach M", "gamma"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

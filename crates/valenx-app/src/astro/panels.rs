@@ -19,10 +19,11 @@
 //! [`super::run`]. Mirrors the CFD-side [`crate::aero::panels`].
 
 use eframe::egui;
-use egui_plot::{Legend, Line, Plot, PlotPoints};
+use egui_plot::{Legend, Line, PlotPoints};
 use nalgebra::Vector3;
 
 use super::model::{self, AstroTab, GuidanceChoice, StageForm};
+use crate::plot_ui::managed_plot_mem_cfg;
 use crate::ValenxApp;
 use valenx_astro::{landing, maneuver, rendezvous, windows};
 
@@ -109,59 +110,59 @@ pub fn draw_vehicle_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .num_columns(2)
                             .spacing([8.0, 4.0])
                             .show(ui, |ui| {
-                                ui.label("Dry mass")
+                                let lbl = ui.label("Dry mass")
                                     .on_hover_text("Inert structural mass jettisoned at staging. SI unit: kg.");
                                 ui.add(
                                     egui::DragValue::new(&mut stage.dry_mass)
                                         .speed(100.0)
                                         .range(1.0..=5.0e6)
                                         .suffix(" kg"),
-                                );
+                                ).labelled_by(lbl.id);
                                 ui.end_row();
-                                ui.label("Propellant mass")
+                                let lbl = ui.label("Propellant mass")
                                     .on_hover_text("Usable propellant in this stage. SI unit: kg.");
                                 ui.add(
                                     egui::DragValue::new(&mut stage.propellant_mass)
                                         .speed(500.0)
                                         .range(0.0..=5.0e6)
                                         .suffix(" kg"),
-                                );
+                                ).labelled_by(lbl.id);
                                 ui.end_row();
-                                ui.label("Thrust (vac)")
+                                let lbl = ui.label("Thrust (vac)")
                                     .on_hover_text("Vacuum thrust. SI unit: N.");
                                 ui.add(
                                     egui::DragValue::new(&mut stage.thrust_vac)
                                         .speed(10_000.0)
                                         .range(1.0..=1.0e8)
                                         .custom_formatter(|v, _| format!("{:.0} kN", v / 1_000.0)),
-                                );
+                                ).labelled_by(lbl.id);
                                 ui.end_row();
-                                ui.label("Thrust (sea level)")
+                                let lbl = ui.label("Thrust (sea level)")
                                     .on_hover_text("Sea-level thrust. For an upper stage that never fires in the atmosphere set this equal to the vacuum thrust. SI unit: N.");
                                 ui.add(
                                     egui::DragValue::new(&mut stage.thrust_sl)
                                         .speed(10_000.0)
                                         .range(1.0..=1.0e8)
                                         .custom_formatter(|v, _| format!("{:.0} kN", v / 1_000.0)),
-                                );
+                                ).labelled_by(lbl.id);
                                 ui.end_row();
-                                ui.label("Isp (vac)")
+                                let lbl = ui.label("Isp (vac)")
                                     .on_hover_text("Vacuum specific impulse. SI unit: s.");
                                 ui.add(
                                     egui::DragValue::new(&mut stage.isp_vac)
                                         .speed(1.0)
                                         .range(1.0..=600.0)
                                         .suffix(" s"),
-                                );
+                                ).labelled_by(lbl.id);
                                 ui.end_row();
-                                ui.label("Isp (sea level)")
+                                let lbl = ui.label("Isp (sea level)")
                                     .on_hover_text("Sea-level specific impulse. SI unit: s.");
                                 ui.add(
                                     egui::DragValue::new(&mut stage.isp_sl)
                                         .speed(1.0)
                                         .range(1.0..=600.0)
                                         .suffix(" s"),
-                                );
+                                ).labelled_by(lbl.id);
                                 ui.end_row();
                             });
                         // Allow removing a stage only when more than one
@@ -197,32 +198,32 @@ pub fn draw_vehicle_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .num_columns(2)
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label("Payload mass")
+                    let lbl = ui.label("Payload mass")
                         .on_hover_text("Payload carried all the way to orbit. SI unit: kg.");
                     ui.add(
                         egui::DragValue::new(&mut form.payload_mass)
                             .speed(100.0)
                             .range(0.0..=1.0e6)
                             .suffix(" kg"),
-                    );
+                    ).labelled_by(lbl.id);
                     ui.end_row();
-                    ui.label("Reference area")
+                    let lbl = ui.label("Reference area")
                         .on_hover_text("Aerodynamic frontal area driving drag. SI unit: m².");
                     ui.add(
                         egui::DragValue::new(&mut form.reference_area)
                             .speed(0.1)
                             .range(0.1..=500.0)
                             .suffix(" m\u{00b2}"),
-                    );
+                    ).labelled_by(lbl.id);
                     ui.end_row();
-                    ui.label("Launch altitude")
+                    let lbl = ui.label("Launch altitude")
                         .on_hover_text("Launch-site elevation above the equatorial radius. SI unit: m.");
                     ui.add(
                         egui::DragValue::new(&mut form.launch_altitude_m)
                             .speed(10.0)
                             .range(0.0..=6_000.0)
                             .suffix(" m"),
-                    );
+                    ).labelled_by(lbl.id);
                     ui.end_row();
                 });
 
@@ -250,7 +251,7 @@ pub fn draw_guidance_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
         .default_open(true)
         .show(ui, |ui| {
             let form = &mut app.astro.ascent;
-            ui.label("Steering law");
+            let steering_lbl = ui.label("Steering law");
             egui::ComboBox::from_id_source("astro_guidance_mode")
                 .selected_text(form.guidance.label())
                 .width(ui.available_width())
@@ -258,7 +259,9 @@ pub fn draw_guidance_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     for g in GuidanceChoice::ALL {
                         ui.selectable_value(&mut form.guidance, g, g.label());
                     }
-                });
+                })
+                .response
+                .labelled_by(steering_lbl.id);
             match form.guidance {
                 GuidanceChoice::OpenLoopGravityTurn => derived(
                     ui,
@@ -277,50 +280,50 @@ pub fn draw_guidance_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .num_columns(2)
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label("Target altitude")
+                    let lbl = ui.label("Target altitude")
                         .on_hover_text("Circular-orbit altitude the closed-loop insertion targets. SI unit: km.");
                     ui.add(
                         egui::DragValue::new(&mut form.target_altitude_km)
                             .speed(5.0)
                             .range(80.0..=40_000.0)
                             .suffix(" km"),
-                    );
+                    ).labelled_by(lbl.id);
                     ui.end_row();
-                    ui.label("Vertical rise time")
+                    let lbl = ui.label("Vertical rise time")
                         .on_hover_text("How long to hold a vertical attitude after liftoff. SI unit: s.");
                     ui.add(
                         egui::DragValue::new(&mut form.vertical_rise_time)
                             .speed(0.5)
                             .range(0.0..=120.0)
                             .suffix(" s"),
-                    );
+                    ).labelled_by(lbl.id);
                     ui.end_row();
-                    ui.label("Pitch kick")
+                    let lbl = ui.label("Pitch kick")
                         .on_hover_text("Pitch-over angle off vertical that starts the gravity turn. SI unit: deg.");
                     ui.add(
                         egui::DragValue::new(&mut form.pitch_kick_deg)
                             .speed(0.1)
                             .range(0.0..=45.0)
                             .suffix(" \u{00b0}"),
-                    );
+                    ).labelled_by(lbl.id);
                     ui.end_row();
-                    ui.label("Kick duration")
+                    let lbl = ui.label("Kick duration")
                         .on_hover_text("How long to hold the kicked attitude before the pure gravity turn. SI unit: s.");
                     ui.add(
                         egui::DragValue::new(&mut form.kick_duration)
                             .speed(0.5)
                             .range(0.0..=60.0)
                             .suffix(" s"),
-                    );
+                    ).labelled_by(lbl.id);
                     ui.end_row();
-                    ui.label("Steady wind")
+                    let lbl = ui.label("Steady wind")
                         .on_hover_text("Constant horizontal wind applied to the drag calculation (0 = calm air). SI unit: m/s.");
                     ui.add(
                         egui::DragValue::new(&mut form.wind_speed_ms)
                             .speed(1.0)
                             .range(0.0..=400.0)
                             .suffix(" m/s"),
-                    );
+                    ).labelled_by(lbl.id);
                     ui.end_row();
                 });
         });
@@ -531,16 +534,21 @@ pub fn draw_results_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     .iter()
                     .map(|s| [s.time, s.dynamic_pressure / 1_000.0])
                     .collect();
-                Plot::new("astro_profile_plot")
-                    .height(190.0)
-                    .legend(Legend::default())
-                    .x_axis_label("mission time (s)")
-                    .show(ui, |plot_ui| {
+                managed_plot_mem_cfg(
+                    ui,
+                    "astro_profile_plot",
+                    190.0,
+                    |plot| {
+                        plot.legend(Legend::default())
+                            .x_axis_label("mission time (s)")
+                    },
+                    |plot_ui| {
                         plot_ui.line(Line::new(altitude).name("altitude (km)"));
                         plot_ui.line(Line::new(velocity).name("inertial speed (km/s)"));
                         plot_ui.line(Line::new(mach).name("Mach"));
                         plot_ui.line(Line::new(qpress).name("dynamic pressure (kPa)"));
-                    });
+                    },
+                );
                 derived(
                     ui,
                     "Altitude in km, inertial speed in km/s, Mach dimensionless, \
@@ -585,23 +593,27 @@ fn draw_hohmann_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .num_columns(2)
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label("From altitude")
+                    let lbl = ui
+                        .label("From altitude")
                         .on_hover_text("Departure circular-orbit altitude. SI unit: km.");
                     ui.add(
                         egui::DragValue::new(&mut form.hohmann_from_km)
                             .speed(10.0)
                             .range(80.0..=400_000.0)
                             .suffix(" km"),
-                    );
+                    )
+                    .labelled_by(lbl.id);
                     ui.end_row();
-                    ui.label("To altitude")
+                    let lbl = ui
+                        .label("To altitude")
                         .on_hover_text("Arrival circular-orbit altitude. SI unit: km.");
                     ui.add(
                         egui::DragValue::new(&mut form.hohmann_to_km)
                             .speed(10.0)
                             .range(80.0..=400_000.0)
                             .suffix(" km"),
-                    );
+                    )
+                    .labelled_by(lbl.id);
                     ui.end_row();
                 });
 
@@ -643,25 +655,29 @@ fn draw_bielliptic_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .num_columns(2)
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label("From altitude")
+                    let lbl = ui
+                        .label("From altitude")
                         .on_hover_text("Departure circular-orbit altitude. SI unit: km.");
                     ui.add(
                         egui::DragValue::new(&mut form.bielliptic_from_km)
                             .speed(10.0)
                             .range(80.0..=400_000.0)
                             .suffix(" km"),
-                    );
+                    )
+                    .labelled_by(lbl.id);
                     ui.end_row();
-                    ui.label("To altitude")
+                    let lbl = ui
+                        .label("To altitude")
                         .on_hover_text("Arrival circular-orbit altitude. SI unit: km.");
                     ui.add(
                         egui::DragValue::new(&mut form.bielliptic_to_km)
                             .speed(10.0)
                             .range(80.0..=400_000.0)
                             .suffix(" km"),
-                    );
+                    )
+                    .labelled_by(lbl.id);
                     ui.end_row();
-                    ui.label("Via apoapsis").on_hover_text(
+                    let lbl = ui.label("Via apoapsis").on_hover_text(
                         "Intermediate apoapsis altitude the transfer coasts out to before \
                          dropping to the arrival orbit. Higher is cheaper in Δv but slower, \
                          and beats Hohmann only for large radius ratios. SI unit: km.",
@@ -671,7 +687,8 @@ fn draw_bielliptic_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .speed(50.0)
                             .range(80.0..=1_000_000.0)
                             .suffix(" km"),
-                    );
+                    )
+                    .labelled_by(lbl.id);
                     ui.end_row();
                 });
 
@@ -713,7 +730,7 @@ fn draw_plane_change_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .num_columns(2)
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label("Orbit altitude").on_hover_text(
+                    let lbl = ui.label("Orbit altitude").on_hover_text(
                         "Circular-orbit altitude where the burn happens. SI unit: km.",
                     );
                     ui.add(
@@ -721,16 +738,16 @@ fn draw_plane_change_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .speed(10.0)
                             .range(80.0..=400_000.0)
                             .suffix(" km"),
-                    );
+                    ).labelled_by(lbl.id);
                     ui.end_row();
-                    ui.label("Inclination change")
+                    let lbl = ui.label("Inclination change")
                         .on_hover_text("Pure plane rotation Δi. SI unit: deg.");
                     ui.add(
                         egui::DragValue::new(&mut form.plane_change_delta_inc_deg)
                             .speed(0.5)
                             .range(0.0..=180.0)
                             .suffix(" deg"),
-                    );
+                    ).labelled_by(lbl.id);
                     ui.end_row();
                 });
 
@@ -768,14 +785,16 @@ fn draw_circular_basics_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .num_columns(2)
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label("Orbit altitude")
+                    let lbl = ui
+                        .label("Orbit altitude")
                         .on_hover_text("Circular-orbit altitude above the equator. SI unit: km.");
                     ui.add(
                         egui::DragValue::new(&mut form.basics_altitude_km)
                             .speed(10.0)
                             .range(80.0..=400_000.0)
                             .suffix(" km"),
-                    );
+                    )
+                    .labelled_by(lbl.id);
                     ui.end_row();
                 });
             let (v_circ, v_esc, period) = model::circular_orbit_basics(form.basics_altitude_km);
@@ -812,7 +831,7 @@ fn draw_elliptical_orbit_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .num_columns(2)
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label("Perigee altitude").on_hover_text(
+                    let lbl = ui.label("Perigee altitude").on_hover_text(
                         "Lowest point of the orbit, above the equator. SI unit: km.",
                     );
                     ui.add(
@@ -820,9 +839,10 @@ fn draw_elliptical_orbit_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .speed(10.0)
                             .range(80.0..=400_000.0)
                             .suffix(" km"),
-                    );
+                    )
+                    .labelled_by(lbl.id);
                     ui.end_row();
-                    ui.label("Apogee altitude").on_hover_text(
+                    let lbl = ui.label("Apogee altitude").on_hover_text(
                         "Highest point of the orbit, above the equator. SI unit: km.",
                     );
                     ui.add(
@@ -830,7 +850,8 @@ fn draw_elliptical_orbit_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .speed(10.0)
                             .range(80.0..=400_000.0)
                             .suffix(" km"),
-                    );
+                    )
+                    .labelled_by(lbl.id);
                     ui.end_row();
                 });
             let orbit = model::elliptical_orbit(form.ellipse_perigee_km, form.ellipse_apogee_km);
@@ -885,7 +906,7 @@ fn draw_synodic_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .num_columns(2)
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label("Orbit A altitude").on_hover_text(
+                    let lbl = ui.label("Orbit A altitude").on_hover_text(
                         "First circular-orbit altitude above the equator. SI unit: km.",
                     );
                     ui.add(
@@ -893,9 +914,10 @@ fn draw_synodic_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .speed(10.0)
                             .range(80.0..=400_000.0)
                             .suffix(" km"),
-                    );
+                    )
+                    .labelled_by(lbl.id);
                     ui.end_row();
-                    ui.label("Orbit B altitude").on_hover_text(
+                    let lbl = ui.label("Orbit B altitude").on_hover_text(
                         "Second circular-orbit altitude above the equator. SI unit: km.",
                     );
                     ui.add(
@@ -903,7 +925,8 @@ fn draw_synodic_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .speed(10.0)
                             .range(80.0..=400_000.0)
                             .suffix(" km"),
-                    );
+                    )
+                    .labelled_by(lbl.id);
                     ui.end_row();
                 });
             let (_, _, t_a) = model::circular_orbit_basics(form.synodic_a_km);
@@ -932,7 +955,7 @@ fn draw_target_period_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .num_columns(2)
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label("Orbital period").on_hover_text(
+                    let lbl = ui.label("Orbital period").on_hover_text(
                         "Desired orbital period — one sidereal day (~23.93 h) is \
                          geostationary, half that is the GPS orbit. SI unit: hours.",
                     );
@@ -941,7 +964,8 @@ fn draw_target_period_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .speed(0.1)
                             .range(1.5..=2400.0)
                             .suffix(" h"),
-                    );
+                    )
+                    .labelled_by(lbl.id);
                     ui.end_row();
                 });
             let altitude_km = model::orbit_altitude_for_period_km(form.target_period_h * 3600.0);
@@ -966,7 +990,7 @@ fn draw_horizon_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .num_columns(2)
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label("Satellite altitude").on_hover_text(
+                    let lbl = ui.label("Satellite altitude").on_hover_text(
                         "Orbit altitude above the surface. Higher orbits see \
                          farther and cover more ground. SI unit: km.",
                     );
@@ -975,7 +999,8 @@ fn draw_horizon_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .speed(10.0)
                             .range(0.0..=400_000.0)
                             .suffix(" km"),
-                    );
+                    )
+                    .labelled_by(lbl.id);
                     ui.end_row();
                 });
             let slant = model::horizon_slant_range_km(form.horizon_altitude_km);
@@ -1001,7 +1026,7 @@ fn draw_injection_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .num_columns(2)
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label("Parking altitude").on_hover_text(
+                    let lbl = ui.label("Parking altitude").on_hover_text(
                         "Circular parking-orbit altitude the burn departs from. \
                          SI unit: km.",
                     );
@@ -1010,9 +1035,10 @@ fn draw_injection_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .speed(10.0)
                             .range(80.0..=400_000.0)
                             .suffix(" km"),
-                    );
+                    )
+                    .labelled_by(lbl.id);
                     ui.end_row();
-                    ui.label("Hyperbolic excess v\u{221E}").on_hover_text(
+                    let lbl = ui.label("Hyperbolic excess v\u{221E}").on_hover_text(
                         "Target speed left over at infinity: 0 is a bare escape, \
                          ~3 km/s is a trans-Mars launch. SI unit: km/s.",
                     );
@@ -1021,7 +1047,8 @@ fn draw_injection_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .speed(0.05)
                             .range(0.0..=20.0)
                             .suffix(" km/s"),
-                    );
+                    )
+                    .labelled_by(lbl.id);
                     ui.end_row();
                 });
             let dv = model::injection_delta_v(
@@ -1048,7 +1075,7 @@ fn draw_flight_path_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .num_columns(2)
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label("Eccentricity").on_hover_text(
+                    let lbl = ui.label("Eccentricity").on_hover_text(
                         "Orbit eccentricity (0 = circular, →1 = highly elongated). \
                          Dimensionless.",
                     );
@@ -1056,9 +1083,10 @@ fn draw_flight_path_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                         egui::DragValue::new(&mut form.fpa_eccentricity)
                             .speed(0.01)
                             .range(0.0..=0.99),
-                    );
+                    )
+                    .labelled_by(lbl.id);
                     ui.end_row();
-                    ui.label("True anomaly \u{03B8}").on_hover_text(
+                    let lbl = ui.label("True anomaly \u{03B8}").on_hover_text(
                         "Angle from perigee along the orbit; 0 / 180° are the \
                          apsides. SI unit: degrees.",
                     );
@@ -1067,7 +1095,8 @@ fn draw_flight_path_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .speed(1.0)
                             .range(-180.0..=180.0)
                             .suffix(" \u{00B0}"),
-                    );
+                    )
+                    .labelled_by(lbl.id);
                     ui.end_row();
                 });
             let gamma = model::flight_path_angle(
@@ -1098,7 +1127,7 @@ fn draw_orbital_speed_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .num_columns(2)
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label("Perigee altitude").on_hover_text(
+                    let lbl = ui.label("Perigee altitude").on_hover_text(
                         "Lowest point of the orbit, above the surface. SI unit: km.",
                     );
                     ui.add(
@@ -1106,9 +1135,10 @@ fn draw_orbital_speed_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .speed(10.0)
                             .range(0.0..=400_000.0)
                             .suffix(" km"),
-                    );
+                    )
+                    .labelled_by(lbl.id);
                     ui.end_row();
-                    ui.label("Apogee altitude").on_hover_text(
+                    let lbl = ui.label("Apogee altitude").on_hover_text(
                         "Highest point of the orbit, above the surface. SI unit: km.",
                     );
                     ui.add(
@@ -1116,9 +1146,10 @@ fn draw_orbital_speed_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .speed(10.0)
                             .range(0.0..=400_000.0)
                             .suffix(" km"),
-                    );
+                    )
+                    .labelled_by(lbl.id);
                     ui.end_row();
-                    ui.label("Query altitude").on_hover_text(
+                    let lbl = ui.label("Query altitude").on_hover_text(
                         "Altitude on the orbit to evaluate the speed at; must lie \
                          between perigee and apogee. SI unit: km.",
                     );
@@ -1127,7 +1158,8 @@ fn draw_orbital_speed_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .speed(10.0)
                             .range(0.0..=400_000.0)
                             .suffix(" km"),
-                    );
+                    )
+                    .labelled_by(lbl.id);
                     ui.end_row();
                 });
             let speed = model::orbital_speed_at_altitude(
@@ -1159,7 +1191,7 @@ fn draw_time_of_flight_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .num_columns(2)
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label("Perigee altitude").on_hover_text(
+                    let lbl = ui.label("Perigee altitude").on_hover_text(
                         "Lowest point of the orbit, above the surface. SI unit: km.",
                     );
                     ui.add(
@@ -1167,9 +1199,10 @@ fn draw_time_of_flight_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .speed(10.0)
                             .range(0.0..=400_000.0)
                             .suffix(" km"),
-                    );
+                    )
+                    .labelled_by(lbl.id);
                     ui.end_row();
-                    ui.label("Apogee altitude").on_hover_text(
+                    let lbl = ui.label("Apogee altitude").on_hover_text(
                         "Highest point of the orbit, above the surface. SI unit: km.",
                     );
                     ui.add(
@@ -1177,9 +1210,10 @@ fn draw_time_of_flight_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .speed(10.0)
                             .range(0.0..=400_000.0)
                             .suffix(" km"),
-                    );
+                    )
+                    .labelled_by(lbl.id);
                     ui.end_row();
-                    ui.label("True anomaly \u{03B8}").on_hover_text(
+                    let lbl = ui.label("True anomaly \u{03B8}").on_hover_text(
                         "Angle from perigee along the orbit (0 = perigee, 180° = \
                          apogee). SI unit: degrees.",
                     );
@@ -1188,7 +1222,8 @@ fn draw_time_of_flight_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .speed(1.0)
                             .range(0.0..=360.0)
                             .suffix(" \u{00B0}"),
-                    );
+                    )
+                    .labelled_by(lbl.id);
                     ui.end_row();
                 });
             let t = model::time_since_perigee(
@@ -1216,23 +1251,23 @@ fn draw_hoverslam_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .num_columns(2)
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label("Descent speed")
+                    let lbl = ui.label("Descent speed")
                         .on_hover_text("Vehicle descent speed at the start of the burn. SI unit: m/s.");
                     ui.add(
                         egui::DragValue::new(&mut form.hoverslam_descent_speed)
                             .speed(1.0)
                             .range(0.0..=2_000.0)
                             .suffix(" m/s"),
-                    );
+                    ).labelled_by(lbl.id);
                     ui.end_row();
-                    ui.label("Net deceleration")
+                    let lbl = ui.label("Net deceleration")
                         .on_hover_text("Thrust-minus-weight net deceleration T/m − g. Must be positive to land. SI unit: m/s².");
                     ui.add(
                         egui::DragValue::new(&mut form.hoverslam_net_decel)
                             .speed(0.5)
                             .range(-50.0..=100.0)
                             .suffix(" m/s\u{00b2}"),
-                    );
+                    ).labelled_by(lbl.id);
                     ui.end_row();
                 });
 
@@ -1263,41 +1298,41 @@ fn draw_rendezvous_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .num_columns(2)
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label("Target orbit altitude")
+                    let lbl = ui.label("Target orbit altitude")
                         .on_hover_text("Circular-orbit altitude of the target, which sets the mean motion n. SI unit: km.");
                     ui.add(
                         egui::DragValue::new(&mut form.rdv_orbit_altitude_km)
                             .speed(5.0)
                             .range(80.0..=40_000.0)
                             .suffix(" km"),
-                    );
+                    ).labelled_by(lbl.id);
                     ui.end_row();
-                    ui.label("Radial offset")
+                    let lbl = ui.label("Radial offset")
                         .on_hover_text("Initial chaser radial offset in the target's LVLH frame. SI unit: m.");
                     ui.add(
                         egui::DragValue::new(&mut form.rdv_offset_radial)
                             .speed(50.0)
                             .range(-100_000.0..=100_000.0)
                             .suffix(" m"),
-                    );
+                    ).labelled_by(lbl.id);
                     ui.end_row();
-                    ui.label("Along-track offset")
+                    let lbl = ui.label("Along-track offset")
                         .on_hover_text("Initial chaser along-track offset in LVLH. SI unit: m.");
                     ui.add(
                         egui::DragValue::new(&mut form.rdv_offset_along)
                             .speed(50.0)
                             .range(-100_000.0..=100_000.0)
                             .suffix(" m"),
-                    );
+                    ).labelled_by(lbl.id);
                     ui.end_row();
-                    ui.label("Transfer time")
+                    let lbl = ui.label("Transfer time")
                         .on_hover_text("Transfer time as a fraction of the orbital period. Avoid whole half-periods (0.5, 1.0, …) where the boundary-value problem is singular.");
                     ui.add(
                         egui::DragValue::new(&mut form.rdv_transfer_fraction)
                             .speed(0.01)
                             .range(0.05..=0.95)
                             .custom_formatter(|v, _| format!("{:.0} % of period", v * 100.0)),
-                    );
+                    ).labelled_by(lbl.id);
                     ui.end_row();
                 });
 
@@ -1346,23 +1381,23 @@ fn draw_azimuth_planner(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .num_columns(2)
                 .spacing([8.0, 4.0])
                 .show(ui, |ui| {
-                    ui.label("Launch latitude")
+                    let lbl = ui.label("Launch latitude")
                         .on_hover_text("Geodetic latitude of the launch site. SI unit: deg.");
                     ui.add(
                         egui::DragValue::new(&mut form.azimuth_latitude_deg)
                             .speed(0.1)
                             .range(-90.0..=90.0)
                             .suffix(" \u{00b0}"),
-                    );
+                    ).labelled_by(lbl.id);
                     ui.end_row();
-                    ui.label("Target inclination")
+                    let lbl = ui.label("Target inclination")
                         .on_hover_text("Inclination of the target orbit. Must be at least |latitude| to reach directly. SI unit: deg.");
                     ui.add(
                         egui::DragValue::new(&mut form.azimuth_inclination_deg)
                             .speed(0.1)
                             .range(0.0..=180.0)
                             .suffix(" \u{00b0}"),
-                    );
+                    ).labelled_by(lbl.id);
                     ui.end_row();
                 });
 
@@ -1414,5 +1449,44 @@ mod tests {
                 error_line(ui, &None);
             });
         });
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
+mod headless_ui_tests {
+    use egui::accesskit::{Node, NodeId, Role};
+
+    fn draw_and_collect_nodes(app: &mut crate::ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            crate::astro_workbench::draw_astro_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        let mut app = crate::ValenxApp::default();
+        app.show_astro_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            !spin_buttons.is_empty(),
+            "astro panels should have at least one numeric spin button"
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every astro DragValue must be labelled_by its caption (AI-drivable name)"
+        );
     }
 }

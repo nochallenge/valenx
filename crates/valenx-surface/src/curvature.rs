@@ -18,6 +18,7 @@
 //! / isophote analyser (those are viewport features), and a step toward, not an
 //! equal of, CATIA-class surface diagnostics.
 
+use crate::error::SurfaceError;
 use crate::nurbs_surface::NurbsSurface;
 
 /// Local surface shape at a point, from the signs of the principal curvatures.
@@ -41,6 +42,34 @@ pub fn principal_curvatures(surface: &NurbsSurface, u: f64, v: f64) -> (f64, f64
     let k = surface.gaussian_curvature(u, v);
     let disc = (h * h - k).max(0.0).sqrt();
     (h + disc, h - disc)
+}
+
+/// Principal curvatures `(κ_max, κ_min)` of `surface` at `(u, v)` — the
+/// fail-loud counterpart of [`principal_curvatures`].
+///
+/// Same `κ = H ± √(max(H²−K, 0))` recovery, but it propagates the
+/// [`SurfaceError::DegenerateGeometry`] raised by
+/// [`NurbsSurface::try_mean_curvature`] / [`NurbsSurface::try_gaussian_curvature`]
+/// instead of letting a parametrically singular point (a pole, parallel
+/// tangents, or `EG − F² ≤ 0`) collapse silently to `(0, 0)`.
+///
+/// `κ_max ≥ κ_min` always (the discriminant is non-negative). Their common sign
+/// follows the surface normal's orientation; for a sphere of radius `r` both are
+/// `1/r` (up to that sign).
+///
+/// # Errors
+///
+/// [`SurfaceError::DegenerateGeometry`] when the curvature is undefined at
+/// `(u, v)` — see [`NurbsSurface::try_fundamental_forms`].
+pub fn try_principal_curvatures(
+    surface: &NurbsSurface,
+    u: f64,
+    v: f64,
+) -> Result<(f64, f64), SurfaceError> {
+    let h = surface.try_mean_curvature(u, v)?;
+    let k = surface.try_gaussian_curvature(u, v)?;
+    let disc = (h * h - k).max(0.0).sqrt();
+    Ok((h + disc, h - disc))
 }
 
 /// Classify the local surface shape at `(u, v)`. `tol` is the curvature
@@ -136,5 +165,58 @@ mod tests {
             let (k1, k2) = principal_curvatures(&s, u, v);
             assert!(k1 >= k2 - 1e-12, "κ_max {k1} < κ_min {k2}");
         }
+    }
+
+    /// An exact NURBS sphere of radius `r` (rational-quadratic semicircle
+    /// revolved 360° about Z — the canonical construction validated by the
+    /// `revolve` module against `4πr²`).
+    fn sphere(r: f64) -> NurbsSurface {
+        use crate::revolve::revolve_z_full;
+        let s = std::f64::consts::FRAC_1_SQRT_2;
+        let profile = crate::nurbs_curve::NurbsCurve::new(
+            2,
+            vec![0.0, 0.0, 0.0, 0.5, 0.5, 1.0, 1.0, 1.0],
+            vec![
+                Vector3::new(0.0, 0.0, r),
+                Vector3::new(r, 0.0, r),
+                Vector3::new(r, 0.0, 0.0),
+                Vector3::new(r, 0.0, -r),
+                Vector3::new(0.0, 0.0, -r),
+            ],
+            vec![1.0, s, 1.0, s, 1.0],
+        )
+        .unwrap();
+        revolve_z_full(&profile).unwrap()
+    }
+
+    #[test]
+    fn sphere_has_equal_principal_curvatures_inverse_radius() {
+        // GROUND TRUTH: a sphere is umbilic everywhere — both principal
+        // curvatures equal 1/r, so it is elliptic with K = 1/r². The sign
+        // follows the normal orientation; compare magnitudes.
+        for &r in &[1.0_f64, 2.5, 4.0] {
+            let s = sphere(r);
+            for &(u, v) in &[(0.2_f64, 0.35_f64), (0.5, 0.5), (0.8, 0.6)] {
+                let (k1, k2) = try_principal_curvatures(&s, u, v).unwrap();
+                assert!(k1 >= k2 - 1e-12, "κ_max {k1} < κ_min {k2}");
+                assert!(
+                    (k1.abs() - 1.0 / r).abs() < 1e-5 && (k2.abs() - 1.0 / r).abs() < 1e-5,
+                    "sphere r={r}: κ=({k1},{k2}) should both be ±1/r {}",
+                    1.0 / r
+                );
+                assert_eq!(local_shape(&s, u, v, 1e-4), LocalShape::Elliptic);
+            }
+        }
+    }
+
+    #[test]
+    fn try_principal_curvatures_fails_loud_at_pole() {
+        // The infallible recovery collapses to (0,0) at the degenerate pole;
+        // the fail-loud variant surfaces the geometry error instead.
+        let s = sphere(2.0);
+        let (k1, k2) = principal_curvatures(&s, 0.5, 0.0);
+        assert!(k1.abs() < 1e-12 && k2.abs() < 1e-12, "silent (0,0) at pole");
+        let err = try_principal_curvatures(&s, 0.5, 0.0).unwrap_err();
+        assert_eq!(err.code(), "surface.degenerate_geometry");
     }
 }

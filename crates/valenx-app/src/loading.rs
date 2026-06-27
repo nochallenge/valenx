@@ -128,7 +128,7 @@ impl ValenxApp {
                     path.file_name().unwrap_or_default().to_string_lossy(),
                     mesh.triangle_count(),
                 ));
-                self.stl = Some(LoadedStl { path, mesh });
+                self.stl = Some(LoadedStl::new(path, mesh));
                 self.last_error = None;
                 self.frame_current_stl();
             }

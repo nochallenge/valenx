@@ -181,6 +181,18 @@ impl eframe::App for ValenxApp {
             self.theme_applied = true;
         }
 
+        // Startup auto-tile (one-shot). The boot path opens several panels by
+        // default (Mesh / Rocket / Engine / Assistant) but never goes through
+        // `project_tabs::sync_active` (no active tab at launch), so the
+        // per-tab-open auto-tile can't fire here. Do it once on the first frame
+        // so the user is greeted by a balanced grid instead of a squished
+        // Assistant. Honours the same `auto_tile_on_open` toggle / 2-panel
+        // threshold via `maybe_auto_tile_on_open`.
+        if !self.startup_auto_tiled {
+            self.startup_auto_tiled = true;
+            self.maybe_auto_tile_on_open();
+        }
+
         // Agent-bridge heartbeat (UNCONDITIONAL, every frame). egui is
         // reactive, so when valenx is idle/unfocused — the normal case while
         // an external agent drives it from the background — `update()` would
@@ -194,6 +206,22 @@ impl eframe::App for ValenxApp {
         // is a no-op when a sooner repaint is already scheduled (run/sweep,
         // automation, adapter-probe, etc.), so the idle cost is only ~1 fps.
         ctx.request_repaint_after(crate::agent_commands::POLL_INTERVAL);
+
+        // Faster heartbeat WHILE THE AGENT BRIDGE IS ACTIVE. An external AI
+        // driving valenx from the background needs queued commands applied
+        // promptly, but egui throttles repaints to ~0 fps when the window is
+        // unfocused/idle, so the 1 fps heartbeat above can leave a freshly
+        // appended command waiting up to a full second for the next frame even
+        // once the poll's `POLL_INTERVAL` window has opened. When the bridge is
+        // in use — its env channels are configured, OR a global command file
+        // already exists on disk — request a ~6 fps THROTTLED repaint so the
+        // poll fires near the start of each `POLL_INTERVAL` window instead of
+        // up to a frame late. Deliberately `request_repaint_after` (not the
+        // full-speed `request_repaint`) to keep the idle/battery cost low, and
+        // gated so the normal interactive build (no bridge) is unaffected.
+        if crate::agent_commands::bridge_active(self) {
+            ctx.request_repaint_after(std::time::Duration::from_millis(150));
+        }
 
         self.pump_run_events();
         self.pump_sweep_events();
@@ -500,6 +528,36 @@ impl eframe::App for ValenxApp {
                         self.open_six_workbench_agents();
                         ui.close_menu();
                     }
+                    // Auto-tile: organize the open central-workspace panels into
+                    // a balanced grid so they're all visible (no crushed
+                    // Assistant). A "do it now" action plus a toggle for the
+                    // automatic-on-tab-open behaviour. Mirrors the tab-strip
+                    // "Tile (N)" button.
+                    if ui
+                        .button(format!("Tile panels now ({})", self.open_tileable_count()))
+                        .on_hover_text(
+                            "Arrange every open workspace panel (workbenches, \
+                             Assistant, agent units) into a balanced grid so all \
+                             of them are visible and legible at once. Same as the \
+                             tab-strip \"Tile\" button.",
+                        )
+                        .clicked()
+                    {
+                        self.auto_tile_dock();
+                        ui.close_menu();
+                    }
+                    if ui
+                        .checkbox(&mut self.auto_tile_on_open, "Auto-tile panels on open")
+                        .on_hover_text(
+                            "When on, opening or switching to a tab with two or \
+                             more open panels auto-organizes them into a balanced \
+                             grid. Turn off to keep the classic layout; you can \
+                             still tile on demand with the \"Tile\" button.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
                     ui.checkbox(&mut self.snap_to_grid, "Snap to grid")
                         .on_hover_text(
                             "Snap the viewport cursor to the nearest ground-grid \
@@ -529,16 +587,41 @@ impl eframe::App for ValenxApp {
                              (wind tunnel), and Astro (launch). Toggle whichever you're \
                              working in.",
                         );
+                    // Domain-focus filter: when a focus category is set, the
+                    // primary-workbench toggles below are limited to that
+                    // domain's workbenches (those that map to a `TabKind`). The
+                    // specialised single-purpose calculators further down have
+                    // no `TabKind` category and so are always listed. `None`
+                    // ("All") lists everything. Captured once so each gate is a
+                    // cheap `in_focus` check with no per-toggle `self` re-borrow.
+                    use crate::project_tabs::TabKind;
+                    let view_focus = self.focus_category.clone();
+                    let vf = view_focus.as_deref();
+                    if let Some(cat) = vf {
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "Focus: {cat} — domain-filtered (Focus picker in ribbon)"
+                            ))
+                            .weak()
+                            .small(),
+                        )
+                        .on_hover_text(
+                            "Only this domain's primary workbenches are listed. \
+                             Set Focus back to \"All\" in the ribbon to see every \
+                             workbench again.",
+                        );
+                    }
                     // Toggle the right-side Mesh Toolbox. Hidden by
                     // default once flipped off; reopen from here or
                     // from the command palette.
-                    if ui
-                        .checkbox(&mut self.show_mesh_toolbox, "Mesh Toolbox")
-                        .on_hover_text(
-                            "Show / hide the right-side Mesh Toolbox panel \
-                             (Inspector + Transformations + Cut plane + Repair).",
-                        )
-                        .changed()
+                    if TabKind::MeshToolbox.in_focus_of(vf)
+                        && ui
+                            .checkbox(&mut self.show_mesh_toolbox, "Mesh Toolbox")
+                            .on_hover_text(
+                                "Show / hide the right-side Mesh Toolbox panel \
+                                 (Inspector + Transformations + Cut plane + Repair).",
+                            )
+                            .changed()
                     {
                         ui.close_menu();
                     }
@@ -547,17 +630,18 @@ impl eframe::App for ValenxApp {
                     // alignment, phylogenetics, RNA folding, MD,
                     // cheminformatics, quantum chemistry, genomics,
                     // docking, gene editing, …). Off by default.
-                    if ui
-                        .checkbox(&mut self.show_genetics_workbench, "Genetics Workbench")
-                        .on_hover_text(
-                            "Show / hide the right-side Genetics Workbench — 15 native \
-                             computational-biology panels (sequence, alignment, \
-                             phylogenetics, population genetics, RNA structure, RNA \
-                             design, molecular dynamics, cheminformatics, macromolecular \
-                             structure, quantum chemistry, genomics, systems biology, \
-                             docking, gene editing, structure prediction).",
-                        )
-                        .changed()
+                    if TabKind::Genetics.in_focus_of(vf)
+                        && ui
+                            .checkbox(&mut self.show_genetics_workbench, "Genetics Workbench")
+                            .on_hover_text(
+                                "Show / hide the right-side Genetics Workbench — 15 native \
+                                 computational-biology panels (sequence, alignment, \
+                                 phylogenetics, population genetics, RNA structure, RNA \
+                                 design, molecular dynamics, cheminformatics, macromolecular \
+                                 structure, quantum chemistry, genomics, systems biology, \
+                                 docking, gene editing, structure prediction).",
+                            )
+                            .changed()
                     {
                         // When the Genetics Workbench is first opened,
                         // auto-switch the central viewport to the 2D DNA /
@@ -577,18 +661,19 @@ impl eframe::App for ValenxApp {
                     // engine (virtual wind tunnel: drag/lift/moment
                     // coefficients, Cp / flow fields, AoA polar sweep).
                     // Off by default.
-                    if ui
-                        .checkbox(
-                            &mut self.show_aero_workbench,
-                            "Aerodynamics / Wind Tunnel",
-                        )
-                        .on_hover_text(
-                            "Show / hide the right-side Wind Tunnel workbench — a \
-                             virtual wind tunnel (3-D external-aerodynamics CFD): \
-                             drag / lift / moment coefficients, Cp and flow-field \
-                             visualization, and an angle-of-attack polar sweep.",
-                        )
-                        .changed()
+                    if TabKind::Aero.in_focus_of(vf)
+                        && ui
+                            .checkbox(
+                                &mut self.show_aero_workbench,
+                                "Aerodynamics / Wind Tunnel",
+                            )
+                            .on_hover_text(
+                                "Show / hide the right-side Wind Tunnel workbench — a \
+                                 virtual wind tunnel (3-D external-aerodynamics CFD): \
+                                 drag / lift / moment coefficients, Cp and flow-field \
+                                 visualization, and an angle-of-attack polar sweep.",
+                            )
+                            .changed()
                     {
                         ui.close_menu();
                     }
@@ -596,15 +681,53 @@ impl eframe::App for ValenxApp {
                     // finite-element analysis (linear-static bending +
                     // modal natural frequencies) on valenx-fem's
                     // in-process solvers. Off by default.
-                    if ui
-                        .checkbox(&mut self.show_fem_workbench, "FEM Workbench")
-                        .on_hover_text(
-                            "Show / hide the right-side FEM Workbench — native \
-                             finite-element analysis (linear-static bending + modal \
-                             natural frequencies) on a built-in structured mesh, \
-                             solved in-process by valenx-fem (no external solver).",
-                        )
-                        .changed()
+                    if TabKind::Fem.in_focus_of(vf)
+                        && ui
+                            .checkbox(&mut self.show_fem_workbench, "FEM Workbench")
+                            .on_hover_text(
+                                "Show / hide the right-side FEM Workbench — native \
+                                 finite-element analysis (linear-static bending + modal \
+                                 natural frequencies) on a built-in structured mesh, \
+                                 solved in-process by valenx-fem (no external solver).",
+                            )
+                            .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Black-Hole / Relativity workbench —
+                    // native general relativity (Kerr–Newman observables,
+                    // thermodynamics, shadow ray-tracer) on valenx-relativity.
+                    if TabKind::BlackHole.in_focus_of(vf)
+                        && ui
+                            .checkbox(&mut self.show_blackhole_workbench, "Black Hole")
+                            .on_hover_text(
+                                "Show / hide the right-side Black-Hole / Relativity \
+                                 workbench — pick a Kerr–Newman spacetime and read \
+                                 horizons, photon sphere, ISCO, shadow radius, \
+                                 redshift and Hawking thermodynamics, plus a \
+                                 ray-traced shadow image, on the in-house \
+                                 valenx-relativity engine.",
+                            )
+                            .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Rotor / Drone (BEMT) workbench —
+                    // native propeller / rotor blade-element-momentum-theory
+                    // performance on valenx-rotor.
+                    if TabKind::Rotor.in_focus_of(vf)
+                        && ui
+                            .checkbox(&mut self.show_rotor_workbench, "Rotor / Drone (BEMT)")
+                            .on_hover_text(
+                                "Show / hide the right-side Rotor / Drone (BEMT) \
+                                 workbench — set the blade geometry (count, tip & hub \
+                                 radius, radial chord/twist stations) and operating \
+                                 point (rpm, freestream, air density), then read \
+                                 thrust, torque, power, efficiency, hover figure of \
+                                 merit and per-element aerodynamics from the in-house \
+                                 valenx-rotor blade-element-momentum engine.",
+                            )
+                            .changed()
                     {
                         ui.close_menu();
                     }
@@ -626,15 +749,16 @@ impl eframe::App for ValenxApp {
                     // incompressible laminar CFD (SIMPLE): the lid-driven
                     // cavity + developing channel-flow cases on
                     // valenx-cfd-native. Off by default.
-                    if ui
-                        .checkbox(&mut self.show_cfd_workbench, "CFD Workbench")
-                        .on_hover_text(
-                            "Show / hide the right-side CFD Workbench — native 2-D \
-                             incompressible laminar CFD (the SIMPLE algorithm): the \
-                             lid-driven cavity and developing channel-flow benchmarks, \
-                             solved in-process by valenx-cfd-native (no external solver).",
-                        )
-                        .changed()
+                    if TabKind::Cfd.in_focus_of(vf)
+                        && ui
+                            .checkbox(&mut self.show_cfd_workbench, "CFD Workbench")
+                            .on_hover_text(
+                                "Show / hide the right-side CFD Workbench — native 2-D \
+                                 incompressible laminar CFD (the SIMPLE algorithm): the \
+                                 lid-driven cavity and developing channel-flow benchmarks, \
+                                 solved in-process by valenx-cfd-native (no external solver).",
+                            )
+                            .changed()
                     {
                         ui.close_menu();
                     }
@@ -642,28 +766,30 @@ impl eframe::App for ValenxApp {
                     // native ab-initio MD (AIMD): small molecules move and
                     // react in 3-D under first-principles quantum forces
                     // (valenx-reactdyn). Off by default.
-                    if ui
-                        .checkbox(&mut self.show_reactdyn_workbench, "Reaction Dynamics")
-                        .on_hover_text(
-                            "Show / hide the right-side Reaction Dynamics workbench — native \
-                             ab-initio molecular dynamics (Born-Oppenheimer AIMD): watch small \
-                             molecules move and react under first-principles quantum forces, \
-                             solved in-process by valenx-reactdyn.",
-                        )
-                        .changed()
+                    if TabKind::Reactdyn.in_focus_of(vf)
+                        && ui
+                            .checkbox(&mut self.show_reactdyn_workbench, "Reaction Dynamics")
+                            .on_hover_text(
+                                "Show / hide the right-side Reaction Dynamics workbench — native \
+                                 ab-initio molecular dynamics (Born-Oppenheimer AIMD): watch small \
+                                 molecules move and react under first-principles quantum forces, \
+                                 solved in-process by valenx-reactdyn.",
+                            )
+                            .changed()
                     {
                         ui.close_menu();
                     }
                     // Toggle the right-side Springs Workbench — native
                     // helical-spring design (valenx-springs). Off by default.
-                    if ui
-                        .checkbox(&mut self.show_springs_workbench, "Springs")
-                        .on_hover_text(
-                            "Show / hide the right-side Springs Workbench — native helical-spring \
-                             design: spring index, axial stiffness, Wahl factor, the diameters, \
-                             pitch, and developed wire length, computed in-process by valenx-springs.",
-                        )
-                        .changed()
+                    if TabKind::Springs.in_focus_of(vf)
+                        && ui
+                            .checkbox(&mut self.show_springs_workbench, "Springs")
+                            .on_hover_text(
+                                "Show / hide the right-side Springs Workbench — native helical-spring \
+                                 design: spring index, axial stiffness, Wahl factor, the diameters, \
+                                 pitch, and developed wire length, computed in-process by valenx-springs.",
+                            )
+                            .changed()
                     {
                         ui.close_menu();
                     }
@@ -869,14 +995,15 @@ impl eframe::App for ValenxApp {
                     }
                     // Toggle the right-side Gears Workbench — native
                     // involute-gear design (valenx-gears). Off by default.
-                    if ui
-                        .checkbox(&mut self.show_gears_workbench, "Gears")
-                        .on_hover_text(
-                            "Show / hide the right-side Gears Workbench — native involute-gear \
-                             design: circular pitch, the pitch / base / addendum / dedendum \
-                             diameters, and the meshing gear ratio, computed in-process by valenx-gears.",
-                        )
-                        .changed()
+                    if TabKind::Gears.in_focus_of(vf)
+                        && ui
+                            .checkbox(&mut self.show_gears_workbench, "Gears")
+                            .on_hover_text(
+                                "Show / hide the right-side Gears Workbench — native involute-gear \
+                                 design: circular pitch, the pitch / base / addendum / dedendum \
+                                 diameters, and the meshing gear ratio, computed in-process by valenx-gears.",
+                            )
+                            .changed()
                     {
                         ui.close_menu();
                     }
@@ -1028,7 +1155,8 @@ impl eframe::App for ValenxApp {
                     }
                     // Toggle the right-side Geomatics Workbench — native
                     // geodesic calculations (valenx-geomatics). Off by default.
-                    if ui
+                    if TabKind::Geomatics.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_geomatics_workbench, "Geomatics")
                         .on_hover_text(
                             "Show / hide the right-side Geomatics Workbench — native geodesic \
@@ -1241,7 +1369,8 @@ impl eframe::App for ValenxApp {
                     }
                     // Toggle the right-side Piping Workbench — native
                     // pipe-section sizing (valenx-piping). Off by default.
-                    if ui
+                    if TabKind::Piping.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_piping_workbench, "Piping")
                         .on_hover_text(
                             "Show / hide the right-side Piping Workbench — native pipe-section \
@@ -1444,7 +1573,8 @@ impl eframe::App for ValenxApp {
                     }
                     // Toggle the right-side Collision Workbench — native AABB
                     // geometry + overlap tests (valenx-collision). Off by default.
-                    if ui
+                    if TabKind::Collision.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_collision_workbench, "Collision")
                         .on_hover_text(
                             "Show / hide the right-side Collision Workbench — native AABB \
@@ -1497,6 +1627,402 @@ impl eframe::App for ValenxApp {
                             "Show / hide the Fluid Statics Workbench — native hydrostatic pressure \
                              and submerged-plate resultant force / centre of pressure, computed \
                              in-process by valenx-fluid-statics.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side SPH Fluids workbench (valenx-fluids).
+                    if TabKind::Fluids.in_focus_of(vf)
+                        && ui
+                        .checkbox(&mut self.show_fluids_workbench, "SPH Fluids")
+                        .on_hover_text(
+                            "Show / hide the Fluids (SPH) Workbench — native particle-based \
+                             SPH fluid simulation (Müller et al. 2003), computed in-process by \
+                             valenx-fluids. Graphics / real-time-grade — NOT validated CFD.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Ocean workbench (valenx-ocean).
+                    if TabKind::Ocean.in_focus_of(vf)
+                        && ui
+                        .checkbox(&mut self.show_ocean_workbench, "Ocean (waves + buoyancy)")
+                        .on_hover_text(
+                            "Show / hide the Ocean Workbench — native sum-of-N Gerstner \
+                             (trochoidal) wave field with deep-water dispersion + quasi-static \
+                             Archimedes buoyancy on a floating body, computed in-process by \
+                             valenx-ocean. Graphics / first-cut engineering — NOT seakeeping CFD.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side ROM workbench (valenx-rom).
+                    if TabKind::Rom.in_focus_of(vf)
+                        && ui
+                        .checkbox(&mut self.show_rom_workbench, "Reduced-order model (POD)")
+                        .on_hover_text(
+                            "Show / hide the ROM Workbench — native reduced-order modelling \
+                             (Proper Orthogonal Decomposition: energy-optimal SVD basis of a \
+                             synthetic parametric field) computed in-process by valenx-rom. \
+                             Research / educational — exact SVD; DMD + DEIM also in valenx-rom.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side UQ workbench (valenx-uq).
+                    if ui
+                        .checkbox(
+                            &mut self.show_uq_workbench,
+                            "Uncertainty quantification (UQ)",
+                        )
+                        .on_hover_text(
+                            "Show / hide the UQ Workbench — native uncertainty quantification \
+                             (forward Monte-Carlo propagation, first-order Sobol sensitivity via \
+                             the Saltelli estimator, and FORM reliability Pf for a g <= 0 \
+                             limit-state) computed in-process by valenx-uq. Research / \
+                             educational — MC error O(1/sqrt(n)); FORM is a first-order \
+                             approximation.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side UAS workbench (valenx-uas) — small-
+                    // UAS design + DEFENSIVE counter-UAS intercept geometry.
+                    if ui
+                        .checkbox(
+                            &mut self.show_uas_workbench,
+                            "UAS design & counter-UAS (UAS)",
+                        )
+                        .on_hover_text(
+                            "Show / hide the UAS Workbench — native small-UAS design \
+                             (multirotor / fixed-wing performance: hover power, endurance, range, \
+                             payload), a one-parameter trade study (endurance vs payload Pareto \
+                             front), and a DEFENSIVE counter-UAS layer that is pure detect / track \
+                             / intercept GEOMETRY + a detection timeline (no weapon employment, no \
+                             targeting, no lethality) — computed in-process by valenx-uas. \
+                             Research / educational — momentum-theory hover; parabolic-polar cruise.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Mission-Simulation workbench
+                    // (valenx-mission-sim) — general discrete-event / agent
+                    // constructive simulation; abstract engagement only.
+                    if ui
+                        .checkbox(
+                            &mut self.show_missionsim_workbench,
+                            "Mission simulation (constructive)",
+                        )
+                        .on_hover_text(
+                            "Show / hide the Mission-Simulation Workbench — a general \
+                             discrete-event / agent constructive simulation (the same engine \
+                             serves logistics, epidemiology, traffic, and policy wargaming): a \
+                             tunable blue-vs-red demo scenario run to a stop time for a timeline, \
+                             final state, and metrics (survivors, detections, time-to-first-\
+                             detection), plus a Lanchester square-law aggregate curve. Engagement \
+                             is ABSTRACT (a probability-of-kill input + the Lanchester ODE) — no \
+                             lethality, no targeting, no kill chain — computed in-process by \
+                             valenx-mission-sim. Research / educational.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Mission Planner workbench
+                    // (valenx-mission-sim::planner) — an in-house visual mission
+                    // planner: a geographic lat/lon map with entities following
+                    // waypoint routes, played back in real time. Movement only.
+                    if ui
+                        .checkbox(
+                            &mut self.show_mission_planner_workbench,
+                            "Mission Planner",
+                        )
+                        .on_hover_text(
+                            "Show / hide the Mission Planner Workbench — an in-house visual \
+                             mission planner (ArduPilot Mission Planner / GMAT style): a \
+                             geographic latitude/longitude map with a graticule, entities that \
+                             follow ordered waypoint routes, and real-time playback (Play / Pause \
+                             + a playback-speed multiplier) so you can watch them move along their \
+                             legs. Stage 1: movement + routes only — no engagement, sensors, or \
+                             orbits. Computed in-process by valenx-mission-sim::planner.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Morphogenesis workbench — an in-house
+                    // Turing reaction–diffusion (Gray–Scott) sandbox that grows
+                    // organic biological patterns live on a 3-D surface.
+                    if ui
+                        .checkbox(&mut self.show_morphogenesis_workbench, "Morphogenesis")
+                        .on_hover_text(
+                            "Show / hide the Morphogenesis Workbench — an in-house Turing \
+                             reaction–diffusion (Gray–Scott) sandbox. Two virtual morphogens U,V \
+                             diffuse + react on a toroidal grid and self-organise into organic \
+                             patterns (spots / coral / mitosis / mazes), rendered as a live, \
+                             shaded 3-D surface that grows in real time (Play / Pause + steps per \
+                             frame). Computed in-process by valenx-app::morphogenesis.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Topology Optimization workbench — an
+                    // in-house 2-D SIMP generative structural-design sandbox.
+                    if ui
+                        .checkbox(&mut self.show_topopt_workbench, "Topology Optimization")
+                        .on_hover_text(
+                            "Show / hide the Topology Optimization Workbench — in-house 2-D SIMP \
+                             generative structural design. Pick a domain (nx×ny), a load case \
+                             (MBB beam / cantilever) and a volume budget; the solver iteratively \
+                             strips material to the stiffest (minimum-compliance) truss and \
+                             animates it forming as a density heat-map. FE solves run on the \
+                             valenx-fem faer sparse backend (valenx-topopt).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Part B-Rep workbench — an in-house
+                    // boundary-representation solid modeler on the truck CAD
+                    // kernel (NURBS primitives + boolean set-ops + tessellation).
+                    if ui
+                        .checkbox(&mut self.show_brep_workbench, "Part B-Rep (CAD)")
+                        .on_hover_text(
+                            "Show / hide the Part B-Rep Workbench — in-house solid modeling on the \
+                             truck CAD kernel. Pick two primitives (box / cylinder / sphere) and a \
+                             boolean op (union / difference / intersection); Build creates closed \
+                             BRep solids, combines them, and tessellates the result to a triangle \
+                             mesh (valenx-truck-cad).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Thermodynamics workbench — in-house
+                    // industrial fluid thermodynamics (cubic equations of state +
+                    // vapor–liquid phase behavior, valenx-thermo).
+                    if ui
+                        .checkbox(&mut self.show_thermo_workbench, "Thermodynamics (EoS)")
+                        .on_hover_text(
+                            "Show / hide the Thermodynamics Workbench — in-house cubic equations of \
+                             state (Peng–Robinson / SRK) + vapor–liquid phase behavior. Pick a fluid \
+                             (CO₂ / N₂ / CH₄ / H₂O / C₃H₈), a model, and a (T, P); Compute solves the \
+                             liquid & vapor compressibility Z and the saturation pressure Psat(T) \
+                             (valenx-thermo).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Quantum circuit workbench — an
+                    // in-house state-vector quantum-circuit simulator
+                    // (valenx-quantum).
+                    if ui
+                        .checkbox(&mut self.show_quantum_workbench, "Quantum circuit")
+                        .on_hover_text(
+                            "Show / hide the Quantum circuit Workbench — an in-house state-vector \
+                             simulator. Pick a qubit count, append gates (Hadamard / Pauli-X on a \
+                             selectable qubit; CNOT on selectable control/target), and Run replays \
+                             the circuit and reports the basis-state probabilities (valenx-quantum).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Waveform (VCD viewer) workbench — an
+                    // in-house Value Change Dump parser (valenx-waveform).
+                    if ui
+                        .checkbox(&mut self.show_waveform_workbench, "Waveform (VCD viewer)")
+                        .on_hover_text(
+                            "Show / hide the Waveform (VCD viewer) Workbench — an in-house Value \
+                             Change Dump parser (Valenx's digital logic-analyzer input). Paste or \
+                             edit a VCD trace and Parse lists every signal (name + bit width), each \
+                             signal's transition count, and the overall time range (valenx-waveform).",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Node Graph workbench — an in-house
+                    // visual node editor (draggable nodes, output->input wiring,
+                    // a topological evaluation pass).
+                    if ui
+                        .checkbox(&mut self.show_nodegraph_workbench, "Node Graph")
+                        .on_hover_text(
+                            "Show / hide the Node Graph Workbench — an in-house visual node \
+                             editor. Add nodes (Constant / Add / Multiply / Output), drag them \
+                             around, and wire an output port to an input port; press Evaluate to \
+                             flow values through the graph in topological order (the seeded demo \
+                             Constant(2) + Constant(2) -> Add -> Output reads 4). The extensible \
+                             node-type system is the foundation for bond graphs and CAD->FEA \
+                             pipelines.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Bond Graph workbench — an in-house
+                    // multi-domain systems modeller (effort/flow power bonds; the
+                    // bond-graph state equations derived + integrated with RK4).
+                    if ui
+                        .checkbox(&mut self.show_bondgraph_workbench, "Bond Graph")
+                        .on_hover_text(
+                            "Show / hide the Bond Graph Workbench — an in-house multi-domain \
+                             systems modeller. Bond graphs model physical systems by power flow \
+                             (effort \u{00D7} flow) across mechanical / electrical / hydraulic / \
+                             thermal domains with R / C / I / Se / Sf / TF / GY / junction \
+                             elements. Pick a preset (mass-spring-damper / RLC / DC-motor), set \
+                             its element parameters, and press Solve: the standard derivation \
+                             builds the state-space dx/dt = A\u{00B7}x + B\u{00B7}u (state = the energy \
+                             variables on the I and C elements), integrates it (RK4) and plots \
+                             the response.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Surrogate Model workbench — an in-house
+                    // ML emulator: train a tiny MLP on samples from a closed-form
+                    // solver, then predict the output instantly as inputs change.
+                    if ui
+                        .checkbox(&mut self.show_surrogate_workbench, "Surrogate Model")
+                        .on_hover_text(
+                            "Show / hide the Surrogate Model Workbench — an in-house machine-learning \
+                             emulator for an expensive solver. It samples a closed-form ground truth \
+                             (cantilever tip deflection \u{03B4} = P\u{00B7}L\u{00B3}/(3\u{00B7}E\u{00B7}I)), \
+                             trains a tiny 2\u{2192}H\u{2192}H\u{2192}1 MLP (ReLU + Adam on MSE) and \
+                             reports train / test MSE, then predicts the output INSTANTLY as the input \
+                             sliders move (the what-if loop) \u{2014} shown live next to the true value.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Survivability / protection workbench
+                    // (valenx-survivability) — the DEFENSIVE / protective side of
+                    // the shared blast/impact physics; no penetration / lethality.
+                    if ui
+                        .checkbox(
+                            &mut self.show_survivability_workbench,
+                            "Survivability / protection",
+                        )
+                        .on_hover_text(
+                            "Show / hide the Survivability / protection Workbench — the \
+                             PROTECTIVE side of blast & impact physics (civil blast-resistant \
+                             design / crash safety): free-field blast loading (Brode / Newmark-\
+                             Hansen) assembled into a Friedlander P(t), the single-degree-of-\
+                             freedom protective-element response (peak deflection, ductility, \
+                             DAF), the pressure-impulse iso-damage diagram with the current \
+                             design point, the minimum armor thickness + areal density that just \
+                             defeats a projectile, and an occupant acceleration-tolerance margin. \
+                             Every output is \"minimum protection to survive threat X\" \u{2014} \
+                             NO penetration, NO lethality, NO warhead model \u{2014} computed in-\
+                             process by valenx-survivability. Research / educational.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Photogrammetry / SfM workbench
+                    // (valenx-photogrammetry).
+                    if ui
+                        .checkbox(
+                            &mut self.show_photogrammetry_workbench,
+                            "Photogrammetry / SfM scan",
+                        )
+                        .on_hover_text(
+                            "Show / hide the Photogrammetry Workbench — native structure-from-\
+                             motion (a synthetic demo scene fed through the in-house \
+                             valenx-photogrammetry COLMAP-style pipeline: features, matching, \
+                             two-view geometry, incremental mapper + bundle adjustment, \
+                             recovering a sparse point cloud + camera poses). Research / \
+                             educational — textbook SfM; the reconstruction is up to a global \
+                             similarity.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Co-Simulation workbench
+                    // (valenx-adapter-fmi).
+                    if ui
+                        .checkbox(
+                            &mut self.show_cosim_workbench,
+                            "Co-Simulation (FMI / HELICS)",
+                        )
+                        .on_hover_text(
+                            "Show / hide the Co-Simulation Workbench — two coupled \
+                             mass-spring-dampers advanced through the in-house \
+                             valenx-adapter-fmi coordinator (Jacobi / Gauss-Seidel explicit \
+                             coupling, or a strongly-coupled fixed-point implicit coupler), \
+                             plotting the exchanged interface signals and the coupling error \
+                             vs a monolithic reference. Research / educational — native co-sim \
+                             master; FMI import only.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Protein-interaction (PPI / interactome)
+                    // workbench (valenx-ppi).
+                    if ui
+                        .checkbox(
+                            &mut self.show_ppi_workbench,
+                            "Protein interaction (PPI)",
+                        )
+                        .on_hover_text(
+                            "Show / hide the PPI / interactome Workbench — a named demo host \
+                             \u{00D7} pathogen interactome (deterministic coevolving orthologue \
+                             alignments) screened through the in-house valenx-ppi engine \
+                             (APC-corrected mutual-information coevolution -> a fused [0,1] PPI \
+                             score per pair -> a ranked all-vs-all screen), drawing the \
+                             interaction network with degree / betweenness centrality + BFS \
+                             shortest path computed over the real scored edges. Research / \
+                             educational coevolution heuristic \u{2014} ranks candidates, never \
+                             a verdict; every result requires human + wet-lab review.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Multibody-dynamics (robot / contact)
+                    // workbench (valenx-mbd).
+                    if ui
+                        .checkbox(
+                            &mut self.show_mbd_workbench,
+                            "Multibody dynamics (robot / contact)",
+                        )
+                        .on_hover_text(
+                            "Show / hide the Multibody-dynamics Workbench — two native demos on \
+                             the in-house valenx-mbd solver: an energy-conserving articulated rod \
+                             pendulum advanced by the constrained-DAE System (KKT + Baumgarte + \
+                             symplectic Euler), and a rigid body dropped onto a ground plane \
+                             through the penalty-contact path (spring-damper normal force + \
+                             regularized Coulomb friction). Research / preliminary-design grade — \
+                             2-D rigid bodies, compliant (penalty) contact.",
+                        )
+                        .changed()
+                    {
+                        ui.close_menu();
+                    }
+                    // Toggle the right-side Autonomy V&V workbench (valenx-autonomy-vnv).
+                    if TabKind::Autonomy.in_focus_of(vf)
+                        && ui
+                        .checkbox(&mut self.show_autonomy_workbench, "Autonomy V&V")
+                        .on_hover_text(
+                            "Show / hide the Autonomy V&V Workbench — native scenario-based \
+                             verification of a kinematic autonomous vehicle carrying simulated \
+                             sensors, computed in-process by valenx-autonomy-vnv (run a scenario \
+                             into a trace, score MinClearance / NoCollision / StayInBounds \
+                             requirements). V&V methodology over model-grade sensors — NOT a \
+                             certified safety case.",
                         )
                         .changed()
                     {
@@ -1580,7 +2106,8 @@ impl eframe::App for ValenxApp {
                     }
                     // Toggle the right-side Sheet Metal Workbench — native bend
                     // allowance / deduction (valenx-sheet-metal). Off by default.
-                    if ui
+                    if TabKind::Sheetmetal.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_sheetmetal_workbench, "Sheet Metal")
                         .on_hover_text(
                             "Show / hide the right-side Sheet Metal Workbench — native bend \
@@ -1594,7 +2121,8 @@ impl eframe::App for ValenxApp {
                     }
                     // Toggle the right-side Field Statistics Workbench — descriptive
                     // statistics over a pasted number list (valenx-fields). Off by default.
-                    if ui
+                    if TabKind::Fields.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_fields_workbench, "Field Statistics")
                         .on_hover_text(
                             "Show / hide the right-side Field Statistics Workbench — descriptive \
@@ -1676,7 +2204,8 @@ impl eframe::App for ValenxApp {
                     }
                     // Toggle the right-side Fasteners Workbench — ISO 4017 hex-bolt
                     // dimensions (valenx-fasteners). Off by default.
-                    if ui
+                    if TabKind::Fasteners.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_fasteners_workbench, "Fasteners")
                         .on_hover_text(
                             "Show / hide the right-side Fasteners Workbench — ISO 4017 hex-bolt \
@@ -1897,7 +2426,8 @@ impl eframe::App for ValenxApp {
                     }
                     // Toggle the right-side Frames Workbench — structural
                     // cross-section properties (valenx-frames). Off by default.
-                    if ui
+                    if TabKind::Frames.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_frames_workbench, "Frames")
                         .on_hover_text(
                             "Show / hide the right-side Frames Workbench — structural \
@@ -1925,7 +2455,8 @@ impl eframe::App for ValenxApp {
                     }
                     // Toggle the right-side Gas Dynamics workbench — 1-D
                     // compressible-flow relations (valenx-gasdynamics). Off by default.
-                    if ui
+                    if TabKind::Gasdynamics.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_gasdynamics_workbench, "Gas Dynamics")
                         .on_hover_text(
                             "Show / hide the right-side Gas Dynamics workbench — 1-D \
@@ -1938,7 +2469,8 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
-                    if ui
+                    if TabKind::Neuro.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_neuro_workbench, "Neural Interface")
                         .on_hover_text(
                             "Show / hide the right-side Neural-Interface workbench — native \
@@ -1962,7 +2494,8 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
-                    if ui
+                    if TabKind::Cad.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_cad_workbench, "Parametric CAD")
                         .on_hover_text(
                             "Show / hide the right-side Parametric-CAD workbench — named \
@@ -1987,7 +2520,8 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
-                    if ui
+                    if TabKind::Draft2d.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_draft2d_workbench, "2D Drafting")
                         .on_hover_text(
                             "Show / hide the right-side 2D Drafting workbench — a \
@@ -1998,7 +2532,8 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
-                    if ui
+                    if TabKind::Reinforcement.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_reinforcement_workbench, "Reinforcement")
                         .on_hover_text(
                             "Show / hide the right-side Concrete-Reinforcement workbench — \
@@ -2009,7 +2544,8 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
-                    if ui
+                    if TabKind::Render.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_render_workbench, "Path-Traced Render")
                         .on_hover_text(
                             "Show / hide the right-side Path-Traced Render workbench — a \
@@ -2032,7 +2568,8 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
-                    if ui
+                    if TabKind::Hvac.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_hvac_workbench, "HVAC")
                         .on_hover_text(
                             "Show / hide the right-side HVAC workbench — duct sizing and \
@@ -2042,7 +2579,8 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
-                    if ui
+                    if TabKind::Reverse.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_reverse_workbench, "Reverse Engineering")
                         .on_hover_text(
                             "Show / hide the right-side Reverse-Engineering workbench — \
@@ -2065,7 +2603,8 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
-                    if ui
+                    if TabKind::Interior.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_interior_workbench, "Interior Design")
                         .on_hover_text(
                             "Show / hide the right-side Interior-Design workbench — a 2D \
@@ -2089,7 +2628,8 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
-                    if ui
+                    if TabKind::Animate.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_animate_workbench, "Animation")
                         .on_hover_text(
                             "Show / hide the right-side Animation workbench — a joint \
@@ -2113,7 +2653,8 @@ impl eframe::App for ValenxApp {
                     {
                         ui.close_menu();
                     }
-                    if ui
+                    if TabKind::VariantEffect.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_variant_effect_workbench, "Variant Effect")
                         .on_hover_text(
                             "Show / hide the right-side Variant-Effect workbench — an HGVS \
@@ -2143,7 +2684,8 @@ impl eframe::App for ValenxApp {
                     // simulator (fly a rocket to orbit) plus the
                     // closed-form mission planners (Hohmann, hoverslam,
                     // rendezvous, launch azimuth). Off by default.
-                    if ui
+                    if TabKind::Astro.in_focus_of(vf)
+                        && ui
                         .checkbox(&mut self.show_astro_workbench, "Astro / Launch")
                         .on_hover_text(
                             "Show / hide the right-side Astro / Launch workbench — a \
@@ -2722,39 +3264,102 @@ impl eframe::App for ValenxApp {
                         ui.close_menu();
                     }
                 });
+                // Width-aware ribbon: at half-screen (~960px) the left menus +
+                // centred title + right panel-cluster used to fight for one row
+                // and visually collide. We gate the optional chrome on the live
+                // window width (`ctx.screen_rect()` is stable regardless of how
+                // much width the widgets already consumed):
+                //   - wide   (≥1100): full title + inline Max/Toolbox/Browser;
+                //   - narrow (<1100): drop the title text, fold the panel
+                //                     toggles into one "⋯ Panels" overflow menu;
+                //   - tiny   (<820):  also drop the "Valenx" word entirely.
+                // The Focus picker stays inline (it is the AI-drivable domain
+                // filter) — it is compact and never the thing that overflows.
+                let bar_w = ctx.screen_rect().width();
+                let narrow = bar_w < 1100.0;
+                let tiny = bar_w < 820.0;
                 ui.separator();
-                ui.label(format!("Valenx {} — pre-alpha", env!("CARGO_PKG_VERSION")));
-                // One-click panel toggles — "make space" controls pinned to
-                // the far right of the ribbon (Blender / Fusion style).
-                // A toggle is highlighted while its panel is visible.
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let any_open = self.show_browser || self.show_mesh_toolbox;
-                    if ui
-                        .selectable_label(!any_open, "Max view")
-                        .on_hover_text(
-                            "Maximize viewport: hide both side panels \
-                             (click again to restore both).",
-                        )
-                        .clicked()
-                    {
-                        let new_state = !any_open;
-                        self.show_browser = new_state;
-                        self.show_mesh_toolbox = new_state;
+                if !tiny {
+                    if narrow {
+                        ui.label("Valenx");
+                    } else {
+                        ui.label(format!("Valenx {} — pre-alpha", env!("CARGO_PKG_VERSION")));
                     }
                     ui.separator();
-                    if ui
-                        .selectable_label(self.show_mesh_toolbox, "Toolbox")
-                        .on_hover_text("Show / hide the right Mesh Toolbox panel.")
-                        .clicked()
-                    {
-                        self.show_mesh_toolbox = !self.show_mesh_toolbox;
-                    }
-                    if ui
-                        .selectable_label(self.show_browser, "Browser")
-                        .on_hover_text("Show / hide the left Browser panel.")
-                        .clicked()
-                    {
-                        self.show_browser = !self.show_browser;
+                }
+                // Domain-focus picker — `Focus: [All v]`. Narrows the Tools /
+                // template menus + the Ctrl+P launcher + the View-menu workbench
+                // toggles to one working domain (pure view filter, nothing
+                // removed). `labelled_by` "Focus" so it is AI-drivable.
+                crate::workbench_focus::focus_selector(self, ui);
+                // One-click panel toggles — "make space" controls pinned to the
+                // far right of the ribbon (Blender / Fusion style). A toggle is
+                // highlighted while its panel is visible. When the window is
+                // narrow they collapse into a single "⋯ Panels" overflow menu so
+                // they never overlap the centred title / left menus.
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let any_open = self.show_browser || self.show_mesh_toolbox;
+                    if narrow {
+                        ui.menu_button("⋯ Panels", |ui| {
+                            if ui
+                                .selectable_label(!any_open, "Max view")
+                                .on_hover_text(
+                                    "Maximize viewport: hide both side panels \
+                                     (click again to restore both).",
+                                )
+                                .clicked()
+                            {
+                                let new_state = !any_open;
+                                self.show_browser = new_state;
+                                self.show_mesh_toolbox = new_state;
+                                ui.close_menu();
+                            }
+                            ui.separator();
+                            if ui
+                                .selectable_label(self.show_mesh_toolbox, "Toolbox")
+                                .on_hover_text("Show / hide the right Mesh Toolbox panel.")
+                                .clicked()
+                            {
+                                self.show_mesh_toolbox = !self.show_mesh_toolbox;
+                            }
+                            if ui
+                                .selectable_label(self.show_browser, "Browser")
+                                .on_hover_text("Show / hide the left Browser panel.")
+                                .clicked()
+                            {
+                                self.show_browser = !self.show_browser;
+                            }
+                        })
+                        .response
+                        .on_hover_text("Panel visibility: Max view, Toolbox, Browser.");
+                    } else {
+                        if ui
+                            .selectable_label(!any_open, "Max view")
+                            .on_hover_text(
+                                "Maximize viewport: hide both side panels \
+                                 (click again to restore both).",
+                            )
+                            .clicked()
+                        {
+                            let new_state = !any_open;
+                            self.show_browser = new_state;
+                            self.show_mesh_toolbox = new_state;
+                        }
+                        ui.separator();
+                        if ui
+                            .selectable_label(self.show_mesh_toolbox, "Toolbox")
+                            .on_hover_text("Show / hide the right Mesh Toolbox panel.")
+                            .clicked()
+                        {
+                            self.show_mesh_toolbox = !self.show_mesh_toolbox;
+                        }
+                        if ui
+                            .selectable_label(self.show_browser, "Browser")
+                            .on_hover_text("Show / hide the left Browser panel.")
+                            .clicked()
+                        {
+                            self.show_browser = !self.show_browser;
+                        }
                     }
                 });
             });
@@ -2849,21 +3454,27 @@ impl eframe::App for ValenxApp {
                 if !collapsed && self.bottom_tab == BottomTab::Log {
                     log_panel::header(ui, &mut self.log);
                 }
-                // Collapse / expand toggle on the right edge. The
-                // button's TEXT is the accessibility / UI-Automation
-                // `Name`, so it is a uniquely- and stably-named,
-                // AI-invokable widget: "Collapse panel" when expanded,
-                // "Expand panel" when collapsed. egui derives a
-                // button's accesskit name from its label text, so the
-                // plain-ASCII phrase is what an external driver finds
-                // and Invokes by Name.
+                // Collapse / expand toggle on the right edge — a painter-drawn
+                // ARROW (▾ open / ▴ collapsed), matching the workbench header
+                // chrome (no font glyph → never a "tofu" box). The arrow carries
+                // an explicit accessible `Name` ("Collapse log" / "Expand log")
+                // via `WidgetInfo::labeled`, so an external AI / screen-reader
+                // driver still finds and Invokes it by a stable label even
+                // though it has no text.
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let name = if collapsed {
-                        "Expand panel"
+                        "Expand log"
                     } else {
-                        "Collapse panel"
+                        "Collapse log"
                     };
-                    if ui.button(name).clicked() {
+                    if crate::workbench_chrome::collapse_arrow_button(
+                        ui,
+                        crate::workbench_chrome::PanelEdge::Bottom,
+                        !collapsed,
+                        name,
+                    )
+                    .clicked()
+                    {
                         self.toggle_bottom_panel();
                     }
                 });
@@ -2915,16 +3526,19 @@ impl eframe::App for ValenxApp {
             };
             browser.show(ctx, |ui| {
                 if browser_collapsed {
-                    // Collapsed: only the named "Expand panel" button.
-                    // Its label TEXT is the accessibility / UI-Automation
-                    // `Name` (egui derives a button's accesskit name from
-                    // its label, exactly like the bottom dock's toggle),
-                    // so the full plain-ASCII phrase is what an external
-                    // driver finds and Invokes by Name. egui clips the
-                    // rendered glyphs to the narrow 30px strip while the
-                    // accesskit Name stays the complete "Expand panel"
-                    // string.
-                    if ui.button("Expand panel").clicked() {
+                    // Collapsed: only a painter-drawn ARROW (▸) toggle that fits
+                    // the narrow 30px strip. It carries an explicit accessible
+                    // `Name` ("Expand Browser") via `WidgetInfo::labeled`, so an
+                    // external AI / screen-reader driver still finds and Invokes
+                    // it by a stable label despite having no text.
+                    if crate::workbench_chrome::collapse_arrow_button(
+                        ui,
+                        crate::workbench_chrome::PanelEdge::Left,
+                        false,
+                        "Expand Browser",
+                    )
+                    .clicked()
+                    {
                         self.toggle_browser_panel();
                     }
                     return;
@@ -2935,7 +3549,17 @@ impl eframe::App for ValenxApp {
                 ui.horizontal(|ui| {
                     ui.heading("Browser");
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("Collapse panel").clicked() {
+                        // Painter-drawn ARROW (◂) collapse toggle, with an
+                        // explicit accessible `Name` ("Collapse Browser") so it
+                        // stays AI-drivable without text.
+                        if crate::workbench_chrome::collapse_arrow_button(
+                            ui,
+                            crate::workbench_chrome::PanelEdge::Left,
+                            true,
+                            "Collapse Browser",
+                        )
+                        .clicked()
+                        {
                             self.toggle_browser_panel();
                         }
                     });
@@ -3012,6 +3636,18 @@ impl eframe::App for ValenxApp {
             if !dock_owns_dockable_panels {
                 crate::fem_workbench::draw_fem_workbench(self, ctx);
             }
+
+            // Black-Hole / Relativity workbench (right) — native general
+            // relativity (Kerr–Newman observables, thermodynamics, shadow
+            // ray-tracer) on valenx-relativity. A no-op unless toggled on via
+            // View → Black Hole.
+            crate::blackhole_workbench::draw_blackhole_workbench(self, ctx);
+
+            // Rotor / Drone (BEMT) workbench (right) — native propeller / rotor
+            // blade-element-momentum performance on valenx-rotor. A no-op unless
+            // toggled on via View → Rotor / Drone (BEMT) (or opened by the agent
+            // bridge under the id "rotor").
+            crate::rotor_workbench::draw_rotor_workbench(self, ctx);
 
             // Induction Motor workbench (right) — 3-phase induction-motor slip /
             // power on valenx-inductionmotor. Off unless toggled via View.
@@ -3221,6 +3857,118 @@ impl eframe::App for ValenxApp {
             crate::projectile_workbench::draw_projectile_workbench(self, ctx);
             crate::conveyor_workbench::draw_conveyor_workbench(self, ctx);
             crate::fluidstatics_workbench::draw_fluidstatics_workbench(self, ctx);
+
+            // Fluids (SPH) Workbench (right) — native particle-based SPH simulation
+            // on valenx-fluids. A no-op unless toggled on via View → SPH Fluids.
+            crate::fluids_workbench::draw_fluids_workbench(self, ctx);
+
+            // Ocean Workbench (right) — native Gerstner wave field + quasi-static
+            // buoyancy on valenx-ocean. A no-op unless toggled on via View → Ocean.
+            crate::ocean_workbench::draw_ocean_workbench(self, ctx);
+
+            // ROM Workbench (right) — native reduced-order modelling (POD / DMD /
+            // DEIM) on valenx-rom. A no-op unless toggled on via View → ROM.
+            crate::rom_workbench::draw_rom_workbench(self, ctx);
+
+            // UQ Workbench (right) — native uncertainty quantification (Monte-Carlo
+            // propagation + Sobol sensitivity + FORM reliability) on valenx-uq. A
+            // no-op unless toggled on via View → UQ.
+            crate::uq_workbench::draw_uq_workbench(self, ctx);
+
+            // UAS Workbench (right) — native small-UAS design + performance +
+            // trade study + DEFENSIVE counter-UAS intercept geometry on
+            // valenx-uas. A no-op unless toggled on via View → UAS.
+            crate::uas_workbench::draw_uas_workbench(self, ctx);
+
+            // Mission-Simulation Workbench (right) — general discrete-event /
+            // agent constructive simulation (scheduler + analytic movers +
+            // range-based detection + ABSTRACT engagement: Pk input + Lanchester
+            // square-law) on valenx-mission-sim. A no-op unless toggled on via
+            // View → Mission simulation.
+            crate::missionsim_workbench::draw_missionsim_workbench(self, ctx);
+
+            // Mission Planner Workbench (right) — an in-house visual mission
+            // planner: a geographic lat/lon map with entities following waypoint
+            // routes, played back in real time (valenx-mission-sim::planner).
+            // Movement + routes only. A no-op unless toggled on via
+            // View → Mission Planner.
+            crate::mission_planner_workbench::draw_mission_planner_workbench(self, ctx);
+
+            // Morphogenesis Workbench (right) — an in-house Turing reaction–
+            // diffusion (Gray–Scott) sandbox growing organic patterns live on a
+            // 3-D surface (valenx-app::morphogenesis). A no-op unless toggled on
+            // via View → Morphogenesis.
+            crate::morphogenesis_workbench::draw_morphogenesis_workbench(self, ctx);
+
+            // Topology Optimization Workbench (right) — in-house 2-D SIMP
+            // generative structural design (minimum-compliance density
+            // optimisation over Q4 plane-stress elements, MBB-beam / cantilever
+            // load cases) on valenx-topopt, FE solves via the valenx-fem faer
+            // sparse backend. A no-op unless toggled on via
+            // View → Topology Optimization.
+            crate::topopt_workbench::draw_topopt_workbench(self, ctx);
+
+            // Part B-Rep Workbench (right) — in-house boundary-representation
+            // solid modeling on the truck CAD kernel (NURBS primitives +
+            // boolean set-ops + tessellation, valenx-truck-cad). A no-op
+            // unless toggled on via View → Part B-Rep (CAD).
+            crate::brep_workbench::draw_brep_workbench(self, ctx);
+
+            // Thermodynamics Workbench (right) — in-house industrial fluid
+            // thermodynamics (cubic EoS + vapor–liquid phase behavior,
+            // valenx-thermo). A no-op unless toggled on via
+            // View → Thermodynamics (EoS).
+            crate::thermo_workbench::draw_thermo_workbench(self, ctx);
+
+            // Quantum circuit Workbench (right) — in-house state-vector
+            // quantum-circuit simulator (valenx-quantum). A no-op unless
+            // toggled on via View → Quantum circuit.
+            crate::quantum_workbench::draw_quantum_workbench(self, ctx);
+
+            // Waveform (VCD viewer) Workbench (right) — in-house Value Change
+            // Dump parser (valenx-waveform). A no-op unless toggled on via
+            // View → Waveform (VCD viewer).
+            crate::waveform_workbench::draw_waveform_workbench(self, ctx);
+
+            // Survivability / protection Workbench (right) — the DEFENSIVE /
+            // protective side of the shared blast/impact physics (free-field
+            // blast loading + SDOF protective response + pressure-impulse
+            // iso-damage diagram + minimum-armor sizing + occupant tolerance
+            // screen; no penetration / lethality) on valenx-survivability. A
+            // no-op unless toggled on via View → Survivability / protection.
+            crate::survivability_workbench::draw_survivability_workbench(self, ctx);
+
+            // Photogrammetry Workbench (right) — native structure-from-motion
+            // (synthetic-scene SfM: features/matching/two-view geometry/incremental
+            // mapper + bundle adjustment) on valenx-photogrammetry. A no-op unless
+            // toggled on via View → Photogrammetry.
+            crate::photogrammetry_workbench::draw_photogrammetry_workbench(self, ctx);
+
+            // Co-Simulation Workbench (right) — native FMI / HELICS co-sim
+            // coupling (two coupled mass-spring-dampers advanced through the
+            // valenx-adapter-fmi master: Jacobi / Gauss-Seidel explicit or
+            // fixed-point implicit coupling). A no-op unless toggled on via
+            // View → Co-Simulation.
+            crate::cosim_workbench::draw_cosim_workbench(self, ctx);
+
+            // PPI / interactome Workbench (right) — a native demo host × pathogen
+            // interactome screened through the in-house valenx-ppi coevolution
+            // engine (fused PPI scores -> interaction network -> centrality /
+            // shortest path). A no-op unless toggled on via View → Protein
+            // interaction (PPI).
+            crate::ppi_workbench::draw_ppi_workbench(self, ctx);
+
+            // Multibody-dynamics Workbench (right) — native planar multibody
+            // dynamics on valenx-mbd: an energy-conserving articulated rod
+            // pendulum (constrained-DAE System) and a body dropped onto a plane
+            // through the penalty-contact + Coulomb-friction path. A no-op unless
+            // toggled on via View → Multibody dynamics (robot / contact).
+            crate::mbd_workbench::draw_mbd_workbench(self, ctx);
+
+            // Autonomy V&V Workbench (right) — native scenario-based verification of
+            // an autonomous vehicle + simulated sensors on valenx-autonomy-vnv. A
+            // no-op unless toggled on via View → Autonomy V&V.
+            crate::autonomy_workbench::draw_autonomy_workbench(self, ctx);
             crate::plate_workbench::draw_plate_workbench(self, ctx);
             crate::strainrosette_workbench::draw_strainrosette_workbench(self, ctx);
             crate::transformer_workbench::draw_transformer_workbench(self, ctx);
@@ -3786,15 +4534,25 @@ impl eframe::App for ValenxApp {
             let show_non_oss = self.settings.show_non_oss_adapters;
             let registry_len = self.registry.len();
             let projects_rev = self.library.content_rev();
+            // Domain-focus filter narrows the launcher's workbench-tab entries,
+            // so it is part of the cache key — flipping it rebuilds the list.
+            let focus = self.focus_category.clone();
             let cache_valid = matches!(
                 &self.palette_cache,
-                Some((len, prev, oss, _))
-                    if *len == registry_len && *prev == projects_rev && *oss == show_non_oss
+                Some((len, prev, oss, foc, _))
+                    if *len == registry_len
+                        && *prev == projects_rev
+                        && *oss == show_non_oss
+                        && *foc == focus
             );
             if !cache_valid {
-                let built =
-                    commands::build_visible_commands(&self.registry, show_non_oss, &self.library);
-                self.palette_cache = Some((registry_len, projects_rev, show_non_oss, built));
+                let built = commands::build_visible_commands(
+                    &self.registry,
+                    show_non_oss,
+                    &self.library,
+                    focus.as_deref(),
+                );
+                self.palette_cache = Some((registry_len, projects_rev, show_non_oss, focus, built));
             }
             // Take the cached Vec by clone — the dispatch step needs
             // exclusive `&mut self`, so we can't hold a borrow into
@@ -3805,7 +4563,7 @@ impl eframe::App for ValenxApp {
             let visible: Vec<commands::CommandKind> = self
                 .palette_cache
                 .as_ref()
-                .map(|(_, _, _, v)| v.clone())
+                .map(|(_, _, _, _, v)| v.clone())
                 .unwrap_or_default();
             if let Some(idx) = commands::show(ctx, &mut self.palette, &visible) {
                 if let Some(kind) = visible.get(idx) {
@@ -4023,6 +4781,40 @@ impl eframe::App for ValenxApp {
         self.genetics.rna_designer.cancel_run();
         if self.run_handle.is_some() || self.sweep_handle.is_some() || self.aero.run.is_some() {
             std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+    }
+
+    /// **Self-inject queued accessibility actions into the frame's input.**
+    ///
+    /// eframe calls this once per frame, just *before* the platform's `RawInput`
+    /// is handed to egui (see eframe `epi_integration`), so it is the sanctioned
+    /// place for an app to add synthetic input events. It is the engine behind
+    /// the generic [`crate::agent_commands::AgentCommand::InvokeNamed`] bridge
+    /// command: [`crate::agent_commands`] resolves a widget's accessible **name**
+    /// to its `accesskit` node id and pushes `(id, Action::Default)` onto
+    /// [`Self::pending_accesskit_actions`]; here we drain that queue into
+    /// `raw_input.events` as `Event::AccessKitActionRequest`, which is **exactly**
+    /// the event eframe's own `on_accesskit_action_request` pushes when an
+    /// external UI-Automation client clicks a control by name. egui's
+    /// `interact()` then sees `has_accesskit_action_request(id, Default)` and
+    /// reports the matching button as `.clicked()` — no per-widget cooperation,
+    /// no duplicated action logic, the same code path a real click takes.
+    ///
+    /// Each queued action fires on exactly one frame (the queue is drained), and
+    /// the queue is empty in the normal interactive build, so this is a no-op
+    /// cost when the bridge is idle.
+    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        if self.pending_accesskit_actions.is_empty() {
+            return;
+        }
+        for (target, action) in self.pending_accesskit_actions.drain(..) {
+            raw_input.events.push(egui::Event::AccessKitActionRequest(
+                egui::accesskit::ActionRequest {
+                    action,
+                    target,
+                    data: None,
+                },
+            ));
         }
     }
 }

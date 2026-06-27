@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-sensors"
+description = "In-house simulated sensor models (LiDAR / camera / IMU / GPS) and a small autonomy step-harness. Each sensor is a parameterised struct with a sample/measure function, fails loud on invalid configuration, and is pinned in tests to analytic ground truth: LiDAR ray-casts an angular beam pattern against an analytic scene (planes / spheres / Möller–Trumbore triangles) returning a range per beam (or a no-return on a miss); the pinhole camera projects a 3-D point through intrinsics K with Brown–Conrady radial-tangential distortion (undistort round-trips); the IMU derives specific force `a − g` rotated into the body frame plus body angular rate from a rigid-body trajectory, with additive bias and seeded Gaussian noise; the GPS converts a local ENU offset about a geodetic datum to latitude/longitude/altitude, with noise. The autonomy harness advances a minimal kinematic vehicle state by `step(dt)` and emits a `SensorFrame` (all readings at time t) — the step API for autonomy / RL testing. Pure Rust, no `unsafe`, no `rand`: all noise comes from an in-crate seeded SplitMix64 PRNG, so every reading is reproducible. These are analytic / graphics-grade MODELS, not hardware-calibrated devices."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+readme.workspace       = true
+publish.workspace      = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

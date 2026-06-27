@@ -282,8 +282,9 @@ fn draw_base_edit(p: &mut GeneEditingPanel, ui: &mut egui::Ui) {
                     }
                 });
             ui.end_row();
-            ui.label("Edit position");
-            ui.add(egui::DragValue::new(&mut p.edit_pos).range(0..=100_000));
+            let lbl = ui.label("Edit position");
+            ui.add(egui::DragValue::new(&mut p.edit_pos).range(0..=100_000))
+                .labelled_by(lbl.id);
             ui.end_row();
             ui.label("From base");
             edit_base_combo(ui, "ge_be_from", &mut p.from_base);
@@ -362,8 +363,9 @@ fn draw_prime_edit(p: &mut GeneEditingPanel, ui: &mut egui::Ui) {
                     }
                 });
             ui.end_row();
-            ui.label("Edit position");
-            ui.add(egui::DragValue::new(&mut p.edit_pos).range(0..=100_000));
+            let lbl = ui.label("Edit position");
+            ui.add(egui::DragValue::new(&mut p.edit_pos).range(0..=100_000))
+                .labelled_by(lbl.id);
             ui.end_row();
             ui.label("Substitute to");
             edit_base_combo(ui, "ge_pe_to", &mut p.to_base);
@@ -766,5 +768,41 @@ mod headless_ui_tests {
             p.error.is_some(),
             "mRNA design should error on an empty CDS"
         );
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::Role;
+        // BaseEdit and PrimeEdit both expose the edit_pos DragValue.
+        for tool in [Tool::BaseEdit, Tool::PrimeEdit] {
+            let mut app = app_with_panel();
+            app.genetics.genediting.tool = tool;
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            let out = ctx.run(egui::RawInput::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    super::draw(&mut app, ui);
+                });
+            });
+            let nodes = out
+                .platform_output
+                .accesskit_update
+                .expect("accesskit tree produced")
+                .nodes;
+            let spin_buttons: Vec<_> = nodes
+                .iter()
+                .filter(|(_, n)| n.role() == Role::SpinButton)
+                .collect();
+            assert!(
+                !spin_buttons.is_empty(),
+                "genediting tool {tool:?} should expose at least one SpinButton"
+            );
+            assert!(
+                spin_buttons
+                    .iter()
+                    .all(|(_, n)| !n.labelled_by().is_empty()),
+                "every genediting DragValue ({tool:?}) must be labelled_by its caption"
+            );
+        }
     }
 }

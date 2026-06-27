@@ -28,17 +28,39 @@ pub fn run_headless(task_args: &[String]) -> anyhow::Result<()> {
     match task {
         "info" => print_info(),
         "cycle" => print_cycle(),
+        "self-test" => return run_self_test(&task_args[1..]),
         "export-engine" => export_stl(&crate::rocket_mesh::detailed_engine_mesh(), arg1)?,
         "export-rocket" => export_stl(&crate::rocket_mesh::lv1_rocket_mesh(), arg1)?,
         "render-engine" => render_png(true, arg1)?,
         "render-rocket" => render_png(false, arg1)?,
         other => anyhow::bail!(
-            "unknown headless task `{other}` — try: info | cycle | \
+            "unknown headless task `{other}` — try: info | cycle | self-test | \
              export-engine <out.stl> | export-rocket <out.stl> | \
              render-engine <out.png> | render-rocket <out.png>"
         ),
     }
     Ok(())
+}
+
+/// Run valenx's baked-in **product self-test** and print the compact report
+/// (one `id  PASS|FAIL|SKIP  <key value or reason>` line per product, then a
+/// tally). Selected by `valenx --self-test [--group <G>] [--id <id>]` (the
+/// `setup::run` arg-router maps the bare `--self-test` flag onto this `self-test`
+/// headless task). Runs the [`crate::self_test`] registry entirely head-less —
+/// each product check builds a fresh `ValenxApp::default()` and probes its panel
+/// in a throwaway egui frame, so **no window and no `rfd` dialog** is ever
+/// constructed. Exits non-zero (an `Err`) iff any product **FAILED** (skips are
+/// not failures), so CI can gate on it.
+fn run_self_test(args: &[String]) -> anyhow::Result<()> {
+    let filter = crate::self_test::Filter::from_args(args);
+    let report = crate::self_test::run_self_tests(&filter);
+    // The report is the product; print it verbatim to stdout.
+    print!("{}", report.render());
+    if report.ok() {
+        Ok(())
+    } else {
+        anyhow::bail!("self-test: {} product(s) FAILED", report.failed)
+    }
 }
 
 /// Print the build identity, platform and the available headless tasks.

@@ -50,6 +50,62 @@ impl Default for RenderWorkbenchState {
     }
 }
 
+impl RenderWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]): the four numeric render
+    /// parameters plus the stainless-finish toggle.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "resolution",
+            "samples / px",
+            "max bounces",
+            "exposure",
+            "polished stainless finish (rocket)",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. The three count fields read `AgentValue::as_i64`
+    /// (the render clamps the value at solve time, so any non-negative integer
+    /// is accepted here); `exposure` reads `AgentValue::as_f64` (narrowed to
+    /// `f32`); the finish toggle reads `AgentValue::as_bool`. Fail-loud: an
+    /// unknown caption, wrong type, or negative count returns `Err` — never a
+    /// panic, no field written on error.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        match name {
+            "resolution" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("resolution must be >= 0, got {n}"));
+                }
+                self.resolution = n as u32;
+            }
+            "samples / px" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("samples / px must be >= 0, got {n}"));
+                }
+                self.spp = n as u32;
+            }
+            "max bounces" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("max bounces must be >= 0, got {n}"));
+                }
+                self.max_depth = n as u32;
+            }
+            "exposure" => self.exposure = value.as_f64()? as f32,
+            "polished stainless finish (rocket)" => self.stainless = value.as_bool()?,
+            other => return Err(format!("unknown Render control: {other:?}")),
+        }
+        Ok(())
+    }
+}
+
 /// Render a Cornell-box scene and return `(width, height, RGB8 pixels)`.
 ///
 /// Returns the `valenx-pathtrace` framebuffer error as a display string
@@ -333,29 +389,38 @@ pub fn draw_render_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
             egui::Grid::new("render_params")
                 .num_columns(2)
                 .show(ui, |ui| {
-                    ui.label("resolution");
+                    // Associate each numeric `DragValue` with its caption via
+                    // `labelled_by`, so the spin button carries the caption as its
+                    // accessibility / UI-Automation Name (egui clears a DragValue's
+                    // own Name, leaving it anonymous to a screen reader / AI driver
+                    // otherwise).
+                    let res = ui.label("resolution");
                     ui.add(
                         egui::DragValue::new(&mut s.resolution)
                             .speed(4.0)
                             .range(48..=512),
-                    );
+                    )
+                    .labelled_by(res.id);
                     ui.end_row();
-                    ui.label("samples / px");
-                    ui.add(egui::DragValue::new(&mut s.spp).speed(1.0).range(1..=128));
+                    let spp = ui.label("samples / px");
+                    ui.add(egui::DragValue::new(&mut s.spp).speed(1.0).range(1..=128))
+                        .labelled_by(spp.id);
                     ui.end_row();
-                    ui.label("max bounces");
+                    let mb = ui.label("max bounces");
                     ui.add(
                         egui::DragValue::new(&mut s.max_depth)
                             .speed(0.2)
                             .range(1..=16),
-                    );
+                    )
+                    .labelled_by(mb.id);
                     ui.end_row();
-                    ui.label("exposure");
+                    let exp = ui.label("exposure");
                     ui.add(
                         egui::DragValue::new(&mut s.exposure)
                             .speed(0.05)
                             .range(0.1..=4.0),
-                    );
+                    )
+                    .labelled_by(exp.id);
                     ui.end_row();
                 });
             if ui.button("▶ Render (Cornell box)").clicked() {
@@ -509,6 +574,32 @@ mod tests {
     use super::*;
 
     #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        use crate::agent_commands::AgentValue;
+        let mut s = RenderWorkbenchState::default();
+        // A representative integer set lands in state.
+        s.agent_set("resolution", &AgentValue::Int(256)).unwrap();
+        assert_eq!(s.resolution, 256);
+        // A float param narrows to f32.
+        s.agent_set("exposure", &AgentValue::Float(1.5)).unwrap();
+        assert_eq!(s.exposure, 1.5);
+        // The checkbox is a bool toggle.
+        s.agent_set(
+            "polished stainless finish (rocket)",
+            &AgentValue::Bool(true),
+        )
+        .unwrap();
+        assert!(s.stainless);
+        // Unknown caption -> Err.
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (string into the integer resolution) -> Err, untouched.
+        assert!(s
+            .agent_set("resolution", &AgentValue::Str("big".into()))
+            .is_err());
+        assert_eq!(s.resolution, 256, "rejected set leaves field untouched");
+    }
+
+    #[test]
     fn renders_a_lit_image() {
         // Small + cheap: the scene must produce a correctly-sized RGB buffer
         // with some non-black pixels (the emissive light illuminates it).
@@ -600,5 +691,69 @@ mod tests {
         writer.write_image_data(&pixels).expect("png data");
         writer.finish().expect("png finish");
         println!("WROTE {}", path.display());
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
+mod headless_ui_tests {
+    use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
+
+    /// As the panel draw, but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_render_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
+    }
+
+    #[test]
+    fn workbench_is_a_noop_when_hidden() {
+        let mut app = ValenxApp::default();
+        assert!(!app.show_render_workbench);
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_render_workbench(&mut app, ctx);
+        });
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // The render parameters (resolution, samples/px, max bounces, exposure)
+        // are SpinButtons; each must be `labelled_by` its caption (egui clears a
+        // DragValue's own Name) so an AI / screen reader can find the control by
+        // the caption text.
+        let mut app = ValenxApp::default();
+        app.show_render_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 4,
+            "expected the render numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every render DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+        for caption in ["resolution", "max bounces"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

@@ -32,6 +32,14 @@
 //!   the room-treatment inverse
 //!   [`reverberation::absorption_for_reverberation_time`] that sizes the
 //!   absorption `A = 24 ln10 * V / (c*RT60)` needed for a target `RT60`.
+//! - **Free-field radiation** ([`radiation`]) — exterior sound radiated
+//!   into open space by a compact source: the pulsating-sphere (monopole)
+//!   peak pressure [`radiation::monopole_pressure`]
+//!   (`|p| = rho c k a^2 U / (r sqrt(1+(ka)^2))`, with the exact `1/r`
+//!   free-field falloff), its radiated power
+//!   [`radiation::monopole_radiated_power`], the point-dipole `|cos theta|`
+//!   directivity [`radiation::dipole_directivity`], and the
+//!   [`radiation::wavenumber`] / [`radiation::directivity_db`] helpers.
 //!
 //! ## Model
 //!
@@ -83,6 +91,7 @@
 
 pub mod doppler;
 pub mod error;
+pub mod radiation;
 pub mod reverberation;
 pub mod room;
 pub mod spl;
@@ -103,6 +112,11 @@ pub use room::{ModeKind, RoomDimensions, RoomMode};
 pub use reverberation::{
     absorption_for_reverberation_time, eyring_reverberation_time, sabine_reverberation_time,
     total_absorption,
+};
+
+pub use radiation::{
+    dipole_directivity, directivity_db, monopole_pressure, monopole_radiated_power, wavenumber,
+    RHO_AIR,
 };
 
 #[cfg(test)]

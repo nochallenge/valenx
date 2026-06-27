@@ -130,17 +130,25 @@ pub fn draw_pressurevessel_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Loading & geometry").strong());
+                    // Associate each numeric `DragValue` with its caption via
+                    // `labelled_by`, so the spin button carries the caption as
+                    // its accessibility / UI-Automation Name (egui clears a
+                    // DragValue's own Name, leaving it anonymous to a screen
+                    // reader / AI driver otherwise).
                     ui.horizontal(|ui| {
-                        ui.label("pressure p (MPa)");
-                        ui.add(egui::DragValue::new(&mut s.pressure_mpa).speed(0.1));
+                        let cap = ui.label("pressure p (MPa)");
+                        ui.add(egui::DragValue::new(&mut s.pressure_mpa).speed(0.1))
+                            .labelled_by(cap.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("bore radius r (m)");
-                        ui.add(egui::DragValue::new(&mut s.radius_m).speed(0.01));
+                        let cap = ui.label("bore radius r (m)");
+                        ui.add(egui::DragValue::new(&mut s.radius_m).speed(0.01))
+                            .labelled_by(cap.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("wall thickness t (m)");
-                        ui.add(egui::DragValue::new(&mut s.thickness_m).speed(0.001));
+                        let cap = ui.label("wall thickness t (m)");
+                        ui.add(egui::DragValue::new(&mut s.thickness_m).speed(0.001))
+                            .labelled_by(cap.id);
                     });
 
                     ui.add_space(6.0);
@@ -550,5 +558,50 @@ mod headless_ui_tests {
         app.show_pressurevessel_workbench = true;
         run_pressurevessel(&mut app.pressurevessel);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::{Node, NodeId, Role};
+
+        // Render with accesskit enabled and read the emitted a11y tree — the
+        // same tree a screen reader / AI UI-Automation driver consumes.
+        let mut app = ValenxApp::default();
+        app.show_pressurevessel_workbench = true;
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_pressurevessel_workbench(&mut app, ctx);
+        });
+        let nodes: Vec<(NodeId, Node)> = out
+            .platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes;
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 3,
+            "expected the pressure-vessel numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every pressure-vessel DragValue must be labelled_by its caption"
+        );
+        for caption in [
+            "pressure p (MPa)",
+            "bore radius r (m)",
+            "wall thickness t (m)",
+        ] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

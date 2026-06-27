@@ -82,6 +82,65 @@ fn mesh_to_triangle_soup(mesh: &valenx_mesh::Mesh) -> TriangleMesh {
     out
 }
 
+impl ReinforcementWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`.
+    /// The third dimension's caption is **section-dependent** — `length (m)`
+    /// for a Beam, `height (m)` for a Column — and both spellings address the
+    /// same `length` field in [`agent_set`](Self::agent_set); `length (m)` is
+    /// listed here.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "width (m)",
+            "depth (m)",
+            "length (m)",
+            "bars",
+            "hoop spacing (m)",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the
+    /// wrong type / out of range returns `Err(String)` — never a panic. Ranges
+    /// mirror the form's `DragValue` clamps (`width`/`depth` `0.05..=3`,
+    /// `length`/`height` `0.1..=20`, `hoop spacing` `0.02..=1`); `bars` has no
+    /// UI clamp and is taken as any non-negative count (the solver floors it at
+    /// 2). The case-dependent third-dimension caption accepts both `length (m)`
+    /// and `height (m)`.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        let ranged = |v: f64, lo: f64, hi: f64, what: &str| -> Result<f64, String> {
+            if v.is_finite() && (lo..=hi).contains(&v) {
+                Ok(v)
+            } else {
+                Err(format!("{what} must be in {lo}..={hi}, got {v}"))
+            }
+        };
+        match name {
+            "width (m)" => self.width = ranged(value.as_f64()?, 0.05, 3.0, "width")?,
+            "depth (m)" => self.depth = ranged(value.as_f64()?, 0.05, 3.0, "depth")?,
+            "length (m)" | "height (m)" => {
+                self.length = ranged(value.as_f64()?, 0.1, 20.0, "length / height")?
+            }
+            "bars" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("bars must be >= 0, got {n}"));
+                }
+                self.n_bars = n as usize;
+            }
+            "hoop spacing (m)" => {
+                self.hoop_spacing = ranged(value.as_f64()?, 0.02, 1.0, "hoop spacing")?
+            }
+            other => return Err(format!("unknown Reinforcement control: {other:?}")),
+        }
+        Ok(())
+    }
+}
+
 /// Draw the reinforcement workbench (a no-op unless toggled on via
 /// View → Reinforcement).
 pub fn draw_reinforcement_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
@@ -106,24 +165,31 @@ pub fn draw_reinforcement_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 ui.selectable_value(&mut s.section, Section::Beam, "Beam");
                 ui.selectable_value(&mut s.section, Section::Column, "Column");
             });
+            // Associate each numeric `DragValue` with its caption via
+            // `labelled_by`, so the spin button carries the caption as its
+            // accessibility / UI-Automation Name (egui clears a DragValue's own
+            // Name, leaving it anonymous to a screen reader / AI driver
+            // otherwise).
             egui::Grid::new("reinf_params")
                 .num_columns(2)
                 .show(ui, |ui| {
-                    ui.label("width (m)");
+                    let l = ui.label("width (m)");
                     ui.add(
                         egui::DragValue::new(&mut s.width)
                             .speed(0.01)
                             .range(0.05..=3.0),
-                    );
+                    )
+                    .labelled_by(l.id);
                     ui.end_row();
-                    ui.label("depth (m)");
+                    let l = ui.label("depth (m)");
                     ui.add(
                         egui::DragValue::new(&mut s.depth)
                             .speed(0.01)
                             .range(0.05..=3.0),
-                    );
+                    )
+                    .labelled_by(l.id);
                     ui.end_row();
-                    ui.label(if s.section == Section::Beam {
+                    let l = ui.label(if s.section == Section::Beam {
                         "length (m)"
                     } else {
                         "height (m)"
@@ -132,17 +198,20 @@ pub fn draw_reinforcement_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         egui::DragValue::new(&mut s.length)
                             .speed(0.05)
                             .range(0.1..=20.0),
-                    );
+                    )
+                    .labelled_by(l.id);
                     ui.end_row();
-                    ui.label("bars");
-                    ui.add(egui::DragValue::new(&mut s.n_bars).speed(0.2));
+                    let l = ui.label("bars");
+                    ui.add(egui::DragValue::new(&mut s.n_bars).speed(0.2))
+                        .labelled_by(l.id);
                     ui.end_row();
-                    ui.label("hoop spacing (m)");
+                    let l = ui.label("hoop spacing (m)");
                     ui.add(
                         egui::DragValue::new(&mut s.hoop_spacing)
                             .speed(0.01)
                             .range(0.02..=1.0),
-                    );
+                    )
+                    .labelled_by(l.id);
                     ui.end_row();
                 });
             ui.separator();
@@ -172,10 +241,7 @@ pub fn draw_reinforcement_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     app.reinforcement.status = "cage produced no geometry".to_string();
                 } else {
                     app.mesh = None;
-                    app.stl = Some(LoadedStl {
-                        path: PathBuf::from("<reinforcement>/cage"),
-                        mesh: soup,
-                    });
+                    app.stl = Some(LoadedStl::new(PathBuf::from("<reinforcement>/cage"), soup));
                     app.frame_current_stl();
                     app.reinforcement.status = format!("{n} triangles in the viewport");
                 }
@@ -254,6 +320,28 @@ pub(crate) fn reinforcement_product() -> crate::WorkspaceProduct {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_commands::AgentValue;
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        let mut s = ReinforcementWorkbenchState::default();
+        s.agent_set("width (m)", &AgentValue::Float(0.4)).unwrap();
+        assert_eq!(s.width, 0.4);
+        s.agent_set("bars", &AgentValue::Int(6)).unwrap();
+        assert_eq!(s.n_bars, 6);
+        // The section-dependent third dimension accepts both captions.
+        s.agent_set("height (m)", &AgentValue::Float(3.5)).unwrap();
+        assert_eq!(s.length, 3.5);
+        // Unknown caption -> Err (no panic).
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (string into a numeric field) -> Err.
+        assert!(s
+            .agent_set("width (m)", &AgentValue::Str("wide".into()))
+            .is_err());
+        // Out-of-range (width > 3) -> Err, field untouched.
+        assert!(s.agent_set("width (m)", &AgentValue::Float(5.0)).is_err());
+        assert_eq!(s.width, 0.4, "rejected set leaves field untouched");
+    }
 
     #[test]
     fn beam_cage_tessellates_to_triangles() {
@@ -272,5 +360,98 @@ mod tests {
         };
         let mesh = run_reinforcement(&s).expect("column cage");
         assert!(!mesh.nodes.is_empty());
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
+mod headless_ui_tests {
+    use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
+
+    /// Render the whole workbench panel once in a headless egui context.
+    fn draw_workbench(app: &mut ValenxApp) {
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_reinforcement_workbench(app, ctx);
+        });
+    }
+
+    /// As [`draw_workbench`], but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_reinforcement_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
+    }
+
+    #[test]
+    fn workbench_is_a_noop_when_hidden() {
+        let mut app = ValenxApp::default();
+        assert!(!app.show_reinforcement_workbench);
+        draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn workbench_draws_when_shown_without_panic() {
+        let mut app = ValenxApp::default();
+        app.show_reinforcement_workbench = true;
+        draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn workbench_draws_a_status_without_panic() {
+        // Populate the status line so that readout branch is exercised too.
+        let mut app = ValenxApp::default();
+        app.show_reinforcement_workbench = true;
+        app.reinforcement.status = "120 triangles in the viewport".to_string();
+        draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // The rebar-cage DragValues are SpinButtons; each must be `labelled_by`
+        // its caption (egui clears a DragValue's own Name), so an AI / screen
+        // reader can find the control by the caption text. The default Beam
+        // section shows the "length (m)" caption (not "height (m)").
+        let mut app = ValenxApp::default();
+        app.show_reinforcement_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // width, depth, length, bars, hoop spacing.
+        assert!(
+            spin_buttons.len() >= 5,
+            "expected the reinforcement numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every reinforcement DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["width (m)", "length (m)", "hoop spacing (m)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        // The Generate button stays a named, invokable node.
+        assert!(
+            nodes.iter().any(|(_, n)| n.role() == Role::Button
+                && n.name().is_some_and(|s| s.contains("Generate"))),
+            "the Generate button is a named, invokable node"
+        );
     }
 }

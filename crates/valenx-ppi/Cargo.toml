@@ -1,0 +1,25 @@
+[package]
+name        = "valenx-ppi"
+description = "In-house protein-protein interaction (PPI) / interactome inference from sequence. Predicts inter-chain interface contacts from a PAIRED multiple-sequence alignment by APC-corrected mutual-information coevolution; folds the coevolution signal, optional geometric interface complementarity from two docked/known structures, and binder-score-style interface-quality aggregation into ONE PpiScore in [0,1] with components broken out; and runs a host x pathogen all-vs-all interactome screen into a ranked table. Built on the workspace `valenx-align` (paired-MSA columns), `valenx-biostruct` (chains / atom geometry), `valenx-dock` (pose) and `valenx-binder-score` (the honesty contract) plus `nalgebra` / `thiserror`. Fail-loud: empty / mismatched MSAs or a missing structure for the complementarity term return a `PpiError` rather than a plausible-but-wrong number. Research/educational coevolution HEURISTIC; NEVER emits a validated 'interacts' verdict — every result is flagged for human / wet-lab review; the AUROC / precision floors in the tests are on TINY TOY benchmarks, not a real dataset."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+readme.workspace       = true
+publish.workspace      = true
+
+[dependencies]
+thiserror          = { workspace = true }
+nalgebra           = { workspace = true }
+valenx-align       = { path = "../valenx-align" }
+valenx-binder-score = { path = "../valenx-binder-score" }
+valenx-dock        = { path = "../valenx-dock" }
+valenx-biostruct   = { path = "../valenx-biostruct" }
+
+[lints.rust]
+missing_docs   = "warn"
+unused_imports = "warn"

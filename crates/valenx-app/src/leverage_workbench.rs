@@ -95,30 +95,35 @@ pub fn draw_leverage_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Geometry").strong());
                     ui.horizontal(|ui| {
-                        ui.label("effort arm (m)");
-                        ui.add(egui::DragValue::new(&mut s.effort_arm_m).speed(0.05));
+                        let ea = ui.label("effort arm (m)");
+                        ui.add(egui::DragValue::new(&mut s.effort_arm_m).speed(0.05))
+                            .labelled_by(ea.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("load arm (m)");
-                        ui.add(egui::DragValue::new(&mut s.load_arm_m).speed(0.05));
+                        let la = ui.label("load arm (m)");
+                        ui.add(egui::DragValue::new(&mut s.load_arm_m).speed(0.05))
+                            .labelled_by(la.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Forces & motion").strong());
                     ui.horizontal(|ui| {
-                        ui.label("effort (N)");
-                        ui.add(egui::DragValue::new(&mut s.effort_n).speed(1.0));
+                        let ef = ui.label("effort (N)");
+                        ui.add(egui::DragValue::new(&mut s.effort_n).speed(1.0))
+                            .labelled_by(ef.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("target load (N)");
+                        let tl = ui.label("target load (N)");
                         ui.add(egui::DragValue::new(&mut s.target_load_n).speed(1.0))
                             .on_hover_text(
                                 "A load to size the lever against: the readout reports the effort required to balance it",
-                            );
+                            )
+                            .labelled_by(tl.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("effort travel (m)");
-                        ui.add(egui::DragValue::new(&mut s.effort_travel_m).speed(0.01));
+                        let et = ui.label("effort travel (m)");
+                        ui.add(egui::DragValue::new(&mut s.effort_travel_m).speed(0.01))
+                            .labelled_by(et.id);
                     });
 
                     ui.add_space(4.0);
@@ -531,12 +536,27 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_leverage_workbench(app, ctx);
         });
+    }
+
+    /// Draw the panel once with accesskit enabled and return the emitted
+    /// accessibility-tree nodes, so the test can inspect names and roles.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_leverage_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -552,5 +572,32 @@ mod headless_ui_tests {
         app.show_leverage_workbench = true;
         run_leverage(&mut app.leverage);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        let mut app = ValenxApp::default();
+        app.show_leverage_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 5,
+            "expected numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+        for caption in ["effort arm (m)", "load arm (m)", "effort (N)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

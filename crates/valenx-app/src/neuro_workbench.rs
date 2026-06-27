@@ -8,7 +8,7 @@
 //! Compute is synchronous (a few seconds); a background runner is future work.
 
 use eframe::egui;
-use egui_plot::{Legend, Line, Plot, PlotPoints};
+use egui_plot::{Legend, Line, PlotPoints};
 use nalgebra::Vector3;
 
 use valenx_neuro::{
@@ -17,6 +17,8 @@ use valenx_neuro::{
     ExtracellularRecorder, NeuroError, Scene, TissueGrid,
 };
 
+use crate::agent_commands::AgentValue;
+use crate::plot_ui::{managed_plot_mem, managed_plot_mem_cfg};
 use crate::ValenxApp;
 
 /// Persistent state for the neural-interface workbench.
@@ -76,6 +78,91 @@ impl Default for NeuroWorkbenchState {
             results: None,
             error: None,
         }
+    }
+}
+
+impl NeuroWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`.
+    /// Every entry matches, byte-for-byte, the caption each `DragValue` is
+    /// `labelled_by` in the draw code (including the µ / σ / Ω / √ glyphs).
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "current (µA, cathodic)",
+            "electrode radius (µm)",
+            "tissue σ (S/m)",
+            "axons",
+            "nearest depth (mm)",
+            "spread (mm)",
+            "pulse width (µs)",
+            "Shannon k limit",
+            "at-electrode threshold I₀ (µA)",
+            "current\u{2013}distance k (µA/µm²)",
+            "fiber diameter (µm)",
+            "R_m (Ω·cm²)",
+            "R_i (Ω·cm)",
+            "C_m (µF/cm²)",
+            "k_myelinated (m/s per µm)",
+            "k_unmyelinated (m/s per √µm)",
+            "distance for latency (m)",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Caption strings match exactly what the workbench
+    /// draws (and what each control is `labelled_by`). Numeric fields read
+    /// [`AgentValue::as_f64`]; the lone integer field (`axons`) reads
+    /// [`AgentValue::as_i64`] and rejects a negative count.
+    ///
+    /// Fail-loud: an unknown caption or a value of the wrong type returns
+    /// `Err(String)` — never a panic, and no field is written on error. Values
+    /// are stored verbatim; `run_neuro` / the readout closures apply their own
+    /// `.max(..)` clamps at compute time (mirroring the manual drag flow), so a
+    /// physically-degenerate intermediate is allowed here without panicking.
+    pub fn agent_set(&mut self, name: &str, value: &AgentValue) -> Result<(), String> {
+        match name {
+            "current (µA, cathodic)" => self.electrode_ua = value.as_f64()?,
+            "electrode radius (µm)" => self.electrode_radius_um = value.as_f64()?,
+            "tissue σ (S/m)" => self.sigma_s_m = value.as_f64()?,
+            "axons" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("axons must be >= 0, got {n}"));
+                }
+                self.n_axons = n as usize;
+            }
+            "nearest depth (mm)" => self.depth_mm = value.as_f64()?,
+            "spread (mm)" => self.spread_mm = value.as_f64()?,
+            "pulse width (µs)" => self.pulse_width_us = value.as_f64()?,
+            "Shannon k limit" => self.k_limit = value.as_f64()?,
+            "at-electrode threshold I₀ (µA)" => self.cd_i0_ua = value.as_f64()?,
+            "current\u{2013}distance k (µA/µm²)" => self.cd_k_ua_per_um2 = value.as_f64()?,
+            "fiber diameter (µm)" => self.fiber_diameter_um = value.as_f64()?,
+            "R_m (Ω·cm²)" => self.r_m_ohm_cm2 = value.as_f64()?,
+            "R_i (Ω·cm)" => self.r_i_ohm_cm = value.as_f64()?,
+            "C_m (µF/cm²)" => self.c_m_uf_cm2 = value.as_f64()?,
+            "k_myelinated (m/s per µm)" => self.k_myel_m_per_s_per_um = value.as_f64()?,
+            "k_unmyelinated (m/s per √µm)" => {
+                self.k_unmyel_m_per_s_per_sqrt_um = value.as_f64()?
+            }
+            "distance for latency (m)" => self.conduction_distance_m = value.as_f64()?,
+            other => return Err(format!("unknown neuro control: {other:?}")),
+        }
+        Ok(())
+    }
+
+    /// The `(myelinated, unmyelinated)` axon conduction velocities (m/s) for the
+    /// current fiber diameter + scaling constants, via the SAME `valenx_neuro`
+    /// laws the panel's Conduction section displays — myelinated `v = k·d`
+    /// (Hursh), unmyelinated `v = k·√d` (cable theory). Used by the product
+    /// self-test ([`crate::self_test`]) to assert the velocity against the
+    /// closed form.
+    pub(crate) fn conduction_velocities(&self) -> (f64, f64) {
+        let d_um = self.fiber_diameter_um;
+        let v_myel = valenx_neuro::myelinated_conduction_velocity(d_um, self.k_myel_m_per_s_per_um);
+        let v_unmyel =
+            valenx_neuro::unmyelinated_conduction_velocity(d_um, self.k_unmyel_m_per_s_per_sqrt_um);
+        (v_myel, v_unmyel)
     }
 }
 
@@ -226,40 +313,48 @@ pub fn draw_neuro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Electrode & tissue").strong());
                     ui.horizontal(|ui| {
-                        ui.label("current (µA, cathodic)");
-                        ui.add(egui::DragValue::new(&mut s.electrode_ua).speed(5.0));
+                        let lbl = ui.label("current (µA, cathodic)");
+                        ui.add(egui::DragValue::new(&mut s.electrode_ua).speed(5.0))
+                            .labelled_by(lbl.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("electrode radius (µm)");
-                        ui.add(egui::DragValue::new(&mut s.electrode_radius_um).speed(1.0));
+                        let lbl = ui.label("electrode radius (µm)");
+                        ui.add(egui::DragValue::new(&mut s.electrode_radius_um).speed(1.0))
+                            .labelled_by(lbl.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("tissue σ (S/m)");
-                        ui.add(egui::DragValue::new(&mut s.sigma_s_m).speed(0.01));
+                        let lbl = ui.label("tissue σ (S/m)");
+                        ui.add(egui::DragValue::new(&mut s.sigma_s_m).speed(0.01))
+                            .labelled_by(lbl.id);
                     });
                     ui.label(egui::RichText::new("Axon bundle").strong());
                     ui.horizontal(|ui| {
-                        ui.label("axons");
-                        ui.add(egui::DragValue::new(&mut s.n_axons).speed(0.3));
+                        let lbl = ui.label("axons");
+                        ui.add(egui::DragValue::new(&mut s.n_axons).speed(0.3))
+                            .labelled_by(lbl.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("nearest depth (mm)");
-                        ui.add(egui::DragValue::new(&mut s.depth_mm).speed(0.1));
+                        let lbl = ui.label("nearest depth (mm)");
+                        ui.add(egui::DragValue::new(&mut s.depth_mm).speed(0.1))
+                            .labelled_by(lbl.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("spread (mm)");
-                        ui.add(egui::DragValue::new(&mut s.spread_mm).speed(0.1));
+                        let lbl = ui.label("spread (mm)");
+                        ui.add(egui::DragValue::new(&mut s.spread_mm).speed(0.1))
+                            .labelled_by(lbl.id);
                     });
 
                     ui.separator();
                     ui.label(egui::RichText::new("Charge-injection safety (Shannon)").strong());
                     ui.horizontal(|ui| {
-                        ui.label("pulse width (µs)");
-                        ui.add(egui::DragValue::new(&mut s.pulse_width_us).speed(5.0));
+                        let lbl = ui.label("pulse width (µs)");
+                        ui.add(egui::DragValue::new(&mut s.pulse_width_us).speed(5.0))
+                            .labelled_by(lbl.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Shannon k limit");
-                        ui.add(egui::DragValue::new(&mut s.k_limit).speed(0.05));
+                        let lbl = ui.label("Shannon k limit");
+                        ui.add(egui::DragValue::new(&mut s.k_limit).speed(0.05))
+                            .labelled_by(lbl.id);
                     });
                     {
                         let sf = charge_safety(s);
@@ -295,12 +390,14 @@ pub fn draw_neuro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         egui::RichText::new("Current–distance selectivity (Stoney)").strong(),
                     );
                     ui.horizontal(|ui| {
-                        ui.label("at-electrode threshold I₀ (µA)");
-                        ui.add(egui::DragValue::new(&mut s.cd_i0_ua).speed(0.5));
+                        let lbl = ui.label("at-electrode threshold I₀ (µA)");
+                        ui.add(egui::DragValue::new(&mut s.cd_i0_ua).speed(0.5))
+                            .labelled_by(lbl.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("current–distance k (µA/µm²)");
-                        ui.add(egui::DragValue::new(&mut s.cd_k_ua_per_um2).speed(0.0005));
+                        let lbl = ui.label("current–distance k (µA/µm²)");
+                        ui.add(egui::DragValue::new(&mut s.cd_k_ua_per_um2).speed(0.0005))
+                            .labelled_by(lbl.id);
                     });
                     {
                         let cd = current_distance_readout(s);
@@ -333,20 +430,24 @@ pub fn draw_neuro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.separator();
                     ui.label(egui::RichText::new("Cable theory (passive fiber)").strong());
                     ui.horizontal(|ui| {
-                        ui.label("fiber diameter (µm)");
-                        ui.add(egui::DragValue::new(&mut s.fiber_diameter_um).speed(0.1));
+                        let lbl = ui.label("fiber diameter (µm)");
+                        ui.add(egui::DragValue::new(&mut s.fiber_diameter_um).speed(0.1))
+                            .labelled_by(lbl.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("R_m (Ω·cm²)");
-                        ui.add(egui::DragValue::new(&mut s.r_m_ohm_cm2).speed(100.0));
+                        let lbl = ui.label("R_m (Ω·cm²)");
+                        ui.add(egui::DragValue::new(&mut s.r_m_ohm_cm2).speed(100.0))
+                            .labelled_by(lbl.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("R_i (Ω·cm)");
-                        ui.add(egui::DragValue::new(&mut s.r_i_ohm_cm).speed(1.0));
+                        let lbl = ui.label("R_i (Ω·cm)");
+                        ui.add(egui::DragValue::new(&mut s.r_i_ohm_cm).speed(1.0))
+                            .labelled_by(lbl.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("C_m (µF/cm²)");
-                        ui.add(egui::DragValue::new(&mut s.c_m_uf_cm2).speed(0.05));
+                        let lbl = ui.label("C_m (µF/cm²)");
+                        ui.add(egui::DragValue::new(&mut s.c_m_uf_cm2).speed(0.05))
+                            .labelled_by(lbl.id);
                     });
                     {
                         // µm → cm for the diameter; µF/cm² → F/cm² for the capacitance.
@@ -378,18 +479,21 @@ pub fn draw_neuro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.separator();
                     ui.label(egui::RichText::new("Conduction (diameter-driven)").strong());
                     ui.horizontal(|ui| {
-                        ui.label("k_myelinated (m/s per µm)");
-                        ui.add(egui::DragValue::new(&mut s.k_myel_m_per_s_per_um).speed(0.1));
+                        let lbl = ui.label("k_myelinated (m/s per µm)");
+                        ui.add(egui::DragValue::new(&mut s.k_myel_m_per_s_per_um).speed(0.1))
+                            .labelled_by(lbl.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("k_unmyelinated (m/s per √µm)");
+                        let lbl = ui.label("k_unmyelinated (m/s per √µm)");
                         ui.add(
                             egui::DragValue::new(&mut s.k_unmyel_m_per_s_per_sqrt_um).speed(0.05),
-                        );
+                        )
+                        .labelled_by(lbl.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("distance for latency (m)");
-                        ui.add(egui::DragValue::new(&mut s.conduction_distance_m).speed(0.005));
+                        let lbl = ui.label("distance for latency (m)");
+                        ui.add(egui::DragValue::new(&mut s.conduction_distance_m).speed(0.005))
+                            .labelled_by(lbl.id);
                     });
                     {
                         // fiber_diameter_um (cable-theory input above) is already in µm — exactly
@@ -451,16 +555,19 @@ pub fn draw_neuro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         );
                         ui.add_space(4.0);
                         ui.label(egui::RichText::new("Recruitment vs current (µA)").strong());
-                        Plot::new("neuro_recruitment")
-                            .height(130.0)
-                            .legend(Legend::default())
-                            .show(ui, |pui| {
+                        managed_plot_mem_cfg(
+                            ui,
+                            "neuro_recruitment",
+                            130.0,
+                            |plot| plot.legend(Legend::default()),
+                            |pui| {
                                 let pts: Vec<[f64; 2]> =
                                     r.recruitment_curve.iter().map(|&(c, f)| [c, f]).collect();
                                 pui.line(Line::new(PlotPoints::from(pts)).name("fraction"));
-                            });
+                            },
+                        );
                         ui.label(egui::RichText::new("Electrode |Z| Bode (log–log)").strong());
-                        Plot::new("neuro_impedance").height(130.0).show(ui, |pui| {
+                        managed_plot_mem(ui, "neuro_impedance", 130.0, |pui| {
                             let pts: Vec<[f64; 2]> = r
                                 .impedance_bode
                                 .iter()
@@ -477,7 +584,7 @@ pub fn draw_neuro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                 ))
                                 .strong(),
                             );
-                            Plot::new("neuro_eap").height(130.0).show(ui, |pui| {
+                            managed_plot_mem(ui, "neuro_eap", 130.0, |pui| {
                                 let pts: Vec<[f64; 2]> = r
                                     .eap_uv
                                     .iter()
@@ -651,5 +758,138 @@ mod tests {
         // At exactly the threshold current, the activation radius == the depth.
         s.electrode_ua = -502.0;
         assert!((current_distance_readout(&s).activation_radius_um - 500.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn agent_set_sets_numeric_and_integer_fields_and_rejects_bad_input() {
+        let mut s = NeuroWorkbenchState::default();
+
+        // A representative f64 control (with a µ glyph in the caption).
+        s.agent_set("current (µA, cathodic)", &AgentValue::Float(150.0))
+            .expect("set current");
+        assert_eq!(s.electrode_ua, 150.0);
+        // The σ glyph caption.
+        s.agent_set("tissue σ (S/m)", &AgentValue::Float(0.3))
+            .expect("set sigma");
+        assert_eq!(s.sigma_s_m, 0.3);
+        // The integer field (Int) — and Float-that-is-integral also coerces.
+        s.agent_set("axons", &AgentValue::Int(5))
+            .expect("set axons");
+        assert_eq!(s.n_axons, 5);
+        s.agent_set("axons", &AgentValue::Float(12.0))
+            .expect("integral float -> usize");
+        assert_eq!(s.n_axons, 12);
+        // A glyph-heavy caption (en-dash + superscript ²).
+        s.agent_set(
+            "current\u{2013}distance k (µA/µm²)",
+            &AgentValue::Float(0.002),
+        )
+        .expect("set cd k");
+        assert_eq!(s.cd_k_ua_per_um2, 0.002);
+
+        // Every advertised control name must be settable (with a number).
+        for cap in NeuroWorkbenchState::agent_control_names() {
+            let v = if *cap == "axons" {
+                AgentValue::Int(4)
+            } else {
+                AgentValue::Float(1.0)
+            };
+            assert!(
+                s.agent_set(cap, &v).is_ok(),
+                "advertised control '{cap}' must be settable"
+            );
+        }
+
+        // Unknown caption -> Err.
+        assert!(s.agent_set("laser power", &AgentValue::Float(1.0)).is_err());
+        // Wrong type: a numeric field needs a number; axons rejects a fraction.
+        assert!(s
+            .agent_set("current (µA, cathodic)", &AgentValue::Str("x".into()))
+            .is_err());
+        assert!(s.agent_set("axons", &AgentValue::Float(2.5)).is_err());
+        // Negative axon count -> Err.
+        assert!(s.agent_set("axons", &AgentValue::Int(-1)).is_err());
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
+mod headless_ui_tests {
+    use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
+
+    /// Render the whole workbench panel once in a headless egui context.
+    fn draw_workbench(app: &mut ValenxApp) {
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_neuro_workbench(app, ctx);
+        });
+    }
+
+    /// As [`draw_workbench`], but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_neuro_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
+    }
+
+    #[test]
+    fn workbench_is_a_noop_when_hidden() {
+        let mut app = ValenxApp::default();
+        assert!(!app.show_neuro_workbench);
+        draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn workbench_draws_when_shown_without_panic() {
+        let mut app = ValenxApp::default();
+        app.show_neuro_workbench = true;
+        draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // Every parameter DragValue is a SpinButton and must be `labelled_by`
+        // its caption (egui clears a DragValue's own Name), so an AI / screen
+        // reader can find the control by the caption text. All the parameter
+        // rows are unconditionally rendered (separator-delimited sections, no
+        // tabs), so the full set of 17 spin buttons is always present.
+        let mut app = ValenxApp::default();
+        app.show_neuro_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 17,
+            "expected the neuro numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every neuro DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in [
+            "current (µA, cathodic)",
+            "electrode radius (µm)",
+            "tissue σ (S/m)",
+        ] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

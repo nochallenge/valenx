@@ -89,7 +89,7 @@ pub mod trim;
 
 pub use area::{area_and_centroid, surface_area, AreaResult};
 pub use continuity::{measure_edge_continuity, ContinuityReport};
-pub use curvature::{local_shape, principal_curvatures, LocalShape};
+pub use curvature::{local_shape, principal_curvatures, try_principal_curvatures, LocalShape};
 pub use curvature_comb::{curvature_comb, CurvatureComb};
 pub use draft_angle::{draft_angle, draft_report, DraftReport};
 pub use error::SurfaceError;

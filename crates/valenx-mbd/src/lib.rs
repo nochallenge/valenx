@@ -44,9 +44,29 @@
 //! joints, or an implicit stiff integrator yet. The prismatic slider here is
 //! the ground variant (a body on a fixed world axis); a body-to-body prismatic
 //! and the rest are the documented next steps.
+//!
+//! ## Companion: articulated-body forward dynamics ([`aba`])
+//!
+//! Alongside the planar constrained-DAE [`System`] above, the [`aba`] module
+//! provides a **3-D kinematic-tree** forward-dynamics solver — the Featherstone
+//! **Articulated-Body Algorithm** (`O(n)`). Build an [`aba::ArticulatedTree`] of
+//! fixed-base, single-DOF (revolute / prismatic) joints in full spatial (6-D)
+//! algebra and [`aba::ArticulatedTree::forward_dynamics`] maps joint positions,
+//! velocities and torques `(q, q̇, τ)` to joint accelerations `q̈`. It is a
+//! distinct paradigm from the global-KKT planar solver — propagation over a
+//! tree rather than one factored matrix — and reuses the same semi-implicit
+//! (symplectic) Euler integration convention for stepping. It supports both a
+//! **fixed base** ([`aba::ArticulatedTree::forward_dynamics`]) and a **floating
+//! base** ([`aba::ArticulatedTree::forward_dynamics_floating`]) — a free 6-DOF
+//! root body that may translate and rotate, solved with the articulated-base
+//! acceleration `a₀ = −(Iᴬ₀)⁻¹ pᴬ₀` and verified to conserve total momentum
+//! (gravity off) and energy.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
+
+pub mod aba;
+pub mod contact;
 
 use nalgebra::{DMatrix, DVector, Vector2};
 

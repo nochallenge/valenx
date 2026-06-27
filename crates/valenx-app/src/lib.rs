@@ -43,6 +43,9 @@ pub mod antenna_workbench;
 pub(crate) mod background;
 pub mod batterypack_workbench;
 pub mod beam_workbench;
+pub mod blackhole_workbench;
+pub mod bondgraph_workbench;
+pub mod brep_workbench;
 pub mod cad_workbench;
 pub mod car_workbench;
 pub mod cfd_workbench;
@@ -55,9 +58,13 @@ pub mod hvac_workbench;
 pub mod inductionmotor_workbench;
 pub mod interior_workbench;
 pub mod neuro_workbench;
+pub mod nodegraph_workbench;
+pub mod quantum_workbench;
 pub mod reinforcement_workbench;
 pub mod render_workbench;
 pub mod reverse_workbench;
+pub mod surrogate_workbench;
+pub mod thermo_workbench;
 pub mod variant_effect_workbench;
 pub mod windturbine_workbench;
 
@@ -85,6 +92,7 @@ pub mod columnsteel_workbench;
 pub mod combustion_workbench;
 pub mod commands;
 pub mod conveyor_workbench;
+pub mod cosim_workbench;
 #[cfg(test)]
 mod coverage_ui_tests;
 pub mod creep_workbench;
@@ -106,6 +114,8 @@ pub mod fixedwing_workbench;
 pub mod fluidstatics_workbench;
 pub mod flywheel_workbench;
 pub mod fourbar_workbench;
+#[cfg(test)]
+mod widget_naming_tests;
 // Mechanical + civil batch — surface valenx-shaftdesign, -screwthread,
 // -pulley, -spring-design, -springcombination, -vibration, -rivet,
 // -soilbearing as reactive right-side workbenches.
@@ -142,9 +152,18 @@ pub mod leverage_workbench;
 pub mod log_panel;
 pub mod marine_workbench;
 pub mod materials;
+pub mod mbd_workbench;
 pub mod mesh_prims;
 pub mod mesh_toolbox;
+pub mod mission_planner_workbench;
+pub mod missionsim_workbench;
 pub mod mohr_workbench;
+/// Richer molecular-viewer representations (sticks / cartoon / marching-cubes
+/// surface) extending [`genetics::molecule_view`]; pure mesh generators wired
+/// into the Macromolecular-Structure panel's representation picker.
+pub mod molviz;
+pub mod morphogenesis;
+pub mod morphogenesis_workbench;
 pub mod mosfet_workbench;
 pub mod new_project_dialog;
 pub mod opamp_workbench;
@@ -153,19 +172,27 @@ pub mod orifice_workbench;
 pub mod param_sketch_panel;
 pub mod pbr_forward_pass;
 pub mod pharmacokinetics_workbench;
+pub mod photogrammetry_workbench;
 pub mod pipeflow_workbench;
 pub mod pipenetwork_workbench;
 pub mod piping_workbench;
+pub mod topopt_workbench;
+pub mod waveform_workbench;
 // Science / bio / civil batch — surface valenx-retainingwall, -openchannel,
 // -weir, -thermocycle, -queueing, -radioactivity, -osmosis, -thermoreg,
 // -hemodynamics, -popdynamics as reactive right-side workbenches.
+pub mod autonomy_workbench;
+pub mod fluids_workbench;
 pub mod hemodynamics_workbench;
+pub mod ocean_workbench;
 pub mod openchannel_workbench;
 pub mod osmosis_workbench;
 pub mod plate_workbench;
+pub(crate) mod plot_ui;
 pub mod pneumatics_workbench;
 pub mod popdynamics_workbench;
 pub mod powerfactor_workbench;
+pub mod ppi_workbench;
 pub mod pressurevessel_workbench;
 /// Per-file registry of agent-bridge `show_3d` mesh producers (replaces the old
 /// per-kind reducer arms; new 3-D tools register from their own module).
@@ -190,9 +217,13 @@ pub mod retainingwall_workbench;
 pub mod rivet_workbench;
 pub mod rocket_mesh;
 pub mod rocket_workbench;
+pub mod rom_workbench;
+pub mod rotor_workbench;
 pub mod run;
 pub mod scene_overlay;
 pub mod screwthread_workbench;
+pub mod self_test;
+pub mod sensors_workbench;
 pub mod settings;
 pub mod setup;
 pub mod shaftdesign_workbench;
@@ -207,6 +238,7 @@ pub mod springs_workbench;
 pub mod statics_workbench;
 pub mod straingauge_workbench;
 pub mod strainrosette_workbench;
+pub mod survivability_workbench;
 pub mod thermalexpansion_workbench;
 pub mod thermistor_workbench;
 pub mod thermocouple_workbench;
@@ -218,7 +250,9 @@ pub mod transformer_workbench;
 pub mod transmissionline_workbench;
 pub mod truss_workbench;
 pub mod types;
+pub mod uas_workbench;
 pub mod undo;
+pub mod uq_workbench;
 pub mod vibration_workbench;
 pub mod viewport;
 pub mod viewport_2d;
@@ -227,6 +261,7 @@ pub mod weir_workbench;
 pub mod welcome_tour;
 pub mod wgpu_renderer;
 pub mod workbench_chrome;
+pub mod workbench_focus;
 
 // Concern-focused helper modules — what used to be a single
 // `helpers.rs` bag-of-everything (1422 LOC, 36 fns spanning 8+
@@ -707,6 +742,19 @@ pub struct FloorPlanView {
     pub lines: Vec<String>,
 }
 
+/// Memoised command-palette entry list with its cache key. The key is
+/// `(registry.len(), library.content_rev(), show_non_oss_adapters,
+/// focus_category)`; the value is the built [`crate::commands::CommandKind`]
+/// list. Aliased so [`ValenxApp::palette_cache`] stays under clippy's
+/// type-complexity bar. See the cache-build site in `update.rs`.
+type PaletteCache = Option<(
+    usize,
+    u64,
+    bool,
+    Option<String>,
+    Vec<crate::commands::CommandKind>,
+)>;
+
 /// Root application state.
 #[derive(Default)]
 pub struct ValenxApp {
@@ -786,6 +834,23 @@ pub struct ValenxApp {
     /// [`Self::dock_enabled`] via [`project_tabs::WorkspaceDoc`]; a
     /// newly-opened tab installs a default document → this is `false`.
     pub dock_agent_only: bool,
+    /// When `true` (the default), opening or switching to a tab that has **two
+    /// or more** central-workspace panels open auto-organises them into a
+    /// balanced grid (via `dock_layout::ValenxApp::auto_tile_dock`) so every
+    /// panel stays visible and legible instead of the Assistant being crushed
+    /// to a sliver beside a wide workbench. The user can turn this off
+    /// (View → "Auto-tile panels on open") and still tile on demand with the
+    /// tab-strip **⊞ Tile** button. Cleared for a clean agent product tab
+    /// ([`Self::dock_agent_only`]) so that single-pair layout is never
+    /// re-gridded. Global (not per-tab) — a UI preference, not scene state.
+    pub auto_tile_on_open: bool,
+    /// One-shot guard: has the **startup auto-tile** already run? The launch
+    /// path has no active tab, so `project_tabs::sync_active` (which carries the
+    /// per-tab-open auto-tile) never fires at boot; the first `update` frame
+    /// instead calls `Self::maybe_auto_tile_on_open` once and sets this, so a
+    /// balanced grid greets the user when several panels are open by default.
+    /// Not persisted — reset each launch.
+    pub startup_auto_tiled: bool,
     /// Per-channel **cursor** for the agent-drives-valenx command bridge: how
     /// many lines of channel `n`'s command file
     /// ([`crate::agent_commands::cmd_path`]) have already been applied. On the
@@ -808,6 +873,18 @@ pub struct ValenxApp {
     /// reads to ~1/sec. `None` until the first poll (derive default). See
     /// [`crate::agent_commands`].
     pub last_agent_poll: Option<std::time::Instant>,
+    /// **Queue of accessibility actions to self-inject next frame**, the
+    /// mechanism behind the generic
+    /// [`invoke_named`](crate::agent_commands::AgentCommand::InvokeNamed) bridge
+    /// command. Each entry is an `accesskit` node id (resolved from a widget's
+    /// accessible **name** by [`crate::agent_commands`]'s headless probe) plus
+    /// the action to fire on it (`Default` = a click). `Self::raw_input_hook`
+    /// drains this into the next frame's `RawInput` as
+    /// `Event::AccessKitActionRequest`, so egui treats it **exactly** like an
+    /// Invoke arriving from an external UI-Automation client — the same code
+    /// path a real "▶ Compute" click takes. Empty in the normal interactive
+    /// build (derive default); only the agent bridge ever pushes to it.
+    pub pending_accesskit_actions: Vec<(egui::accesskit::NodeId, egui::accesskit::Action)>,
     /// Per-unit chat **input buffers** for the "Workbench + Agent" `agent:<n>`
     /// tiles, keyed by unit number `n`. Each unit's chat `TextEdit` binds to its
     /// own entry here (via `unit_chat_inputs.entry(n).or_default()`) so the six
@@ -1101,6 +1178,26 @@ pub struct ValenxApp {
     /// in-process solvers (no external solver, no input deck). See
     /// [`crate::fem_workbench`].
     pub fem: crate::fem_workbench::FemWorkbenchState,
+
+    /// Whether the right-side Black-Hole / Relativity workbench is visible.
+    /// Defaults to `false`; flipped on from the View menu. Independent of the
+    /// other workbenches — egui docks them side by side.
+    pub show_blackhole_workbench: bool,
+    /// Form + result state for the Black-Hole / Relativity workbench — native
+    /// general relativity (Kerr–Newman observables, thermodynamics, shadow
+    /// ray-tracer) over the in-process `valenx-relativity` engine. See
+    /// [`crate::blackhole_workbench`].
+    pub blackhole: crate::blackhole_workbench::BlackHoleWorkbenchState,
+
+    /// Whether the right-side Rotor / Drone (BEMT) workbench is visible.
+    /// Defaults to `false`; flipped on from the View menu or opened by the
+    /// agent bridge under the id `"rotor"`. Independent of the other
+    /// workbenches — egui docks them side by side.
+    pub show_rotor_workbench: bool,
+    /// Form + result state for the Rotor / Drone (BEMT) workbench — native
+    /// propeller / rotor blade-element-momentum-theory performance over the
+    /// in-process `valenx-rotor` engine. See [`crate::rotor_workbench`].
+    pub rotor: crate::rotor_workbench::RotorWorkbenchState,
 
     /// Whether the right-side Induction Motor workbench is visible. Defaults
     /// to `false`; flipped on from the View menu.
@@ -1722,6 +1819,15 @@ pub struct ValenxApp {
     /// State for the Optics workbench. See [`crate::optics_workbench`].
     pub optics: crate::optics_workbench::OpticsWorkbenchState,
 
+    /// Whether the right-side **Waveform (VCD viewer)** workbench panel is
+    /// visible. Defaults to `false`; toggled from the View menu or opened by
+    /// the agent bridge under the id `"waveform"`. An in-house Value Change
+    /// Dump parser (Valenx's digital logic-analyzer input, via
+    /// valenx-waveform). See [`crate::waveform_workbench`].
+    pub show_waveform_workbench: bool,
+    /// Editable VCD source + latest parse result for the Waveform workbench.
+    pub waveform: crate::waveform_workbench::WaveformWorkbenchState,
+
     /// Whether the right-side Orifice Meter workbench is visible (View menu).
     pub show_orifice_workbench: bool,
     /// State for the Orifice Meter workbench. See [`crate::orifice_workbench`].
@@ -1941,6 +2047,252 @@ pub struct ValenxApp {
     /// `valenx-vehicle`).
     pub car: crate::car_workbench::CarWorkbenchState,
 
+    /// Whether the right-side Sensors workbench panel is visible. Defaults to
+    /// `false`; toggled from the View menu or opened by the agent bridge under
+    /// the id `"sensors"`. Wraps `valenx-sensors` (LiDAR + radar).
+    /// See [`crate::sensors_workbench`].
+    pub show_sensors_workbench: bool,
+    /// Form + result state for the Sensors workbench (LiDAR scan / radar
+    /// measurement over the in-process `valenx-sensors` engine).
+    pub sensors: crate::sensors_workbench::SensorsWorkbenchState,
+
+    /// Whether the right-side Fluids (SPH) workbench panel is visible. Defaults
+    /// to `false`; toggled from the View menu or opened by the agent bridge
+    /// under the id `"fluids"`. Wraps `valenx-fluids` (SPH particle simulation).
+    /// See [`crate::fluids_workbench`].
+    pub show_fluids_workbench: bool,
+    /// Form + result state for the Fluids (SPH) workbench (particle simulation
+    /// over the in-process `valenx-fluids` engine).
+    pub fluids: crate::fluids_workbench::FluidsWorkbenchState,
+
+    /// Whether the right-side Ocean workbench panel is visible. Defaults to
+    /// `false`; toggled from the View menu or opened by the agent bridge under
+    /// the id `"ocean"`. Wraps `valenx-ocean` (Gerstner wave field + quasi-static
+    /// Archimedes buoyancy). See [`crate::ocean_workbench`].
+    pub show_ocean_workbench: bool,
+    /// Form + result state for the Ocean workbench (wave-height profile +
+    /// floating-body settle over the in-process `valenx-ocean` engine).
+    pub ocean: crate::ocean_workbench::OceanWorkbenchState,
+
+    /// Whether the right-side ROM (reduced-order model) workbench panel is
+    /// visible. Defaults to `false`; toggled from the View menu or opened by the
+    /// agent bridge under the id `"rom"`. Wraps `valenx-rom` (POD / DMD / DEIM).
+    /// See [`crate::rom_workbench`].
+    pub show_rom_workbench: bool,
+    /// Form + result state for the ROM workbench (POD energy spectrum +
+    /// snapshot reconstruction over the in-process `valenx-rom` engine).
+    pub rom: crate::rom_workbench::RomWorkbenchState,
+
+    /// Whether the right-side UQ (uncertainty quantification) workbench panel is
+    /// visible. Defaults to `false`; toggled from the View menu or opened by the
+    /// agent bridge under the id `"uq"`. Wraps `valenx-uq` (Monte-Carlo
+    /// propagation + Sobol sensitivity + FORM reliability). See
+    /// [`crate::uq_workbench`].
+    pub show_uq_workbench: bool,
+    /// Form + result state for the UQ workbench (output histogram + Sobol bar
+    /// chart + FORM Pf over the in-process `valenx-uq` engine).
+    pub uq: crate::uq_workbench::UqWorkbenchState,
+
+    /// Whether the right-side UAS (small-UAS design + defensive counter-UAS)
+    /// workbench panel is visible. Defaults to `false`; toggled from the View
+    /// menu or opened by the agent bridge under the id `"uas"` (aliases
+    /// `"drone"` / `"counteruas"`). Wraps `valenx-uas` (multirotor / fixed-wing
+    /// performance + trade study + defensive intercept GEOMETRY — no weapon
+    /// employment). See [`crate::uas_workbench`].
+    pub show_uas_workbench: bool,
+    /// Form + result state for the UAS workbench (performance readout + trade
+    /// Pareto scatter + counter-UAS intercept plan view over the in-process
+    /// `valenx-uas` engine).
+    pub uas: crate::uas_workbench::UasWorkbenchState,
+
+    /// Whether the right-side Mission-Simulation (general discrete-event /
+    /// agent constructive simulation) workbench panel is visible. Defaults to
+    /// `false`; toggled from the View menu or opened by the agent bridge under
+    /// the id `"missionsim"` (aliases `"mission"` / `"wargame"`). Wraps
+    /// `valenx-mission-sim`: a discrete-event scheduler, analytic movers, and
+    /// range-based detection, with ABSTRACT probabilistic engagement (a Pk input
+    /// plus the Lanchester square-law ODE; no lethality, targeting, or
+    /// kill-chain). See [`crate::missionsim_workbench`].
+    pub show_missionsim_workbench: bool,
+    /// Form + result state for the Mission-Simulation workbench (plan-view entity
+    /// tracks + Lanchester force-vs-time plot + outcome metrics over the
+    /// in-process `valenx-mission-sim` engine).
+    pub missionsim: crate::missionsim_workbench::MissionSimWorkbenchState,
+
+    /// Whether the right-side **Mission Planner** workbench panel is visible.
+    /// Defaults to `false`; toggled from the View menu or opened by the agent
+    /// bridge under the id `"missionplanner"`. A geographic (lat/lon) map with
+    /// entities following waypoint routes, played back in real time
+    /// (`valenx-mission-sim::planner`). Movement + routes only (Stage 1) — no
+    /// engagement / sensors / orbits. See [`crate::mission_planner_workbench`].
+    pub show_mission_planner_workbench: bool,
+    /// Live scenario + playback state for the Mission Planner workbench.
+    pub mission_planner: crate::mission_planner_workbench::MissionPlannerWorkbenchState,
+
+    /// Whether the right-side **Morphogenesis** workbench panel is visible.
+    /// Defaults to `false`; toggled from the View menu or opened by the agent
+    /// bridge under the id `"morphogenesis"`. A live Turing reaction–diffusion
+    /// (Gray–Scott) field grown as a 3-D surface. See
+    /// [`crate::morphogenesis_workbench`].
+    pub show_morphogenesis_workbench: bool,
+    /// Live reaction–diffusion field + playback state for the Morphogenesis
+    /// workbench.
+    pub morphogenesis: crate::morphogenesis_workbench::MorphogenesisWorkbenchState,
+
+    /// Whether the right-side **Topology Optimization** workbench panel is
+    /// visible. Defaults to `false`; toggled from the View menu or opened by the
+    /// agent bridge under the id `"topopt"`. In-house 2-D SIMP generative
+    /// structural design (minimum-compliance density optimisation), solved on
+    /// the valenx-fem faer sparse backend. See [`crate::topopt_workbench`].
+    pub show_topopt_workbench: bool,
+    /// Input parameters + latest result + animation cursor for the Topology
+    /// Optimization workbench.
+    pub topopt: crate::topopt_workbench::TopOptWorkbenchState,
+
+    /// Whether the right-side **Part B-Rep (CAD)** workbench panel is
+    /// visible. Defaults to `false`; toggled from the View menu or opened by
+    /// the agent bridge under the id `"brep"`. An in-house boundary-
+    /// representation solid modeler on the `truck` CAD kernel (NURBS
+    /// primitives + boolean set-ops + tessellation, via valenx-truck-cad).
+    /// See [`crate::brep_workbench`].
+    pub show_brep_workbench: bool,
+    /// Primitive selectors + sizes + boolean op + latest build result for
+    /// the Part B-Rep workbench.
+    pub brep: crate::brep_workbench::BrepWorkbenchState,
+
+    /// Whether the right-side **Thermodynamics (EoS)** workbench panel is
+    /// visible. Defaults to `false`; toggled from the View menu or opened by
+    /// the agent bridge under the id `"thermo"`. An in-house industrial
+    /// fluid-thermodynamics panel (cubic equations of state + vapor–liquid
+    /// phase behavior, via valenx-thermo). See [`crate::thermo_workbench`].
+    pub show_thermo_workbench: bool,
+    /// Fluid + EoS-model selectors + (T, P) state + latest compute result
+    /// for the Thermodynamics workbench.
+    pub thermo: crate::thermo_workbench::ThermoWorkbenchState,
+
+    /// Whether the right-side **Quantum circuit** workbench panel is
+    /// visible. Defaults to `false`; toggled from the View menu or opened by
+    /// the agent bridge under the id `"quantum"`. An in-house state-vector
+    /// quantum-circuit simulator (build a gate circuit, run it, read the
+    /// basis-state probabilities, via valenx-quantum). See
+    /// [`crate::quantum_workbench`].
+    pub show_quantum_workbench: bool,
+    /// Qubit count + gate-edit selectors + recorded op list + latest run
+    /// result for the Quantum circuit workbench.
+    pub quantum: crate::quantum_workbench::QuantumWorkbenchState,
+
+    /// Whether the right-side **Node Graph** workbench panel is visible.
+    /// Defaults to `false`; toggled from the View menu or opened by the agent
+    /// bridge under the id `"nodegraph"`. An in-house visual node-graph editor
+    /// (draggable nodes, output->input wiring, a topological evaluation pass) —
+    /// the foundation for later pipeline / systems editing. See
+    /// [`crate::nodegraph_workbench`].
+    pub show_nodegraph_workbench: bool,
+    /// The edited graph + canvas interaction state for the Node Graph workbench.
+    pub nodegraph: crate::nodegraph_workbench::NodeGraphWorkbenchState,
+
+    /// Whether the right-side **Bond Graph** workbench panel is visible.
+    /// Defaults to `false`; toggled from the View menu or opened by the agent
+    /// bridge under the id `"bondgraph"`. An in-house multi-domain systems
+    /// modeller: standard bond-graph elements (R / C / I / Se / Sf / TF / GY /
+    /// junctions) on a canvas, with three canonical presets whose linear
+    /// state-space `dx/dt = A·x + B·u` is derived from the bond graph and
+    /// integrated (RK4). See [`crate::bondgraph_workbench`].
+    pub show_bondgraph_workbench: bool,
+    /// The chosen preset + element parameters + latest solution for the Bond
+    /// Graph workbench.
+    pub bondgraph: crate::bondgraph_workbench::BondGraphWorkbenchState,
+
+    /// Whether the right-side **Surrogate Model** workbench panel is visible.
+    /// Defaults to `false`; toggled from the View menu or opened by the agent
+    /// bridge under the id `"surrogate"`. An in-house ML surrogate: trains a tiny
+    /// MLP on samples from a closed-form solver (cantilever tip deflection) and
+    /// predicts the output instantly as the input sliders move (the what-if
+    /// loop), shown next to the true value. See [`crate::surrogate_workbench`].
+    pub show_surrogate_workbench: bool,
+    /// The training hyper-parameters + live inputs + latest trained surrogate
+    /// for the Surrogate Model workbench.
+    pub surrogate: crate::surrogate_workbench::SurrogateWorkbenchState,
+
+    /// Whether the right-side Survivability / protection workbench panel is
+    /// visible. Defaults to `false`; toggled from the View menu or opened by the
+    /// agent bridge under the id `"survivability"` (aliases `"protection"` /
+    /// `"blast"`). Wraps `valenx-survivability` — the DEFENSIVE / protective side
+    /// of the shared blast/impact physics: free-field blast loading, SDOF
+    /// protective response + the pressure-impulse iso-damage diagram, minimum
+    /// armor sizing, and an occupant tolerance screen. Every output is "minimum
+    /// protection to survive threat X"; no penetration / lethality is modeled.
+    /// See [`crate::survivability_workbench`].
+    pub show_survivability_workbench: bool,
+    /// Form + result state for the Survivability / protection workbench
+    /// (Friedlander pressure-time curve + P-I iso-damage diagram with the design
+    /// point + armor / occupant readouts over the in-process
+    /// `valenx-survivability` crate).
+    pub survivability: crate::survivability_workbench::SurvivabilityWorkbenchState,
+
+    /// Whether the right-side Photogrammetry / SfM scan workbench panel is
+    /// visible. Defaults to `false`; toggled from the View menu or opened by the
+    /// agent bridge under the id `"photogrammetry"` (aliases `"sfm"` / `"scan"`).
+    /// Wraps `valenx-photogrammetry` (COLMAP-style structure-from-motion:
+    /// features + matching + two-view geometry + incremental mapper + bundle
+    /// adjustment). See [`crate::photogrammetry_workbench`].
+    pub show_photogrammetry_workbench: bool,
+    /// Form + result state for the Photogrammetry workbench (synthetic-scene SfM
+    /// recovery: recovered sparse cloud + camera poses + reprojection error over
+    /// the in-process `valenx-photogrammetry` mapper).
+    pub photogrammetry: crate::photogrammetry_workbench::PhotogrammetryWorkbenchState,
+
+    /// Whether the right-side Co-Simulation (FMI / HELICS) workbench panel is
+    /// visible. Defaults to `false`; toggled from the View menu or opened by
+    /// the agent bridge under the id `"cosim"` (aliases `"co-simulation"` /
+    /// `"fmi"`). Wraps `valenx-adapter-fmi` (the in-house native co-sim master
+    /// — Jacobi / Gauss-Seidel over a Subsystem graph — plus a strongly-coupled
+    /// fixed-point implicit coupler). See [`crate::cosim_workbench`].
+    pub show_cosim_workbench: bool,
+    /// Form + result state for the Co-Simulation workbench (two coupled
+    /// mass-spring-dampers exchanged through the in-process valenx-adapter-fmi
+    /// coordinator: exchanged-signal history + coupling iterations + error vs a
+    /// monolithic reference).
+    pub cosim: crate::cosim_workbench::CosimWorkbenchState,
+
+    /// Whether the right-side Protein-interaction (PPI / interactome) workbench
+    /// panel is visible. Defaults to `false`; toggled from the View menu or
+    /// opened by the agent bridge under the id `"ppi"` (aliases `"interactome"`
+    /// / `"network"`). Wraps `valenx-ppi` (the in-house sequence-first
+    /// coevolution PPI engine — APC-corrected mutual-information over a paired
+    /// MSA folded into a fused `[0,1]` score, plus an all-vs-all interactome
+    /// screen). See [`crate::ppi_workbench`].
+    pub show_ppi_workbench: bool,
+    /// Form + result state for the PPI / interactome workbench (a named demo
+    /// host × pathogen interactome screened through the in-process valenx-ppi
+    /// engine: the real scored interaction network + degree / betweenness
+    /// centrality + BFS shortest path computed over it).
+    pub ppi: crate::ppi_workbench::PpiWorkbenchState,
+
+    /// Whether the right-side Multibody-dynamics (robot / contact) workbench
+    /// panel is visible. Defaults to `false`; toggled from the View menu or
+    /// opened by the agent bridge under the id `"mbd"` (aliases `"multibody"` /
+    /// `"robot"`). Wraps `valenx-mbd` (the in-house planar constrained-DAE
+    /// multibody solver, its Featherstone articulated-body algorithm, and its
+    /// penalty-contact + Coulomb-friction model). See [`crate::mbd_workbench`].
+    pub show_mbd_workbench: bool,
+    /// Form + result state for the Multibody-dynamics workbench (an
+    /// energy-conserving articulated rod pendulum advanced by the real
+    /// constrained-DAE `System`, and a body dropped onto a plane through the
+    /// real penalty-contact + Coulomb-friction path — trajectory + contact-force
+    /// history + energy / penetration diagnostics).
+    pub mbd: crate::mbd_workbench::MbdWorkbenchState,
+
+    /// Whether the right-side Autonomy V&V workbench panel is visible. Defaults
+    /// to `false`; toggled from the View menu or opened by the agent bridge
+    /// under the id `"autonomy"`. Wraps `valenx-autonomy-vnv` (scenario-based
+    /// verification of an autonomous vehicle with simulated sensors). See
+    /// [`crate::autonomy_workbench`].
+    pub show_autonomy_workbench: bool,
+    /// Form + result state for the Autonomy V&V workbench (scenario → trace →
+    /// requirement report over the in-process `valenx-autonomy-vnv` framework).
+    pub autonomy: crate::autonomy_workbench::AutonomyWorkbenchState,
+
     /// Whether the right-side Assistant activity sidebar is visible. On by
     /// default (set in [`ValenxApp::new`]) so the app narrates its own work
     /// via the live feed.
@@ -1986,20 +2338,23 @@ pub struct ValenxApp {
     pub landing_inline_message: Option<String>,
 
     /// Memoised command-palette entry list, keyed by
-    /// `(registry.len(), library.content_rev(), show_non_oss_adapters)`.
+    /// `(registry.len(), library.content_rev(), show_non_oss_adapters,
+    /// focus_category)`.
     /// `build_visible_commands` allocates ~360 `String`s per call and used
     /// to run every frame; the cache invalidates when the registry grows
     /// (rare — re-probe / load), when the saved-project list changes (the
     /// launcher lists one entry per saved project, so add/remove/**rename**
-    /// must rebuild), or when the OSS-only toggle flips in Settings. `None`
-    /// until the first palette render fills it.
+    /// must rebuild), when the OSS-only toggle flips in Settings, or when the
+    /// **domain-focus filter** changes (it narrows the launcher's workbench-tab
+    /// entries). `None` until the first palette render fills it.
     ///
     /// The second key is [`crate::project_library::ProjectLibrary::content_rev`],
     /// a content fingerprint over each project's `(id, name)` — so an in-place
     /// rename (which leaves `projects.len()` unchanged) now flips the key and
-    /// the launcher shows the new name on the next frame. See the cache-build
-    /// site in `update.rs`.
-    pub palette_cache: Option<(usize, u64, bool, Vec<crate::commands::CommandKind>)>,
+    /// the launcher shows the new name on the next frame. The fourth key is
+    /// [`ValenxApp::focus_category`] so flipping the focus rebuilds immediately.
+    /// See the cache-build site in `update.rs`. Type aliased as `PaletteCache`.
+    pub palette_cache: PaletteCache,
 
     // ── Swappable viewport system (cloud/viewport) ────────────────────────
     /// Which viewport implementation is rendered in the central panel.
@@ -2060,6 +2415,19 @@ pub struct ValenxApp {
     /// viewport-kind switches so pan, zoom, and sub-view selection are
     /// remembered when the user returns to the 2D view.
     pub viewport_2d: crate::viewport_2d::Viewport2dState,
+
+    /// **Domain-focus filter** — the working domain the workbench surfaces are
+    /// narrowed to, or [`None`] for "All" (show everything, the default).
+    ///
+    /// A pure-UI focus layer: when `Some(category)`, the Ctrl+P launcher's
+    /// `OpenWorkbenchTab` entries, the tab strip's "From template" menu, and the
+    /// View menu's primary-workbench toggles show only workbenches whose
+    /// [`crate::project_tabs::TabKind::group`] category equals it; "All"
+    /// ([`None`]) shows everything. Nothing is removed or feature-gated — see
+    /// [`crate::workbench_focus`]. **In-session only** (transient view
+    /// preference, not written to the settings file), so it resets to "All" on
+    /// relaunch.
+    pub focus_category: Option<String>,
 }
 
 impl ValenxApp {
@@ -2098,6 +2466,11 @@ impl ValenxApp {
         // optimize → export an engine, visible at launch.
         app.show_engine_workbench = true;
         app.snap_to_grid = true;
+        // Auto-organise the open central-workspace panels into a balanced grid
+        // when a tab is opened/switched (so the Assistant is never crushed to a
+        // sliver beside a wide workbench). On by default; toggle in View, or
+        // tile on demand with the tab-strip "⊞ Tile" button.
+        app.auto_tile_on_open = true;
         app.init_registry();
         // Restore the per-case run-history map from disk so the
         // browser's ✓/✗ badges survive app restarts. A missing /

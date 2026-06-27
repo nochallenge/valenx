@@ -17,7 +17,7 @@ use valenx_viz::stl::{StlTriangle, TriangleMesh};
 use crate::types::LoadedStl;
 use crate::ValenxApp;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Shape {
     Sphere,
     Torus,
@@ -39,6 +39,58 @@ impl Default for ReverseWorkbenchState {
             k: 8,
             status: String::new(),
         }
+    }
+}
+
+/// Parse a demo-shape name (for the agent `SetControl` bridge) into a [`Shape`].
+/// Case-insensitive; matches the two picker words. Fail-loud on an unknown name.
+fn parse_shape(s: &str) -> Result<Shape, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "sphere" => Ok(Shape::Sphere),
+        "torus" => Ok(Shape::Torus),
+        other => Err(format!(
+            "unknown shape '{other}' (expected 'sphere' or 'torus')"
+        )),
+    }
+}
+
+impl ReverseWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). `shape` is the
+    /// Sphere/Torus selection (set by option name).
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &["shape", "cloud density", "k neighbours"]
+    }
+
+    /// Set one labelled control by caption, for the agent `SetControl` bridge.
+    /// Numeric fields read `AgentValue::as_i64` (the two demo counts); `shape`
+    /// reads `AgentValue::as_str` and matches the picker names. Fail-loud: an
+    /// unknown caption, wrong type, or negative count returns `Err` — never a
+    /// panic, no field written on error.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        match name {
+            "shape" => self.shape = parse_shape(value.as_str()?)?,
+            "cloud density" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("cloud density must be >= 0, got {n}"));
+                }
+                self.density = n as usize;
+            }
+            "k neighbours" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("k neighbours must be >= 0, got {n}"));
+                }
+                self.k = n as usize;
+            }
+            other => return Err(format!("unknown Reverse Engineering control: {other:?}")),
+        }
+        Ok(())
     }
 }
 
@@ -134,15 +186,20 @@ pub fn draw_reverse_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
             egui::Grid::new("reverse_params")
                 .num_columns(2)
                 .show(ui, |ui| {
-                    ui.label("cloud density");
+                    // Associate each DragValue with its caption via
+                    // `labelled_by`, so the spin button is named for a screen
+                    // reader / AI driver (egui clears a DragValue's own Name).
+                    let density = ui.label("cloud density");
                     ui.add(
                         egui::DragValue::new(&mut s.density)
                             .speed(0.5)
                             .range(6..=64),
-                    );
+                    )
+                    .labelled_by(density.id);
                     ui.end_row();
-                    ui.label("k neighbours");
-                    ui.add(egui::DragValue::new(&mut s.k).speed(0.2).range(4..=20));
+                    let k = ui.label("k neighbours");
+                    ui.add(egui::DragValue::new(&mut s.k).speed(0.2).range(4..=20))
+                        .labelled_by(k.id);
                     ui.end_row();
                 });
             ui.separator();
@@ -173,10 +230,10 @@ pub fn draw_reverse_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     app.reverse.status = "no triangles reconstructed".to_string();
                 } else {
                     app.mesh = None;
-                    app.stl = Some(LoadedStl {
-                        path: PathBuf::from("<reverse>/reconstruction"),
-                        mesh: soup,
-                    });
+                    app.stl = Some(LoadedStl::new(
+                        PathBuf::from("<reverse>/reconstruction"),
+                        soup,
+                    ));
                     app.frame_current_stl();
                     app.reverse.status = format!("{n_pts} points → {n} triangles");
                 }
@@ -252,6 +309,26 @@ mod tests {
     use super::*;
 
     #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        use crate::agent_commands::AgentValue;
+        let mut s = ReverseWorkbenchState::default();
+        // A representative integer set lands in state.
+        s.agent_set("cloud density", &AgentValue::Int(32)).unwrap();
+        assert_eq!(s.density, 32);
+        // The shape enum is set by option name.
+        s.agent_set("shape", &AgentValue::Str("torus".into()))
+            .unwrap();
+        assert_eq!(s.shape, Shape::Torus);
+        // Unknown caption -> Err.
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (string into the integer count) -> Err, field untouched.
+        assert!(s
+            .agent_set("cloud density", &AgentValue::Str("many".into()))
+            .is_err());
+        assert_eq!(s.density, 32, "rejected set leaves field untouched");
+    }
+
+    #[test]
     fn sphere_cloud_reconstructs_to_a_mesh() {
         let mesh = run_reverse(&ReverseWorkbenchState::default()).expect("triangulate");
         assert!(!mesh.nodes.is_empty(), "mesh has nodes");
@@ -260,5 +337,65 @@ mod tests {
             !soup.triangles.is_empty(),
             "reconstruction yields triangles"
         );
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
+mod headless_ui_tests {
+    use super::*;
+
+    #[test]
+    fn workbench_is_a_noop_when_hidden() {
+        let mut app = ValenxApp::default();
+        assert!(!app.show_reverse_workbench);
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_reverse_workbench(&mut app, ctx);
+        });
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::{Node, NodeId, Role};
+
+        // Render with accesskit enabled and read the emitted a11y tree — the
+        // same tree a screen reader / AI UI-Automation driver consumes. Every
+        // DragValue (Role::SpinButton) must carry a caption via `labelled_by`,
+        // since egui clears a DragValue's own Name.
+        let mut app = ValenxApp::default();
+        app.show_reverse_workbench = true;
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_reverse_workbench(&mut app, ctx);
+        });
+        let nodes: Vec<(NodeId, Node)> = out
+            .platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes;
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // The reconstruction params draw cloud-density + k-neighbours.
+        assert!(
+            spin_buttons.len() >= 2,
+            "expected the reverse numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every reverse DragValue must be labelled_by its caption"
+        );
+        for caption in ["cloud density", "k neighbours"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

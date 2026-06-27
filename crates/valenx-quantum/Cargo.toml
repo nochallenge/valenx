@@ -1,0 +1,20 @@
+[package]
+name = "valenx-quantum"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+description = "Quantum circuit simulation for Valenx — state-vector qubits, gates, and projective measurement."
+
+publish.workspace = true
+
+[dependencies]
+thiserror   = { workspace = true }
+num-complex = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

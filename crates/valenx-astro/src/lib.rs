@@ -77,21 +77,65 @@
 //! the `Δv` budget, max-Q and the staging timeline are all real
 //! engineering numbers. Each is a documented, well-understood
 //! extension on the way toward a fuller flight-mechanics suite.
+//!
+//! ## Space-domain analysis (STK-class geometry)
+//!
+//! Beyond ascent and on-orbit mechanics, the crate provides the
+//! **space-situational-geometry** layer that turns a propagated orbit into
+//! operational answers — pure, dual-use orbital geometry (no weapons):
+//!
+//! - [`frames`] — the Earth reference-frame primitives: Greenwich sidereal
+//!   time ([`gmst`]), geodetic ↔ Earth-fixed ([`geodetic_to_ecef`] /
+//!   [`ecef_to_geodetic`]) and inertial ↔ Earth-fixed ([`eci_to_ecef`])
+//!   transforms.
+//! - [`access`] — ground-station **access / visibility**: from a satellite
+//!   ephemeris and a station with an elevation mask, the rise/set/peak
+//!   [`AccessWindow`]s of every pass ([`access_windows`], [`look_angles`]).
+//! - [`coverage`] — instantaneous **footprint** geometry (the spherical-cap
+//!   [`footprint_half_angle`] and area fraction) and a
+//!   [`coverage_fraction`] over a set of ground points.
+//! - [`conjunction`] — **conjunction screening** (SSA): the time and distance
+//!   of closest approach of two ephemerides ([`screen_conjunction`]), flagged
+//!   against a miss-distance threshold.
+//!
+//! ## Hypersonic / atmospheric reentry
+//!
+//! For **defensive reentry-survivability analysis** — peak g-load, peak
+//! stagnation heat flux and integrated heat load for a body diving back
+//! into the atmosphere:
+//!
+//! - [`reentry`] — a planar entry integrated through the full **US Standard
+//!   Atmosphere 1976** with an optional lift-to-drag ratio (the general
+//!   engineering case), plus the [`allen_eggers_max_deceleration`] and
+//!   [`stagnation_heat_flux`] (Sutton–Graves) closed forms.
+//! - [`reentry_hypersonic`] — the **Allen–Eggers** analytic anchor over an
+//!   [`ExponentialAtmosphere`] (`ρ = ρ₀·e^(−h/H)`): the velocity–altitude
+//!   profile, the ballistic-coefficient-independent peak deceleration
+//!   `a_max = Vₑ²·sin γ/(2eH)` and its altitude in closed form, the
+//!   Sutton–Graves and [`fay_riddell_heat_flux`] heating correlations, and a
+//!   [`BallisticEntry`] integrator whose peak deceleration converges to the
+//!   closed form. This is analytic / engineering-grade physics — point-mass,
+//!   single exponential layer, optical-region heating *correlations*; **no**
+//!   coupled CFD, real-gas chemistry, ablation or radiative heating.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod access;
 pub mod aero;
 pub mod atmosphere;
 pub mod budget;
 pub mod config;
+pub mod conjunction;
 pub mod constants;
+pub mod coverage;
 pub mod dynamics;
 pub mod eclipse;
 pub mod engine_cycle;
 pub mod error;
 pub mod flight3d;
 pub mod flight6dof;
+pub mod frames;
 pub mod groundtrack;
 pub mod guidance;
 pub mod influence;
@@ -103,11 +147,13 @@ pub mod mass;
 pub mod mission;
 pub mod orbit;
 pub mod orbit3d;
+pub mod precise_time;
 pub mod presets;
 pub mod propulsion;
 pub mod radec;
 pub mod recovery;
 pub mod reentry;
+pub mod reentry_hypersonic;
 pub mod rendezvous;
 pub mod result;
 pub mod rigidbody;
@@ -117,7 +163,16 @@ pub mod vehicle;
 pub mod wind;
 pub mod windows;
 
+pub use access::{
+    access_windows, elevation_of, look_angles, AccessWindow, EphemerisPoint, GroundStation,
+    LookAngles,
+};
 pub use config::{AscentConfig, GuidanceMode};
+pub use conjunction::{screen_conjunction, Conjunction};
+pub use coverage::{
+    central_angle, coverage_area_fraction, coverage_fraction, footprint_ground_radius,
+    footprint_half_angle, max_slant_range, point_in_footprint,
+};
 pub use eclipse::{
     beta_angle, eclipse_fraction, orbit_normal_eci, solar_geometry, sun_direction_eci,
     SolarGeometry, J2000,
@@ -126,17 +181,32 @@ pub use engine_cycle::{solve_cycle, CycleInputs, CycleResult, ShaftInputs, Shaft
 pub use error::AstroError;
 pub use flight3d::{ascent_to_orbit, Ascent3d};
 pub use flight6dof::{ControlGains, State6dof};
+pub use frames::{ecef_to_eci, ecef_to_geodetic, eci_to_ecef, geodetic_to_ecef, gmst, gmst_after};
 pub use guidance::GuidanceProgram;
 pub use influence::{hill_sphere_radius, sphere_of_influence_radius};
 pub use lambert::lambert;
 pub use maneuver::{bielliptic_transfer, hohmann_transfer, Transfer};
 pub use orbit::{elements, OrbitElements};
-pub use orbit3d::{ClassicalElements, StateVector};
+pub use orbit3d::{
+    atmosphere_velocity_eci, drag_accel as orbit_drag_accel, propagate_with_drag, BallisticTerm,
+    ClassicalElements, StateVector,
+};
+pub use precise_time::{
+    from_jde_utc as epoch_from_jde_utc, tai as tai_epoch, utc as utc_epoch, Epoch,
+    TT_MINUS_TAI_SECONDS,
+};
 pub use propulsion::{
     optimize_engine, CoolingInputs, CoolingPerformance, EngineDesign, EngineOptimum,
     EnginePerformance,
 };
 pub use radec::{geocentric_angular_rates, geocentric_equatorial, Equatorial};
+pub use reentry::{
+    allen_eggers_max_deceleration, stagnation_heat_flux, EntryConditions, EntryResult,
+};
+pub use reentry_hypersonic::{
+    fay_riddell_heat_flux, sutton_graves_heat_flux, BallisticEntry, BallisticEntryResult,
+    ExponentialAtmosphere,
+};
 pub use result::{AscentResult, FlightEvent, Outcome, TrajectorySample};
 pub use rigidbody::{AttitudeState, Inertia};
 pub use sim::{propagate_two_body, simulate_ascent};
