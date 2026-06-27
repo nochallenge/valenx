@@ -79,6 +79,18 @@ impl FastenersWorkbenchState {
         }
         Ok(())
     }
+
+    /// The current computed-result text for the agent `ReadReadout` bridge and
+    /// the product self-test ([`crate::self_test`]): the dimension readout once a
+    /// size has been computed, else the last `error`, else `None` before the
+    /// first compute. Read-only.
+    pub fn agent_readout(&self) -> Option<String> {
+        if !self.result.is_empty() {
+            Some(self.result.clone())
+        } else {
+            self.error.clone()
+        }
+    }
 }
 
 /// Draw the Fasteners Workbench right-side panel. A no-op when the
@@ -324,6 +336,13 @@ fn draw_hex_preview(ui: &mut egui::Ui, pts: &[Vector3<f64>]) {
 
 /// Look up the selected bolt in the ISO 4017 table and format its
 /// dimensions. Extracted from the draw closure so it is unit-testable.
+/// Run the bolt-dimension lookup (the in-panel **Compute** action). Factored
+/// out so the button and the product self-test ([`crate::self_test`]) share one
+/// path.
+pub(crate) fn run(app: &mut ValenxApp) {
+    run_fasteners(&mut app.fasteners);
+}
+
 fn run_fasteners(s: &mut FastenersWorkbenchState) {
     s.error = None;
 

@@ -248,11 +248,21 @@ pub fn draw_assistant_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
     // anything.
     ctx.request_repaint_after(Duration::from_millis(1000));
 
-    let close = crate::workbench_chrome::workbench_shell(
+    // FIX B — balanced width. This classic docked Assistant only renders for
+    // non-tiled (calculator-style) tabs: a 3-D tab hides it and hosts the
+    // Assistant as a grid tile instead (`!dock_enabled`, see update.rs). Here
+    // the active workbench form sits in the centre / a right SidePanel, so give
+    // the Assistant ~40% of the window width with a sane ~320px floor — both
+    // the form and the chat stay readable instead of the Assistant squishing to
+    // a sliver. The user can still drag it wider/narrower (down to the floor).
+    let screen_w = ctx.screen_rect().width();
+    let default_w = (screen_w * 0.40).clamp(320.0, 640.0);
+    let close = crate::workbench_chrome::workbench_shell_sized(
         app,
         ctx,
         "valenx_assistant_panel",
         "Assistant",
+        Some((default_w, 320.0)),
         assistant_workbench_body,
     );
     if close {

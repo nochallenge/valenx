@@ -104,6 +104,14 @@ fn joint0(anim: &Animation, t: f64) -> f64 {
         .unwrap_or(0.0)
 }
 
+/// Joint-0 value (rad) at time `t` for the demo two-keyframe sweep (0 → π over
+/// 2 s) with the given easing — the SAME `Animation::sample` the product card
+/// uses. Used by the product self-test ([`crate::self_test`]) to assert keyframe
+/// interpolation against the analytic value (e.g. Linear at t = 1 s ⇒ π/2).
+pub(crate) fn sample_demo_joint0(tween: TweenMode, t: f64) -> f64 {
+    joint0(&demo_animation(tween), t)
+}
+
 /// Build the agent-bridge **`animate` product** — a DATA-ONLY *text card*
 /// summarising the keyframe timeline (`mesh: None`, populated `lines`).
 ///

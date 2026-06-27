@@ -121,6 +121,18 @@ impl FramesWorkbenchState {
         }
         Ok(())
     }
+
+    /// The current computed-result text for the agent `ReadReadout` bridge and
+    /// the product self-test ([`crate::self_test`]): the cross-section readout
+    /// once computed, else the last `error`, else `None` before the first
+    /// compute. Read-only.
+    pub fn agent_readout(&self) -> Option<String> {
+        if !self.result.is_empty() {
+            Some(self.result.clone())
+        } else {
+            self.error.clone()
+        }
+    }
 }
 
 /// One labelled `DragValue` row for a dimension.
@@ -345,6 +357,13 @@ fn draw_section_preview(ui: &mut egui::Ui, pts: &[Vector3<f64>]) {
 /// Build the selected [`Profile`] variant from the form, compute the
 /// cross-sectional area + perimeter, and format the readout. Extracted
 /// from the draw closure so it is unit-testable.
+/// Run the cross-section property compute (the in-panel **Compute** action).
+/// Factored out so the button and the product self-test ([`crate::self_test`])
+/// share one path.
+pub(crate) fn run(app: &mut ValenxApp) {
+    run_frames(&mut app.frames);
+}
+
 fn run_frames(s: &mut FramesWorkbenchState) {
     s.error = None;
 

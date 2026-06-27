@@ -438,6 +438,13 @@ fn draw_centerline_preview(ui: &mut egui::Ui, pts: &[Vector3<f64>]) {
 /// Build a [`SpringSpec`] from the form, validate it, and format the
 /// design-scalar readout. Extracted from the draw closure so it is
 /// unit-testable.
+/// Run the spring design compute (the in-panel **Analyze** action). Factored
+/// out so the button and the product self-test ([`crate::self_test`]) share one
+/// path.
+pub(crate) fn run(app: &mut ValenxApp) {
+    run_springs(&mut app.springs);
+}
+
 fn run_springs(s: &mut SpringsWorkbenchState) {
     s.error = None;
 

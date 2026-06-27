@@ -149,6 +149,20 @@ impl NeuroWorkbenchState {
         }
         Ok(())
     }
+
+    /// The `(myelinated, unmyelinated)` axon conduction velocities (m/s) for the
+    /// current fiber diameter + scaling constants, via the SAME `valenx_neuro`
+    /// laws the panel's Conduction section displays — myelinated `v = k·d`
+    /// (Hursh), unmyelinated `v = k·√d` (cable theory). Used by the product
+    /// self-test ([`crate::self_test`]) to assert the velocity against the
+    /// closed form.
+    pub(crate) fn conduction_velocities(&self) -> (f64, f64) {
+        let d_um = self.fiber_diameter_um;
+        let v_myel = valenx_neuro::myelinated_conduction_velocity(d_um, self.k_myel_m_per_s_per_um);
+        let v_unmyel =
+            valenx_neuro::unmyelinated_conduction_velocity(d_um, self.k_unmyel_m_per_s_per_sqrt_um);
+        (v_myel, v_unmyel)
+    }
 }
 
 struct NeuroResults {

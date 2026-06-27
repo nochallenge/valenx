@@ -363,6 +363,13 @@ fn draw_profile_preview(ui: &mut egui::Ui, pts: &[Vector3<f64>]) {
 /// Build a [`GearSpec`] from the form, validate it, and format the
 /// design-scalar readout. Extracted from the draw closure so it is
 /// unit-testable.
+/// Run the gear geometry compute (the in-panel **Analyze** action). Factored
+/// out so the button and the product self-test ([`crate::self_test`]) share one
+/// path.
+pub(crate) fn run(app: &mut ValenxApp) {
+    run_gears(&mut app.gears);
+}
+
 fn run_gears(s: &mut GearsWorkbenchState) {
     s.error = None;
 

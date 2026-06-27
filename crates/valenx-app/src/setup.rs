@@ -26,6 +26,16 @@ pub fn run() -> anyhow::Result<()> {
     if let Some(pos) = args.iter().position(|a| a == "--headless") {
         return crate::headless::run_headless(&args[pos + 1..]);
     }
+    // Product self-test: `valenx --self-test [--group <G>] [--id <id>]` is a
+    // first-class shortcut for the `--headless self-test` task — it runs the
+    // baked-in 56-product verification head-less (no window, no rfd dialog) and
+    // prints the compact report. Kept as its own flag so the standing "one fast
+    // command to verify the products" entry point is obvious.
+    if let Some(pos) = args.iter().position(|a| a == "--self-test") {
+        let mut task = vec!["self-test".to_string()];
+        task.extend_from_slice(&args[pos + 1..]);
+        return crate::headless::run_headless(&task);
+    }
 
     tracing::info!(
         target: "valenx",

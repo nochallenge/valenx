@@ -221,6 +221,7 @@ pub mod rotor_workbench;
 pub mod run;
 pub mod scene_overlay;
 pub mod screwthread_workbench;
+pub mod self_test;
 pub mod sensors_workbench;
 pub mod settings;
 pub mod setup;
@@ -842,6 +843,13 @@ pub struct ValenxApp {
     /// ([`Self::dock_agent_only`]) so that single-pair layout is never
     /// re-gridded. Global (not per-tab) — a UI preference, not scene state.
     pub auto_tile_on_open: bool,
+    /// One-shot guard: has the **startup auto-tile** already run? The launch
+    /// path has no active tab, so `project_tabs::sync_active` (which carries the
+    /// per-tab-open auto-tile) never fires at boot; the first `update` frame
+    /// instead calls [`Self::maybe_auto_tile_on_open`] once and sets this, so a
+    /// balanced grid greets the user when several panels are open by default.
+    /// Not persisted — reset each launch.
+    pub startup_auto_tiled: bool,
     /// Per-channel **cursor** for the agent-drives-valenx command bridge: how
     /// many lines of channel `n`'s command file
     /// ([`crate::agent_commands::cmd_path`]) have already been applied. On the

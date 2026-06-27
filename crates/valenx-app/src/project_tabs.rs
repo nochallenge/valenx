@@ -4805,6 +4805,80 @@ mod tests {
             draw_kind(kind, &mut app);
         }
     }
+
+    /// FIX B: opening a **calculator** workbench tab (Thermo — NO 3-D model)
+    /// must NOT auto-tile into an empty viewport grid. The form stays in the
+    /// central area (classic layout) and the Assistant takes a balanced side
+    /// width instead — so `dock_enabled` stays off and no `central_view` tile
+    /// is created. (Tileable count is just the Assistant = 1, below threshold.)
+    #[test]
+    fn opening_a_calculator_tab_stays_classic_no_empty_viewport() {
+        let mut app = ValenxApp::default();
+        app.show_assistant_panel = true;
+        app.auto_tile_on_open = true;
+        // Replicate the bridge / tab-strip NewTab(Thermo) open flow exactly.
+        park_active_doc(&mut app);
+        app.tab_bar.open(TabKind::Thermo);
+        install_active_doc(&mut app); // ends in sync_active → maybe_auto_tile
+
+        assert!(app.show_thermo_workbench, "Thermo workbench is on");
+        // No model loaded → no CENTRAL_VIEW tile; only the Assistant is tileable.
+        let ids = app.open_tileable_panels();
+        assert!(
+            !ids.contains(&"central_view".to_string()),
+            "a calculator tab must NOT get an empty viewport tile"
+        );
+        assert_eq!(app.open_tileable_count(), 1, "only the Assistant counts");
+        assert!(
+            !app.dock_enabled,
+            "calculator tab stays classic (no tiling)"
+        );
+        assert!(app.dock_tree.is_none(), "no grid tree for a calculator tab");
+    }
+
+    /// A minimal loaded mesh (3 nodes — enough for an AABB) for the 3-D-tab
+    /// test below. Mirrors the lib.rs test helper without reaching its private
+    /// module.
+    fn tiny_loaded_mesh() -> crate::types::LoadedMesh {
+        let mut mesh = valenx_mesh::Mesh::new("test-3d-tab");
+        mesh.nodes.push(nalgebra::Vector3::new(0.0, 0.0, 0.0));
+        mesh.nodes.push(nalgebra::Vector3::new(1.0, 1.0, 1.0));
+        mesh.nodes.push(nalgebra::Vector3::new(1.0, 0.0, 0.0));
+        let quality = valenx_mesh::quality_report(&mesh);
+        let aspect_hist =
+            valenx_mesh::aspect_ratio_histogram(&mesh, valenx_mesh::DEFAULT_AR_BUCKETS);
+        let skew_hist = valenx_mesh::skewness_histogram(&mesh, valenx_mesh::DEFAULT_SKEW_BUCKETS);
+        crate::types::LoadedMesh {
+            path: std::path::PathBuf::from("<test>/3d"),
+            mesh,
+            quality,
+            aspect_hist,
+            skew_hist,
+        }
+    }
+
+    /// FIX B counterpart: a tab **with** a 3-D model loaded DOES auto-tile into
+    /// the `[viewport | Assistant]` balanced grid (the viewport tile shows the
+    /// real model).
+    #[test]
+    fn opening_a_tab_with_a_model_tiles_viewport_and_assistant() {
+        let mut app = ValenxApp::default();
+        app.show_assistant_panel = true;
+        app.auto_tile_on_open = true;
+        // A loaded mesh = real 3-D central content.
+        app.mesh = Some(tiny_loaded_mesh());
+        app.maybe_auto_tile_on_open();
+
+        let ids = app.open_tileable_panels();
+        assert!(ids.contains(&"central_view".to_string()), "viewport tiled");
+        assert!(
+            ids.contains(&"valenx_assistant_panel".to_string()),
+            "assistant tiled"
+        );
+        assert_eq!(app.open_tileable_count(), 2);
+        assert!(app.dock_enabled, "a 3-D tab auto-tiles");
+        assert!(app.dock_tree.is_some());
+    }
 }
 
 /// Headless render tests for the tab *strip itself* (its menus, the inline

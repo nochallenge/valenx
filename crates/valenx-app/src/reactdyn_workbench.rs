@@ -561,6 +561,70 @@ fn start_run(s: &mut ReactdynWorkbenchState) {
     });
 }
 
+/// Run the molecular-dynamics trajectory **synchronously** (no background
+/// thread) and store it in `last` / `error`. Unlike [`start_run`] this blocks
+/// until the run finishes — used by the product self-test ([`crate::self_test`]),
+/// which needs a deterministic, already-complete trajectory to check NVE energy
+/// conservation. Drives the SAME `AimdEngine`/`QmMmEngine`/`ReactiveEngine`
+/// `run` the background path calls.
+pub(crate) fn run(app: &mut ValenxApp) {
+    let s = &mut app.reactdyn;
+    s.error = None;
+    let outcome = match s.backend {
+        Backend::Aimd => build_aimd_inputs(s).and_then(|(sys, c)| {
+            AimdEngine
+                .run(&sys, &c, &mut |_| {})
+                .map_err(|e| e.to_string())
+        }),
+        Backend::QmMm => build_qmmm_inputs(s).and_then(|(sys, c)| {
+            QmMmEngine
+                .run(&sys, &c, &mut |_| {})
+                .map_err(|e| e.to_string())
+        }),
+        Backend::Reactive => build_reactive_inputs(s).and_then(|(sys, c)| {
+            ReactiveEngine
+                .run(&sys, &c, &mut |_| {})
+                .map_err(|e| e.to_string())
+        }),
+    };
+    match outcome {
+        Ok(traj) => {
+            s.status = format!("done — {} frames", traj.frames.len());
+            s.last = Some(traj);
+            s.frame_idx = 0;
+            s.playing = false;
+            s.last_pushed = None;
+        }
+        Err(e) => {
+            s.status = "failed".into();
+            s.error = Some(e);
+        }
+    }
+}
+
+impl ReactdynWorkbenchState {
+    /// The relative total-energy drift `max|E(t) − E₀| / |E₀|` of the last
+    /// trajectory — the NVE energy-conservation diagnostic (small for a correct
+    /// velocity-Verlet integrator). `None` before the first run or for an empty
+    /// trajectory. Read-only; used by the product self-test.
+    pub(crate) fn last_energy_rel_drift(&self) -> Option<f64> {
+        let frames = &self.last.as_ref()?.frames;
+        let e0 = frames.first()?.total_hartree();
+        let denom = e0.abs().max(1e-12);
+        let max_drift = frames
+            .iter()
+            .map(|f| (f.total_hartree() - e0).abs())
+            .fold(0.0_f64, f64::max);
+        Some(max_drift / denom)
+    }
+
+    /// The current status / error line (used by the product self-test to report
+    /// why a synchronous run produced no trajectory). Read-only.
+    pub(crate) fn status_line(&self) -> String {
+        self.status.clone()
+    }
+}
+
 /// Move a finished background run's result into `last` / `error`.
 fn poll_run(s: &mut ReactdynWorkbenchState) {
     let done = if let Some(run) = &s.run {

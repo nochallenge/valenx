@@ -4170,6 +4170,17 @@ fn draw_external_editors(app: &mut ValenxApp, ui: &mut egui::Ui) {
     });
 }
 
+/// The axis-aligned bounding-box **extents** `(dx, dy, dz)` of the canonical
+/// valenx LV-1 rocket mesh — the SAME `canonical_aabb` the Mesh Toolbox
+/// Inspector reports for a loaded canonical mesh. Used by the product self-test
+/// ([`crate::self_test`]) to assert the mesh-inspection path against a known
+/// mesh's measured extents. `None` for an (impossible) empty LV-1 mesh.
+pub(crate) fn lv1_canonical_aabb_extents() -> Option<(f64, f64, f64)> {
+    let mesh = crate::rocket_mesh::lv1_rocket_mesh();
+    let (min, max) = canonical_aabb(&mesh)?;
+    Some((max.x - min.x, max.y - min.y, max.z - min.z))
+}
+
 /// Canonical-mesh AABB. Returns `None` for an empty mesh.
 fn canonical_aabb(mesh: &valenx_mesh::Mesh) -> Option<(Vector3<f64>, Vector3<f64>)> {
     let mut iter = mesh.nodes.iter();

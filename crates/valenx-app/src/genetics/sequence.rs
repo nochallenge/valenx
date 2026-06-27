@@ -151,6 +151,23 @@ impl SequencePanel {
         self.history.can_redo()
     }
 
+    /// Set the working sequence + kind, run the **Analyze** sub-tool, and return
+    /// the rendered statistics readout (length, GC content, composition, …) — the
+    /// SAME `run_analyze` the panel's Analyze button drives. Used by the product
+    /// self-test ([`crate::self_test`]) so it can feed a known sequence and read
+    /// the exact `valenx_bioseq` composition stats back.
+    pub(crate) fn agent_analyze(&mut self, seq: &str, kind: SeqKind) -> String {
+        self.seq_text = seq.to_string();
+        self.kind = kind;
+        self.tool = Tool::Analyze;
+        run_analyze(self);
+        if !self.result.is_empty() {
+            self.result.clone()
+        } else {
+            self.error.clone().unwrap_or_default()
+        }
+    }
+
     /// Build a [`valenx_bioseq::record::SeqRecord`] from the current
     /// sequence text for the 2D DNA viewport. Returns `None` when the
     /// text is empty or fails to parse — the viewport then falls back to

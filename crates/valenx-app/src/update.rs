@@ -181,6 +181,18 @@ impl eframe::App for ValenxApp {
             self.theme_applied = true;
         }
 
+        // Startup auto-tile (one-shot). The boot path opens several panels by
+        // default (Mesh / Rocket / Engine / Assistant) but never goes through
+        // `project_tabs::sync_active` (no active tab at launch), so the
+        // per-tab-open auto-tile can't fire here. Do it once on the first frame
+        // so the user is greeted by a balanced grid instead of a squished
+        // Assistant. Honours the same `auto_tile_on_open` toggle / 2-panel
+        // threshold via `maybe_auto_tile_on_open`.
+        if !self.startup_auto_tiled {
+            self.startup_auto_tiled = true;
+            self.maybe_auto_tile_on_open();
+        }
+
         // Agent-bridge heartbeat (UNCONDITIONAL, every frame). egui is
         // reactive, so when valenx is idle/unfocused — the normal case while
         // an external agent drives it from the background — `update()` would
@@ -3442,21 +3454,27 @@ impl eframe::App for ValenxApp {
                 if !collapsed && self.bottom_tab == BottomTab::Log {
                     log_panel::header(ui, &mut self.log);
                 }
-                // Collapse / expand toggle on the right edge. The
-                // button's TEXT is the accessibility / UI-Automation
-                // `Name`, so it is a uniquely- and stably-named,
-                // AI-invokable widget: "Collapse panel" when expanded,
-                // "Expand panel" when collapsed. egui derives a
-                // button's accesskit name from its label text, so the
-                // plain-ASCII phrase is what an external driver finds
-                // and Invokes by Name.
+                // Collapse / expand toggle on the right edge — a painter-drawn
+                // ARROW (▾ open / ▴ collapsed), matching the workbench header
+                // chrome (no font glyph → never a "tofu" box). The arrow carries
+                // an explicit accessible `Name` ("Collapse log" / "Expand log")
+                // via `WidgetInfo::labeled`, so an external AI / screen-reader
+                // driver still finds and Invokes it by a stable label even
+                // though it has no text.
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let name = if collapsed {
-                        "Expand panel"
+                        "Expand log"
                     } else {
-                        "Collapse panel"
+                        "Collapse log"
                     };
-                    if ui.button(name).clicked() {
+                    if crate::workbench_chrome::collapse_arrow_button(
+                        ui,
+                        crate::workbench_chrome::PanelEdge::Bottom,
+                        !collapsed,
+                        name,
+                    )
+                    .clicked()
+                    {
                         self.toggle_bottom_panel();
                     }
                 });
@@ -3508,16 +3526,19 @@ impl eframe::App for ValenxApp {
             };
             browser.show(ctx, |ui| {
                 if browser_collapsed {
-                    // Collapsed: only the named "Expand panel" button.
-                    // Its label TEXT is the accessibility / UI-Automation
-                    // `Name` (egui derives a button's accesskit name from
-                    // its label, exactly like the bottom dock's toggle),
-                    // so the full plain-ASCII phrase is what an external
-                    // driver finds and Invokes by Name. egui clips the
-                    // rendered glyphs to the narrow 30px strip while the
-                    // accesskit Name stays the complete "Expand panel"
-                    // string.
-                    if ui.button("Expand panel").clicked() {
+                    // Collapsed: only a painter-drawn ARROW (▸) toggle that fits
+                    // the narrow 30px strip. It carries an explicit accessible
+                    // `Name` ("Expand Browser") via `WidgetInfo::labeled`, so an
+                    // external AI / screen-reader driver still finds and Invokes
+                    // it by a stable label despite having no text.
+                    if crate::workbench_chrome::collapse_arrow_button(
+                        ui,
+                        crate::workbench_chrome::PanelEdge::Left,
+                        false,
+                        "Expand Browser",
+                    )
+                    .clicked()
+                    {
                         self.toggle_browser_panel();
                     }
                     return;
@@ -3528,7 +3549,17 @@ impl eframe::App for ValenxApp {
                 ui.horizontal(|ui| {
                     ui.heading("Browser");
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("Collapse panel").clicked() {
+                        // Painter-drawn ARROW (◂) collapse toggle, with an
+                        // explicit accessible `Name` ("Collapse Browser") so it
+                        // stays AI-drivable without text.
+                        if crate::workbench_chrome::collapse_arrow_button(
+                            ui,
+                            crate::workbench_chrome::PanelEdge::Left,
+                            true,
+                            "Collapse Browser",
+                        )
+                        .clicked()
+                        {
                             self.toggle_browser_panel();
                         }
                     });
