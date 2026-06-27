@@ -90,7 +90,7 @@ jobs:
           Copy-Item ".github/release-readme.md" "$stage/README.txt"
           Compress-Archive -Path "$stage/*" -DestinationPath "dist/$name.zip" -Force
           Get-ChildItem dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows-zip
           path: dist/*.zip
@@ -142,7 +142,7 @@ jobs:
           cp .github/release-readme.md "${stage}/README.txt"
           tar -czf "dist/${name}.tar.gz" -C dist "${name}"
           ls -lah dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux-tar
           path: dist/*.tar.gz
@@ -187,7 +187,7 @@ jobs:
           cp .github/release-readme.md "${stage}/README.txt"
           tar -czf "dist/${name}.tar.gz" -C dist "${name}"
           ls -lah dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos-tar
           path: dist/*.tar.gz
