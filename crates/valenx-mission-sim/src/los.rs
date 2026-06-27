@@ -297,6 +297,11 @@ pub fn visible_from(
 
 #[cfg(test)]
 mod tests {
+    // These tests index grids as the readable `row * width + col`; with a literal
+    // row of 0 or 1 that form trips identity_op (`1 * w`, `+ 0`) and erasing_op
+    // (`0 * w`). The explicit arithmetic documents the (row, col) cell being poked,
+    // so keep it and silence the style lints for the test module only.
+    #![allow(clippy::identity_op, clippy::erasing_op)]
     use super::*;
 
     #[test]
