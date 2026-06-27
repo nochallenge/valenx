@@ -284,7 +284,6 @@ mod tests {
     /// by exactly the radial factor `1 + k1·r²`, then maps through `K`.
     #[test]
     fn forward_radial_matches_hand_value() {
-        let k = k();
         let d = Distortion::new(0.1, 0.0, 0.0, 0.0, 0.0);
         let (x, y) = (0.2, 0.1); // normalized point
         let r2 = x * x + y * y; // 0.05
