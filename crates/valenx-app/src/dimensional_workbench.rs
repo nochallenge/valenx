@@ -240,8 +240,13 @@ pub fn draw_dimensional_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
 /// helper taking the field by reference instead.
 fn drag(ui: &mut egui::Ui, label: &str, value: &mut f64, speed: f64) {
     ui.horizontal(|ui| {
-        ui.label(label);
-        ui.add(egui::DragValue::new(value).speed(speed));
+        // Associate the `DragValue` with its caption via `labelled_by`, so the
+        // spin button carries the caption as its accessibility / UI-Automation
+        // Name (egui clears a DragValue's own name, so without this it is
+        // anonymous to a screen reader / AI driver).
+        let cap = ui.label(label);
+        ui.add(egui::DragValue::new(value).speed(speed))
+            .labelled_by(cap.id);
     });
 }
 
@@ -621,5 +626,42 @@ mod headless_ui_tests {
         app.show_dimensional_workbench = true;
         run_dimensional(&mut app.dimensional);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::{Node, NodeId, Role};
+
+        // Render with accesskit enabled and read the emitted a11y tree — the
+        // same tree a screen reader / AI UI-Automation driver consumes.
+        let mut app = ValenxApp::default();
+        app.show_dimensional_workbench = true;
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_dimensional_workbench(&mut app, ctx);
+        });
+        let nodes: Vec<(NodeId, Node)> = out
+            .platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes;
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // The active group's variable rows each draw a numeric spin button.
+        assert!(
+            spin_buttons.len() >= 2,
+            "expected the dimensional numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        // Every DragValue must be associated with a caption (AI-drivable name).
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every dimensional DragValue must be labelled_by its caption"
+        );
     }
 }

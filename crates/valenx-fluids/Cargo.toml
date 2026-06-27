@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-fluids"
+description = "In-house particle-based fluid simulation (SPH family). A particle system with a uniform-grid spatial hash for neighbour search; weakly-compressible SPH after Müller et al. 2003 (poly6 density kernel, spiky pressure-gradient kernel, viscosity-Laplacian kernel, density estimate, a Tait/ideal-gas equation of state, pressure + viscosity + gravity forces, semi-implicit Euler integration, and a reflect/clamp box boundary); plus PCISPH (predictive-corrective incompressible SPH, Solenthaler & Pajarola 2009) for stiffer near-incompressibility at a larger stable time-step. Clean-room reimplementation from the published methods (algorithmically inspired by doyubkim/fluid-engine-dev \"Jet\", MIT). Fails loud on invalid configuration (h ≤ 0, non-positive mass/rest-density, NaN positions) and guards every divide; pinned in tests to the achievable analytic checks (free-fall integration, poly6 normalisation and compact support, momentum conservation, Newton's-third-law symmetry, a hydrostatic density gradient). Pure Rust, no `unsafe`, no `rand`. GRAPHICS / REAL-TIME-GRADE interactive fluid — NOT validated against analytic CFD or experiment."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+readme.workspace       = true
+publish.workspace      = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

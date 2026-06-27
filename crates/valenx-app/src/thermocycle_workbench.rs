@@ -145,72 +145,104 @@ pub fn draw_thermocycle_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     });
 
                     ui.add_space(4.0);
+                    // Associate each numeric `DragValue` with its caption via
+                    // `labelled_by`, so the spin button carries the caption as
+                    // its accessibility / UI-Automation Name (egui clears a
+                    // DragValue's own Name, leaving it anonymous to a screen
+                    // reader / AI driver otherwise); the hover text mirrors the
+                    // caption for a mouse user. Applied across every cycle arm.
                     match s.cycle {
                         CycleType::Carnot => {
                             ui.label(egui::RichText::new("Reservoirs (K)").strong());
                             ui.horizontal(|ui| {
-                                ui.label("cold Tc (K)");
-                                ui.add(egui::DragValue::new(&mut s.t_cold_k).speed(1.0));
+                                let lbl = ui.label("cold Tc (K)");
+                                ui.add(egui::DragValue::new(&mut s.t_cold_k).speed(1.0))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("cold Tc (K)");
                             });
                             ui.horizontal(|ui| {
-                                ui.label("hot Th (K)");
-                                ui.add(egui::DragValue::new(&mut s.t_hot_k).speed(1.0));
+                                let lbl = ui.label("hot Th (K)");
+                                ui.add(egui::DragValue::new(&mut s.t_hot_k).speed(1.0))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("hot Th (K)");
                             });
                         }
                         CycleType::Otto => {
                             ui.label(egui::RichText::new("Air-standard Otto").strong());
                             ui.horizontal(|ui| {
-                                ui.label("compression ratio r");
-                                ui.add(egui::DragValue::new(&mut s.compression_ratio).speed(0.1));
+                                let lbl = ui.label("compression ratio r");
+                                ui.add(egui::DragValue::new(&mut s.compression_ratio).speed(0.1))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("compression ratio r");
                             });
                             ui.horizontal(|ui| {
-                                ui.label("gamma γ");
-                                ui.add(egui::DragValue::new(&mut s.gamma).speed(0.01));
+                                let lbl = ui.label("gamma γ");
+                                ui.add(egui::DragValue::new(&mut s.gamma).speed(0.01))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("gamma γ");
                             });
                         }
                         CycleType::Diesel => {
                             ui.label(egui::RichText::new("Air-standard Diesel").strong());
                             ui.horizontal(|ui| {
-                                ui.label("compression ratio r");
-                                ui.add(egui::DragValue::new(&mut s.compression_ratio).speed(0.1));
+                                let lbl = ui.label("compression ratio r");
+                                ui.add(egui::DragValue::new(&mut s.compression_ratio).speed(0.1))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("compression ratio r");
                             });
                             ui.horizontal(|ui| {
-                                ui.label("cutoff ratio rc");
-                                ui.add(egui::DragValue::new(&mut s.cutoff_ratio).speed(0.05));
+                                let lbl = ui.label("cutoff ratio rc");
+                                ui.add(egui::DragValue::new(&mut s.cutoff_ratio).speed(0.05))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("cutoff ratio rc");
                             });
                             ui.horizontal(|ui| {
-                                ui.label("gamma γ");
-                                ui.add(egui::DragValue::new(&mut s.gamma).speed(0.01));
+                                let lbl = ui.label("gamma γ");
+                                ui.add(egui::DragValue::new(&mut s.gamma).speed(0.01))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("gamma γ");
                             });
                         }
                         CycleType::Brayton => {
                             ui.label(egui::RichText::new("Air-standard Brayton").strong());
                             ui.horizontal(|ui| {
-                                ui.label("pressure ratio rp");
-                                ui.add(egui::DragValue::new(&mut s.pressure_ratio).speed(0.1));
+                                let lbl = ui.label("pressure ratio rp");
+                                ui.add(egui::DragValue::new(&mut s.pressure_ratio).speed(0.1))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("pressure ratio rp");
                             });
                             ui.horizontal(|ui| {
-                                ui.label("gamma γ");
-                                ui.add(egui::DragValue::new(&mut s.gamma).speed(0.01));
+                                let lbl = ui.label("gamma γ");
+                                ui.add(egui::DragValue::new(&mut s.gamma).speed(0.01))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("gamma γ");
                             });
                         }
                         CycleType::Rankine => {
                             ui.label(egui::RichText::new("Rankine enthalpies (kJ/kg)").strong());
                             ui.horizontal(|ui| {
-                                ui.label("h1 cond. exit");
-                                ui.add(egui::DragValue::new(&mut s.h1).speed(0.5));
+                                let lbl = ui.label("h1 cond. exit");
+                                ui.add(egui::DragValue::new(&mut s.h1).speed(0.5))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("h1 cond. exit");
                             });
                             ui.horizontal(|ui| {
-                                ui.label("h2 pump exit");
-                                ui.add(egui::DragValue::new(&mut s.h2).speed(0.5));
+                                let lbl = ui.label("h2 pump exit");
+                                ui.add(egui::DragValue::new(&mut s.h2).speed(0.5))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("h2 pump exit");
                             });
                             ui.horizontal(|ui| {
-                                ui.label("h3 turbine inlet");
-                                ui.add(egui::DragValue::new(&mut s.h3).speed(0.5));
+                                let lbl = ui.label("h3 turbine inlet");
+                                ui.add(egui::DragValue::new(&mut s.h3).speed(0.5))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("h3 turbine inlet");
                             });
                             ui.horizontal(|ui| {
-                                ui.label("h4 turbine exit");
-                                ui.add(egui::DragValue::new(&mut s.h4).speed(0.5));
+                                let lbl = ui.label("h4 turbine exit");
+                                ui.add(egui::DragValue::new(&mut s.h4).speed(0.5))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("h4 turbine exit");
                             });
                         }
                     }
@@ -617,12 +649,28 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_thermocycle_workbench(app, ctx);
         });
+    }
+
+    /// As `draw_workbench`, but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_thermocycle_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -638,5 +686,54 @@ mod headless_ui_tests {
         app.show_thermocycle_workbench = true;
         run_thermocycle(&mut app.thermocycle);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // The default cycle is Carnot, which shows two DragValues; each is a
+        // SpinButton that must be `labelled_by` its caption (egui clears a
+        // DragValue's own Name), so an AI / screen reader can find the control
+        // by the caption text. Only the Carnot fields are counted — the Otto /
+        // Diesel / Brayton / Rankine fields are hidden behind a non-default
+        // selection.
+        let mut app = ValenxApp::default();
+        app.show_thermocycle_workbench = true;
+        assert_eq!(
+            app.thermocycle.cycle,
+            CycleType::Carnot,
+            "default cycle is Carnot"
+        );
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // Carnot shows cold Tc and hot Th.
+        assert!(
+            spin_buttons.len() >= 2,
+            "expected the Carnot numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every Carnot DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        // The two Carnot field captions plus the section header all render in
+        // the default state as named nodes.
+        for caption in ["cold Tc (K)", "hot Th (K)", "Reservoirs (K)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        // The Analyze button stays a named, invokable node.
+        assert!(
+            nodes.iter().any(|(_, n)| n.role() == Role::Button
+                && n.name().is_some_and(|s| s.contains("Analyze"))),
+            "the Analyze button is a named, invokable node"
+        );
     }
 }

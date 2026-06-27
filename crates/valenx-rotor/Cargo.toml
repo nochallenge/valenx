@@ -1,0 +1,25 @@
+[package]
+name        = "valenx-rotor"
+description = "Propeller / rotor performance by blade-element-momentum theory (BEMT). Discretises a blade into radial elements (chord, twist, airfoil polar at each station), and for each element couples 2-D blade-element aerodynamics with annular momentum theory: the inflow angle phi is the root of the consistency residual tan(phi) = V(1-a) / (Omega*r*(1+a')), solved with a guaranteed-convergence bracketing root-finder (bisection). Includes Prandtl tip + hub loss, a Glauert/Buhl high-induction correction, an analytic thin-airfoil polar (Cl = 2*pi*sin(alpha) clamped with linear post-stall; Cd = cd0 + k*Cl^2) and caller-supplied tabulated polars. Integrates element loads (trapezoid) to thrust T, torque Q, power P = Q*Omega, propeller efficiency eta = T*V/P and hover figure of merit FM = (T^1.5/sqrt(2*rho*A))/P. Research/educational grade: 1-D strip theory with engineering corrections, NOT a substitute for a vortex / CFD analysis; the analytic polar is a thin-airfoil approximation and real designs need measured airfoil data. Every entry validates finite, positive inputs and guards every divide, the acos domain and non-convergence -> Result, never a silent NaN."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# serde derives the value types (rotor geometry, per-element + integrated
+# results) for JSON round-tripping; thiserror builds the validated error
+# enum. Pure std numerics otherwise — no platform or heavy-math deps.
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# JSON round-trip checks for the serde-derived value types.
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

@@ -20,6 +20,22 @@ tracing     = { workspace = true }
 sha2        = { workspace = true }
 uuid        = { workspace = true }
 semver      = { workspace = true }
+# Zero-copy memory-mapped reads for very large files (multi-GB CAD
+# tessellations, FASTQ/BAM sequencing runs, telemetry captures) — see
+# `mmap.rs`. Pure-Rust, well-maintained; pinned to the 0.9 line that is
+# already in the lock graph (transitively pulled by other deps).
+memmap2     = "0.9"
+# Embedded project/simulation database (project history, material
+# properties, run metadata, file-validation records) in a single local
+# `.db` file — see `db.rs`. The `bundled` feature compiles SQLite from
+# source via `cc` (no system `libsqlite3` required), the same -sys/cc
+# build path already exercised by other crates in this workspace.
+#
+# Pinned to 0.37 (libsqlite3-sys 0.35): the newer 0.38/0.40 line's
+# build script uses the `cfg_select!` macro, which is not stabilised on
+# this workspace's MSRV (1.88, see workspace `rust-version`) and fails
+# to compile. 0.37 builds cleanly under 1.88.
+rusqlite    = { version = "0.37", features = ["bundled"] }
 
 valenx-fields = { path = "../valenx-fields" }
 

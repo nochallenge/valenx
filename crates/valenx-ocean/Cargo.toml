@@ -1,0 +1,21 @@
+[package]
+name        = "valenx-ocean"
+description = "In-house ocean wave field and rigid-body buoyancy. A sum-of-N directional Gerstner (trochoidal) wave field with deep-water dispersion `omega = sqrt(g*k)` (`k = 2*pi/wavelength`), giving surface displacement, water height, and the surface normal at a horizontal `(x, z)` point and time `t`; plus quasi-static Archimedes buoyancy on a floating rigid body — submerged-volume integration over sample points (or an analytic waterplane/volume hull), buoyant force `rho_water * g * V_submerged` at the centre of buoyancy, a linear+quadratic drag, and a heave/pitch/roll response integrator. Clean-room reimplementation from the published math (Gerstner/trochoidal waves; algorithmically inspired by — not ported from — the deprecated, Unreal-tied UE4 `OceanProject`). Fails loud on invalid configuration (wavelength/amplitude/density <= 0, NaN) and guards every divide (`k > 0`, `omega > 0`); pinned in tests to analytic ground truth (single-wave crest-to-trough = `2*amplitude`, deep-water phase speed `c = sqrt(g/k)`, spatial/temporal periodicity, fully-submerged force `rho*g*V`, floating equilibrium displacing its own weight, the heave natural frequency, and zero net force at equilibrium). Pure Rust, no `unsafe`, no `rand`: wave phases come from an in-crate deterministic seed. GRAPHICS / ENGINEERING-GRADE Gerstner-wave + quasi-static buoyancy — NOT a seakeeping CFD/RANS solver; no diffraction/radiation/added-mass beyond a single coefficient."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+readme.workspace       = true
+publish.workspace      = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

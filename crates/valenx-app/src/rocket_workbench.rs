@@ -30,8 +30,9 @@ use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
 use eframe::egui;
-use egui_plot::{Line, Plot, PlotPoints, Points};
+use egui_plot::{Line, PlotPoints, Points};
 
+use crate::plot_ui::{managed_plot, managed_plot_mem};
 use crate::types::LoadedMesh;
 use crate::ValenxApp;
 use valenx_astro::{
@@ -81,6 +82,26 @@ impl OptObjective {
             OptObjective::MaxApoapsis => "max apoapsis",
             OptObjective::MinPeakG => "min peak-g",
         }
+    }
+}
+
+/// Parse an optimizer-objective name (for the agent `SetControl` bridge) into
+/// an [`OptObjective`]. Case-insensitive; accepts the radio labels (with or
+/// without the hyphen / spaces). Fail-loud on an unrecognised name so a typo is
+/// a `warn` note, not a silent no-op.
+fn parse_opt_objective(s: &str) -> Result<OptObjective, String> {
+    match s
+        .trim()
+        .to_ascii_lowercase()
+        .replace(['-', '_'], " ")
+        .as_str()
+    {
+        "max payload" | "maxpayload" | "payload" => Ok(OptObjective::MaxPayload),
+        "max apoapsis" | "maxapoapsis" | "apoapsis" => Ok(OptObjective::MaxApoapsis),
+        "min peak g" | "minpeakg" | "min peakg" | "peak g" | "min g" => Ok(OptObjective::MinPeakG),
+        other => Err(format!(
+            "unknown objective '{other}' (expected 'max payload', 'max apoapsis', or 'min peak-g')"
+        )),
     }
 }
 
@@ -221,6 +242,11 @@ pub struct RocketWorkbenchState {
     scrub_t: f64,
     /// Which trajectory channel the ascent plot draws against time.
     plot_y: PlotQuantity,
+    /// One-shot request to reset the pinned ascent plot back to auto-bounds
+    /// (set by the "Reset view" button; consumed on the next plot draw). The
+    /// plot is also double-click-resettable, but this gives a discoverable,
+    /// AI-drivable control that restores the view after panning / zooming.
+    plot_reset: bool,
 }
 
 impl Default for RocketWorkbenchState {
@@ -240,7 +266,92 @@ impl Default for RocketWorkbenchState {
             auto: None,
             scrub_t: 0.0,
             plot_y: PlotQuantity::default(),
+            plot_reset: false,
         }
+    }
+}
+
+impl RocketWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`
+    /// so an agent can discover the name space.
+    ///
+    /// Scope: the genuinely-settable **numeric** interstage knobs + the sizing
+    /// target + the optimizer **objective** enum. The captions match exactly the
+    /// labels the workbench form draws (so an agent sets a parameter by the same
+    /// name a user reads). The `strut area A` / `material yield σy` captions are
+    /// addressed in the form's **display units** (cm² and MPa respectively), the
+    /// same numbers the user edits.
+    ///
+    /// Deliberately **not** exposed (3-D / output-only / action controls): the
+    /// `▶ playback · t (s)` scrubber and the `plot:` channel radio (both
+    /// inspect-only view state), and the buttons (`Auto-design`, `Fly the LV-1`,
+    /// `Show the 3-D rocket model`, `Run AI optimization`) which are *actions*,
+    /// not settable values. The fixed medium-lift trajectory is not
+    /// parameterised here, so no trajectory knobs are listed.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "supported mass",
+            "strut count N",
+            "strut area A",
+            "material yield σy",
+            "target SF",
+            "optimizer objective",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. The caption strings match what the workbench form
+    /// draws (and what each control is `labelled_by`), so an agent can set a
+    /// parameter by the same name a user reads.
+    ///
+    /// Fail-loud: an unknown caption or a value of the wrong type returns
+    /// `Err(String)` (the bridge turns it into a `warn` feed note) — never a
+    /// panic, and no field is written on error. Numeric fields read
+    /// `AgentValue::as_f64` / `AgentValue::as_i64`; the objective enum reads
+    /// `AgentValue::as_str` and matches the radio labels. `strut area A` is
+    /// given in **cm²** and `material yield σy` in **MPa** — the same display
+    /// units the form edits — and converted to the stored SI value (m² / Pa).
+    /// Numeric values are clamped to the same ranges the DragValues/Slider
+    /// enforce so an out-of-range set lands on a valid, reactive design.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        match name {
+            // -- Interstage structure (numeric) --
+            "supported mass" => {
+                self.design.supported_mass_kg = value.as_f64()?.clamp(100.0, 200_000.0);
+            }
+            "strut count N" => {
+                let n = value.as_i64()?;
+                if n < 1 {
+                    return Err(format!("strut count N must be >= 1, got {n}"));
+                }
+                self.design.strut_count = (n as usize).min(64);
+            }
+            // The form edits strut area in cm² and stores m² (×1e-4).
+            "strut area A" => {
+                let cm2 = value.as_f64()?.clamp(0.01, 2000.0);
+                self.design.strut_area_m2 = cm2 * 1.0e-4;
+            }
+            // The form edits yield in MPa and stores Pa (×1e6).
+            "material yield σy" => {
+                let mpa = value.as_f64()?.clamp(1.0, 2000.0);
+                self.design.material_yield_pa = mpa * 1.0e6;
+            }
+            // -- Sizing aid target --
+            "target SF" => {
+                self.target_sf = value.as_f64()?.clamp(1.0, 3.0);
+            }
+            // -- Optimizer objective enum --
+            "optimizer objective" => {
+                self.opt_objective = parse_opt_objective(value.as_str()?)?;
+            }
+            other => return Err(format!("unknown Rocket control: {other:?}")),
+        }
+        Ok(())
     }
 }
 
@@ -765,6 +876,143 @@ pub(crate) fn rocket_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
     // Poll any background optimization before drawing (non-blocking);
     // `opt_running` is a live progress snapshot while one is in flight.
     let opt_running = poll_opt_job(s, ui.ctx());
+
+    // ── Valenx LV-1 — PINNED ascent inspector ─────────────────
+    // Rendered *above* the scrolling parameter form (and therefore outside
+    // its `ScrollArea`) so the live trajectory plot, its channel toggles and
+    // the playback scrubber stay visible while the form below is scrolled —
+    // and so the plot's scroll-wheel zoom is not swallowed by a surrounding
+    // scroll container. The form (auto-design, optimizer, structure knobs)
+    // follows in the `ScrollArea`.
+    ui.label(egui::RichText::new("Valenx LV-1 — ascent to orbit").strong());
+    ui.label(
+        egui::RichText::new("a from-scratch two-stage launcher, flown live by valenx-astro")
+            .weak()
+            .small(),
+    );
+    ui.horizontal_wrapped(|ui| {
+        let fly_clicked = ui
+            .button(egui::RichText::new("▶ Fly the Valenx LV-1").strong())
+            .clicked();
+        if s.lv1.is_none() || fly_clicked {
+            s.lv1 = Some(fly_lv1());
+        }
+        // 3-D rocket model → central viewport (auto-loads once on first open;
+        // the button reloads / re-frames it).
+        let show_3d = ui
+            .button(egui::RichText::new("Show the 3-D rocket model").strong())
+            .on_hover_text(
+                "Loads a 3-D model of the LV-1 into the centre viewport — orbit / zoom it.",
+            )
+            .clicked();
+        if show_3d || !s.loaded_3d_once {
+            s.loaded_3d_once = true;
+            s.show_3d_request = true;
+        }
+    });
+    if s.lv1.is_some() {
+        // Summary + flight window (immutable view, released before the
+        // scrubber borrows `scrub_t` mutably below).
+        let (t_max, has_plot) = {
+            let f = s.lv1.as_ref().unwrap();
+            ui.label(egui::RichText::new(&f.summary).monospace().small());
+            (f.t_max.max(0.0), !f.alt_pts.is_empty())
+        };
+        s.scrub_t = s.scrub_t.clamp(0.0, t_max);
+
+        if has_plot {
+            // Pick which telemetry channel the plot draws; the numeric
+            // readout below always shows every quantity.
+            ui.horizontal_wrapped(|ui| {
+                ui.label(egui::RichText::new("plot:").small());
+                ui.radio_value(&mut s.plot_y, PlotQuantity::Altitude, "alt");
+                ui.radio_value(&mut s.plot_y, PlotQuantity::Speed, "speed");
+                ui.radio_value(&mut s.plot_y, PlotQuantity::Mach, "Mach");
+                ui.radio_value(&mut s.plot_y, PlotQuantity::DynPressure, "q");
+                ui.radio_value(&mut s.plot_y, PlotQuantity::AccelG, "g");
+            });
+            let q = s.plot_y;
+            ui.label(
+                egui::RichText::new(format!(
+                    "{} vs time (s) · dots = staging + MECO · drag to scrub",
+                    q.axis_label()
+                ))
+                .weak()
+                .small(),
+            );
+
+            // ▶ Playback scrubber — drag through the flight and read the full
+            // vehicle state at that instant. Its `.text(..)` makes egui
+            // auto-name the value sub-node (Role::SpinButton), so it is
+            // already AI-drivable / screen-reader-named.
+            if t_max > 0.0 {
+                ui.add(egui::Slider::new(&mut s.scrub_t, 0.0..=t_max).text("▶ playback · t (s)"));
+            }
+
+            let f = s.lv1.as_ref().unwrap();
+            let scrub = sample_at(&f.samples, s.scrub_t);
+            if let Some(p) = scrub {
+                ui.label(
+                    egui::RichText::new(format!(
+                        "t {:>6.1} s   alt {:>7.2} km   downrange {:>7.2} km\n\
+                                 v_rel {:>6.0} m/s   v_inert {:>6.0} m/s   Mach {:>5.2}\n\
+                                 q {:>6.1} kPa   accel {:>5.2} g   mass {:>7.2} t",
+                        p.time,
+                        p.altitude_m / 1000.0,
+                        p.downrange_m / 1000.0,
+                        p.speed_relative,
+                        p.speed_inertial,
+                        p.mach,
+                        p.dynamic_pressure / 1000.0,
+                        p.acceleration_g,
+                        p.mass / 1000.0,
+                    ))
+                    .monospace()
+                    .small(),
+                );
+            }
+
+            // Line + event + now markers all follow the selected channel,
+            // derived from the one retained sample series.
+            let line_pts: Vec<[f64; 2]> = if q == PlotQuantity::Altitude {
+                f.alt_pts.clone()
+            } else {
+                f.samples
+                    .iter()
+                    .map(|smp| [smp.time, q.value(smp)])
+                    .collect()
+            };
+            let event_pts: Vec<[f64; 2]> = f
+                .event_pts
+                .iter()
+                .filter_map(|ep| sample_at(&f.samples, ep[0]).map(|smp| [ep[0], q.value(&smp)]))
+                .collect();
+            let now_pt = scrub.map(|p| [p.time, q.value(&p)]);
+            let axis_name = q.axis_label();
+            // Pinned, maneuverable, resizable plot (drag-pan / scroll-zoom /
+            // box-zoom / double-click- or button-reset).
+            managed_plot(ui, "lv1_ascent_plot", 240.0, &mut s.plot_reset, |pui| {
+                pui.line(Line::new(PlotPoints::from(line_pts)).name(axis_name));
+                if !event_pts.is_empty() {
+                    pui.points(
+                        Points::new(PlotPoints::from(event_pts))
+                            .radius(5.0)
+                            .name("staging / MECO"),
+                    );
+                }
+                if let Some(pt) = now_pt {
+                    pui.points(
+                        Points::new(PlotPoints::from(vec![pt]))
+                            .radius(7.0)
+                            .color(egui::Color32::from_rgb(255, 196, 0))
+                            .name("now"),
+                    );
+                }
+            });
+        }
+    }
+    ui.separator();
+
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show(ui, |ui| {
@@ -815,134 +1063,6 @@ pub(crate) fn rocket_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
             ui.add_space(6.0);
             ui.separator();
 
-            // ── Valenx LV-1 — watch it fly to orbit ───────────────
-            ui.label(egui::RichText::new("Valenx LV-1 — ascent to orbit").strong());
-            ui.label(
-                egui::RichText::new(
-                    "a from-scratch two-stage launcher, flown live by valenx-astro",
-                )
-                .weak()
-                .small(),
-            );
-            let fly_clicked = ui
-                .button(egui::RichText::new("▶ Fly the Valenx LV-1").strong())
-                .clicked();
-            if s.lv1.is_none() || fly_clicked {
-                s.lv1 = Some(fly_lv1());
-            }
-            // 3-D rocket model → central viewport (auto-loads once
-            // on first open; the button reloads / re-frames it).
-            let show_3d = ui
-                .button(egui::RichText::new("Show the 3-D rocket model").strong())
-                .on_hover_text(
-                    "Loads a 3-D model of the LV-1 into the centre viewport — orbit / zoom it.",
-                )
-                .clicked();
-            if show_3d || !s.loaded_3d_once {
-                s.loaded_3d_once = true;
-                s.show_3d_request = true;
-            }
-            if s.lv1.is_some() {
-                // Summary + flight window (immutable view, released before
-                // the scrubber borrows `scrub_t` mutably below).
-                let (t_max, has_plot) = {
-                    let f = s.lv1.as_ref().unwrap();
-                    ui.label(egui::RichText::new(&f.summary).monospace().small());
-                    (f.t_max.max(0.0), !f.alt_pts.is_empty())
-                };
-                s.scrub_t = s.scrub_t.clamp(0.0, t_max);
-
-                if has_plot {
-                    // Pick which telemetry channel the plot draws; the
-                    // numeric readout below always shows every quantity.
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(egui::RichText::new("plot:").small());
-                        ui.radio_value(&mut s.plot_y, PlotQuantity::Altitude, "alt");
-                        ui.radio_value(&mut s.plot_y, PlotQuantity::Speed, "speed");
-                        ui.radio_value(&mut s.plot_y, PlotQuantity::Mach, "Mach");
-                        ui.radio_value(&mut s.plot_y, PlotQuantity::DynPressure, "q");
-                        ui.radio_value(&mut s.plot_y, PlotQuantity::AccelG, "g");
-                    });
-                    let q = s.plot_y;
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "{} vs time (s) · dots = staging + MECO · drag to scrub",
-                            q.axis_label()
-                        ))
-                        .weak()
-                        .small(),
-                    );
-
-                    // ▶ Playback scrubber — drag through the flight and
-                    // read the full vehicle state at that instant.
-                    if t_max > 0.0 {
-                        ui.add(
-                            egui::Slider::new(&mut s.scrub_t, 0.0..=t_max)
-                                .text("▶ playback · t (s)"),
-                        );
-                    }
-
-                    let f = s.lv1.as_ref().unwrap();
-                    let scrub = sample_at(&f.samples, s.scrub_t);
-                    if let Some(p) = scrub {
-                        ui.label(
-                            egui::RichText::new(format!(
-                                "t {:>6.1} s   alt {:>7.2} km   downrange {:>7.2} km\n\
-                                         v_rel {:>6.0} m/s   v_inert {:>6.0} m/s   Mach {:>5.2}\n\
-                                         q {:>6.1} kPa   accel {:>5.2} g   mass {:>7.2} t",
-                                p.time,
-                                p.altitude_m / 1000.0,
-                                p.downrange_m / 1000.0,
-                                p.speed_relative,
-                                p.speed_inertial,
-                                p.mach,
-                                p.dynamic_pressure / 1000.0,
-                                p.acceleration_g,
-                                p.mass / 1000.0,
-                            ))
-                            .monospace()
-                            .small(),
-                        );
-                    }
-
-                    // Line + event + now markers all follow the selected
-                    // channel, derived from the one retained sample series.
-                    let line_pts: Vec<[f64; 2]> = if q == PlotQuantity::Altitude {
-                        f.alt_pts.clone()
-                    } else {
-                        f.samples
-                            .iter()
-                            .map(|smp| [smp.time, q.value(smp)])
-                            .collect()
-                    };
-                    let event_pts: Vec<[f64; 2]> = f
-                        .event_pts
-                        .iter()
-                        .filter_map(|ep| {
-                            sample_at(&f.samples, ep[0]).map(|smp| [ep[0], q.value(&smp)])
-                        })
-                        .collect();
-                    let now_pt = scrub.map(|p| [p.time, q.value(&p)]);
-                    Plot::new("lv1_ascent_plot").height(210.0).show(ui, |pui| {
-                        pui.line(Line::new(PlotPoints::from(line_pts)).name(q.axis_label()));
-                        if !event_pts.is_empty() {
-                            pui.points(
-                                Points::new(PlotPoints::from(event_pts))
-                                    .radius(5.0)
-                                    .name("staging / MECO"),
-                            );
-                        }
-                        if let Some(pt) = now_pt {
-                            pui.points(
-                                Points::new(PlotPoints::from(vec![pt]))
-                                    .radius(7.0)
-                                    .color(egui::Color32::from_rgb(255, 196, 0))
-                                    .name("now"),
-                            );
-                        }
-                    });
-                }
-            }
             // ── AI optimizer — multi-objective design search ──────
             ui.add_space(6.0);
             ui.label(egui::RichText::new("AI optimizer — multi-objective design search").strong());
@@ -1055,7 +1175,7 @@ pub(crate) fn rocket_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                         OptObjective::MinPeakG => ("best peak-g vs sim #", "best peak g"),
                     };
                     ui.label(egui::RichText::new(axis).weak().small());
-                    Plot::new("lv1_opt_plot").height(170.0).show(ui, |pui| {
+                    managed_plot_mem(ui, "lv1_opt_plot", 170.0, |pui| {
                         pui.line(Line::new(PlotPoints::from(conv.clone())).name(series));
                     });
                 }
@@ -1075,25 +1195,31 @@ pub(crate) fn rocket_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
             ui.add_space(4.0);
             ui.label(egui::RichText::new("Interstage structure").strong());
             ui.horizontal(|ui| {
-                ui.label("supported mass");
+                // Associate each DragValue with its caption via `labelled_by`,
+                // so the spin button is named for a screen reader / AI driver
+                // (egui clears a DragValue's own Name; `.on_hover_text` does
+                // not set it).
+                let cap = ui.label("supported mass");
                 ui.add(
                     egui::DragValue::new(&mut s.design.supported_mass_kg)
                         .speed(100.0)
                         .range(100.0..=200_000.0)
                         .suffix(" kg"),
                 )
+                .labelled_by(cap.id)
                 .on_hover_text("Upper stage + payload carried by the interstage.");
             });
             ui.horizontal(|ui| {
-                ui.label("strut count N");
+                let cap = ui.label("strut count N");
                 ui.add(
                     egui::DragValue::new(&mut s.design.strut_count)
                         .speed(0.2)
                         .range(1..=64),
-                );
+                )
+                .labelled_by(cap.id);
             });
             ui.horizontal(|ui| {
-                ui.label("strut area A");
+                let cap = ui.label("strut area A");
                 // Edit in cm² for usability; store in m². Only write back
                 // on an actual edit so the reactive dirty-check below stays
                 // stable (no per-frame float drift).
@@ -1105,13 +1231,14 @@ pub(crate) fn rocket_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .range(0.01..=2000.0)
                             .suffix(" cm²"),
                     )
+                    .labelled_by(cap.id)
                     .changed()
                 {
                     s.design.strut_area_m2 = area_cm2 * 1.0e-4;
                 }
             });
             ui.horizontal(|ui| {
-                ui.label("material yield σy");
+                let cap = ui.label("material yield σy");
                 let mut yield_mpa = s.design.material_yield_pa / 1.0e6;
                 if ui
                     .add(
@@ -1120,6 +1247,7 @@ pub(crate) fn rocket_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .range(1.0..=2000.0)
                             .suffix(" MPa"),
                     )
+                    .labelled_by(cap.id)
                     .on_hover_text("≈ 324 MPa for Al-2024-T3.")
                     .changed()
                 {
@@ -1200,8 +1328,12 @@ pub(crate) fn rocket_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 ui.add_space(6.0);
                 ui.label(egui::RichText::new("Sizing aid").strong());
                 ui.horizontal(|ui| {
-                    ui.label("target SF");
-                    ui.add(egui::Slider::new(&mut s.target_sf, 1.0..=3.0));
+                    // A Slider's numeric value sub-node is a Role::SpinButton;
+                    // egui only auto-names it when the slider carries `.text(..)`
+                    // (it then `labelled_by`s the value node internally — see
+                    // egui 0.28 slider.rs). So name it via `.text(..)` rather
+                    // than a sibling label, to stay AI-drivable.
+                    ui.add(egui::Slider::new(&mut s.target_sf, 1.0..=3.0).text("target SF"));
                 });
                 if let Some(a_req) = required_area_per_strut_m2(
                     r.peak_axial_load_n,
@@ -1611,6 +1743,116 @@ mod tests {
             );
         }
     }
+
+    // ---- agent bridge: agent_set / agent_control_names ----
+
+    #[test]
+    fn agent_set_writes_validated_fields_and_rejects_bad_input() {
+        use crate::agent_commands::AgentValue;
+        let mut s = RocketWorkbenchState::default();
+
+        // Numeric float field (stored verbatim, kg).
+        s.agent_set("supported mass", &AgentValue::Float(9_000.0))
+            .expect("set supported mass");
+        assert!((s.design.supported_mass_kg - 9_000.0).abs() < 1e-9);
+
+        // Integer count (usize); a whole-valued float is also accepted.
+        s.agent_set("strut count N", &AgentValue::Int(12))
+            .expect("set strut count");
+        assert_eq!(s.design.strut_count, 12);
+        s.agent_set("strut count N", &AgentValue::Float(6.0))
+            .expect("whole float -> usize");
+        assert_eq!(s.design.strut_count, 6);
+
+        // Display-unit conversions: strut area is cm² -> m², yield MPa -> Pa.
+        s.agent_set("strut area A", &AgentValue::Float(20.0))
+            .expect("set strut area");
+        assert!((s.design.strut_area_m2 - 20.0e-4).abs() < 1e-12);
+        s.agent_set("material yield σy", &AgentValue::Float(324.0))
+            .expect("set yield");
+        assert!((s.design.material_yield_pa - 324.0e6).abs() < 1.0);
+
+        // Sizing target slider value.
+        s.agent_set("target SF", &AgentValue::Float(2.0))
+            .expect("set target SF");
+        assert!((s.target_sf - 2.0).abs() < 1e-9);
+
+        // Objective enum by radio label (case/hyphen tolerant).
+        s.agent_set(
+            "optimizer objective",
+            &AgentValue::Str("max apoapsis".into()),
+        )
+        .expect("set objective");
+        assert_eq!(s.opt_objective, OptObjective::MaxApoapsis);
+        s.agent_set("optimizer objective", &AgentValue::Str("Min Peak-G".into()))
+            .expect("hyphen/case tolerant");
+        assert_eq!(s.opt_objective, OptObjective::MinPeakG);
+
+        // Range clamping (no panic, lands on a valid value).
+        s.agent_set("strut count N", &AgentValue::Int(1000))
+            .expect("clamp high");
+        assert_eq!(s.design.strut_count, 64);
+
+        // --- Fail-loud cases: unknown caption + wrong type + bad enum/int ---
+        assert!(
+            s.agent_set("no such control", &AgentValue::Float(1.0))
+                .is_err(),
+            "unknown caption must Err"
+        );
+        assert!(
+            s.agent_set("supported mass", &AgentValue::Str("nope".into()))
+                .is_err(),
+            "string into a numeric field must Err"
+        );
+        assert!(
+            s.agent_set("optimizer objective", &AgentValue::Float(1.0))
+                .is_err(),
+            "number into the enum field must Err"
+        );
+        assert!(
+            s.agent_set(
+                "optimizer objective",
+                &AgentValue::Str("orbit-speed".into())
+            )
+            .is_err(),
+            "unknown objective name must Err"
+        );
+        assert!(
+            s.agent_set("strut count N", &AgentValue::Int(0)).is_err(),
+            "strut count < 1 must Err"
+        );
+    }
+
+    #[test]
+    fn agent_control_names_are_unique_and_settable() {
+        use crate::agent_commands::AgentValue;
+        let names = RocketWorkbenchState::agent_control_names();
+        assert!(!names.is_empty());
+        // No duplicate captions.
+        let mut sorted = names.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), names.len(), "control names must be unique");
+        // Every advertised caption is actually settable (numeric for the
+        // numeric ones, the objective label for the enum) — i.e. none of the
+        // listed names returns the "unknown control" error.
+        let mut s = RocketWorkbenchState::default();
+        for &n in names {
+            // Each caption is exercised with a value of the TYPE it reads: the
+            // objective is an enum (a radio label), `strut count N` is an integer
+            // count (read via `as_i64`, so a fractional `Float` would fail loudly
+            // and is not the right shape here), and the rest are real-valued.
+            let v = match n {
+                "optimizer objective" => AgentValue::Str("max payload".into()),
+                "strut count N" => AgentValue::Int(4),
+                _ => AgentValue::Float(1.5),
+            };
+            assert!(
+                s.agent_set(n, &v).is_ok(),
+                "advertised control '{n}' must be settable"
+            );
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1693,5 +1935,59 @@ mod headless_ui_tests {
             draw_workbench(&mut app);
         }
         assert!(app.rocket.lv1.is_some());
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::{Node, NodeId, Role};
+
+        // Render with accesskit enabled and read the emitted a11y tree — the
+        // same tree a screen reader / AI UI-Automation driver consumes. Every
+        // DragValue (Role::SpinButton) must carry a caption via `labelled_by`,
+        // since egui clears a DragValue's own Name.
+        let mut app = ValenxApp::default();
+        app.show_rocket_workbench = true;
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_rocket_workbench(&mut app, ctx);
+        });
+        let nodes: Vec<(NodeId, Node)> = out
+            .platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes;
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // The interstage-structure form draws supported-mass, strut-count,
+        // strut-area and material-yield as numeric spin buttons.
+        assert!(
+            spin_buttons.len() >= 4,
+            "expected the rocket interstage numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        // Every numeric spin button (the 4 interstage DragValues plus the
+        // `.text(..)`-named sliders, whose value sub-node egui labels
+        // internally) must be associated with a caption — without it the
+        // control is anonymous to a screen reader / AI driver.
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every rocket numeric spin button must be labelled_by its caption (AI-drivable name)"
+        );
+        for caption in [
+            "supported mass",
+            "strut count N",
+            "strut area A",
+            "material yield σy",
+        ] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

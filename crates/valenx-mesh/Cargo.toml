@@ -17,6 +17,13 @@ serde      = { workspace = true }
 serde_json = { workspace = true }
 ndarray    = { workspace = true }
 nalgebra   = { workspace = true }
+# GPU-render-oriented mesh optimization (vertex-cache / overdraw /
+# vertex-fetch reordering + LOD simplification). Idiomatic Rust
+# wrapper over the C++ `meshoptimizer` library, compiled in-tree via
+# the `cc` crate (MSVC/clang/gcc) — no system package required. Used
+# by `crate::meshopt` to expose these passes over the canonical
+# `Mesh`. MIT OR Apache-2.0.
+meshopt    = "0.6"
 # Round-26 L3 DEFERRED: the intended fix was to delete the local
 # `read_capped_obj_lines` mirror in `format/obj.rs` and use
 # `valenx_core::io_caps::read_capped_lines_bounded` directly. Adding

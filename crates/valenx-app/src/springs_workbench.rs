@@ -68,6 +68,67 @@ impl Default for SpringsWorkbenchState {
     }
 }
 
+impl SpringsWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`;
+    /// each string matches exactly the caption the form draws.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "wire d",
+            "mean coil D",
+            "free length",
+            "active coils n",
+            "shear modulus G (MPa)",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the
+    /// wrong type / out of range returns `Err(String)` (the bridge turns it into
+    /// a `warn` feed note) — never a panic. Ranges mirror the workbench's own
+    /// validity checks: every geometry / material value must be a finite `> 0`
+    /// (a non-positive wire diameter, coil diameter, length, coil count, or
+    /// shear modulus is physically meaningless and rejected here).
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        // Every Springs control is a strictly-positive real; share the check.
+        let positive = |v: f64, what: &str| -> Result<f64, String> {
+            if v.is_finite() && v > 0.0 {
+                Ok(v)
+            } else {
+                Err(format!("{what} must be > 0, got {v}"))
+            }
+        };
+        match name {
+            "wire d" => self.wire_diameter_mm = positive(value.as_f64()?, "wire d")?,
+            "mean coil D" => self.mean_coil_diameter_mm = positive(value.as_f64()?, "mean coil D")?,
+            "free length" => self.free_length_mm = positive(value.as_f64()?, "free length")?,
+            "active coils n" => self.n_active_coils = positive(value.as_f64()?, "active coils n")?,
+            "shear modulus G (MPa)" => {
+                self.shear_modulus_mpa = positive(value.as_f64()?, "shear modulus G")?
+            }
+            other => return Err(format!("unknown Springs control: {other:?}")),
+        }
+        Ok(())
+    }
+
+    /// The current computed-result text for the agent `ReadReadout` bridge (see
+    /// [`crate::agent_commands`]): the same `Result` string the panel renders
+    /// once a design has been computed, else the last `error`, else `None` when
+    /// it has not been run yet. Read-only — lets an agent read the answer back
+    /// after driving a compute, closing the live-driving loop.
+    pub fn agent_readout(&self) -> Option<String> {
+        if !self.result.is_empty() {
+            Some(self.result.clone())
+        } else {
+            self.error.clone()
+        }
+    }
+}
+
 /// Draw the Springs Workbench right-side panel. A no-op when the
 /// `show_springs_workbench` toggle is off.
 pub fn draw_springs_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
@@ -102,27 +163,32 @@ pub fn draw_springs_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Geometry (mm)").strong());
                     ui.horizontal(|ui| {
-                        ui.label("wire d");
-                        ui.add(egui::DragValue::new(&mut s.wire_diameter_mm).speed(0.05));
+                        let wd = ui.label("wire d");
+                        ui.add(egui::DragValue::new(&mut s.wire_diameter_mm).speed(0.05))
+                            .labelled_by(wd.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("mean coil D");
-                        ui.add(egui::DragValue::new(&mut s.mean_coil_diameter_mm).speed(0.1));
+                        let md = ui.label("mean coil D");
+                        ui.add(egui::DragValue::new(&mut s.mean_coil_diameter_mm).speed(0.1))
+                            .labelled_by(md.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("free length");
-                        ui.add(egui::DragValue::new(&mut s.free_length_mm).speed(0.5));
+                        let fl = ui.label("free length");
+                        ui.add(egui::DragValue::new(&mut s.free_length_mm).speed(0.5))
+                            .labelled_by(fl.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("active coils n");
-                        ui.add(egui::DragValue::new(&mut s.n_active_coils).speed(0.1));
+                        let nc = ui.label("active coils n");
+                        ui.add(egui::DragValue::new(&mut s.n_active_coils).speed(0.1))
+                            .labelled_by(nc.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Material").strong());
                     ui.horizontal(|ui| {
-                        ui.label("shear modulus G (MPa)");
-                        ui.add(egui::DragValue::new(&mut s.shear_modulus_mpa).speed(100.0));
+                        let sg = ui.label("shear modulus G (MPa)");
+                        ui.add(egui::DragValue::new(&mut s.shear_modulus_mpa).speed(100.0))
+                            .labelled_by(sg.id);
                     });
 
                     // Live hint: the spring index C = D/d (4–12 is the
@@ -372,6 +438,13 @@ fn draw_centerline_preview(ui: &mut egui::Ui, pts: &[Vector3<f64>]) {
 /// Build a [`SpringSpec`] from the form, validate it, and format the
 /// design-scalar readout. Extracted from the draw closure so it is
 /// unit-testable.
+/// Run the spring design compute (the in-panel **Analyze** action). Factored
+/// out so the button and the product self-test ([`crate::self_test`]) share one
+/// path.
+pub(crate) fn run(app: &mut ValenxApp) {
+    run_springs(&mut app.springs);
+}
+
 fn run_springs(s: &mut SpringsWorkbenchState) {
     s.error = None;
 
@@ -472,6 +545,24 @@ pub(crate) fn springs_product() -> crate::WorkspaceProduct {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_commands::AgentValue;
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        let mut s = SpringsWorkbenchState::default();
+        s.agent_set("wire d", &AgentValue::Float(1.6)).unwrap();
+        assert_eq!(s.wire_diameter_mm, 1.6);
+        // Unknown caption -> Err (no panic).
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (bool into a numeric field) -> Err.
+        assert!(s.agent_set("wire d", &AgentValue::Bool(true)).is_err());
+        // Non-positive -> Err, field untouched.
+        assert!(s.agent_set("wire d", &AgentValue::Float(0.0)).is_err());
+        assert_eq!(
+            s.wire_diameter_mm, 1.6,
+            "rejected set leaves field untouched"
+        );
+    }
 
     #[test]
     fn default_state_is_idle() {
@@ -589,6 +680,7 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     /// Render the whole workbench panel once in a headless egui context.
     fn draw_workbench(app: &mut ValenxApp) {
@@ -596,6 +688,20 @@ mod headless_ui_tests {
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_springs_workbench(app, ctx);
         });
+    }
+
+    /// Draw the panel once with accesskit enabled and return the emitted
+    /// accessibility-tree nodes, so the test can inspect names and roles.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_springs_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -619,5 +725,32 @@ mod headless_ui_tests {
         run_springs(&mut app.springs);
         app.springs.error = Some("invalid spring parameters".to_string());
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        let mut app = ValenxApp::default();
+        app.show_springs_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 5,
+            "expected numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+        for caption in ["wire d", "mean coil D", "free length"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

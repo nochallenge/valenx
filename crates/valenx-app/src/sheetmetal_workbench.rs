@@ -48,6 +48,59 @@ impl Default for SheetmetalWorkbenchState {
     }
 }
 
+impl SheetmetalWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). All four bend parameters
+    /// are numeric.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "thickness (mm)",
+            "inside radius (mm)",
+            "bend angle (\u{00B0})",
+            "k-factor",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Every bend parameter reads `AgentValue::as_f64`.
+    /// Fail-loud: an unknown caption or a value of the wrong type returns `Err`
+    /// — never a panic, no field written on error. (Out-of-range values are
+    /// caught at `run_sheetmetal` time, which surfaces an in-panel error.)
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        match name {
+            "thickness (mm)" => self.thickness_mm = value.as_f64()?,
+            "inside radius (mm)" => self.inside_radius_mm = value.as_f64()?,
+            "bend angle (\u{00B0})" => self.bend_angle_deg = value.as_f64()?,
+            "k-factor" => self.k_factor = value.as_f64()?,
+            other => return Err(format!("unknown Sheet Metal control: {other:?}")),
+        }
+        Ok(())
+    }
+
+    /// The current computed-result text for the agent `ReadReadout` bridge and
+    /// the product self-test ([`crate::self_test`]): the bend readout (neutral
+    /// radius, bend allowance, bend deduction) once computed, else the last
+    /// `error`, else `None` before the first compute. Read-only.
+    pub fn agent_readout(&self) -> Option<String> {
+        if !self.result.is_empty() {
+            Some(self.result.clone())
+        } else {
+            self.error.clone()
+        }
+    }
+}
+
+/// Run the bend-allowance compute (the in-panel **Compute** action). Factored
+/// out so the button and the product self-test ([`crate::self_test`]) share one
+/// path.
+pub(crate) fn run(app: &mut ValenxApp) {
+    run_sheetmetal(&mut app.sheetmetal);
+}
+
 /// Draw the Sheet Metal Workbench right-side panel. A no-op when the
 /// `show_sheetmetal_workbench` toggle is off.
 pub fn draw_sheetmetal_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
@@ -74,20 +127,24 @@ pub fn draw_sheetmetal_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Bend parameters").strong());
                     ui.horizontal(|ui| {
-                        ui.label("thickness (mm)");
-                        ui.add(egui::DragValue::new(&mut s.thickness_mm).speed(0.05));
+                        let cap_thk = ui.label("thickness (mm)");
+                        ui.add(egui::DragValue::new(&mut s.thickness_mm).speed(0.05))
+                            .labelled_by(cap_thk.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("inside radius (mm)");
-                        ui.add(egui::DragValue::new(&mut s.inside_radius_mm).speed(0.05));
+                        let cap_rad = ui.label("inside radius (mm)");
+                        ui.add(egui::DragValue::new(&mut s.inside_radius_mm).speed(0.05))
+                            .labelled_by(cap_rad.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("bend angle (\u{00B0})");
-                        ui.add(egui::DragValue::new(&mut s.bend_angle_deg).speed(1.0));
+                        let cap_ang = ui.label("bend angle (\u{00B0})");
+                        ui.add(egui::DragValue::new(&mut s.bend_angle_deg).speed(1.0))
+                            .labelled_by(cap_ang.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("k-factor");
-                        ui.add(egui::DragValue::new(&mut s.k_factor).speed(0.01));
+                        let cap_kf = ui.label("k-factor");
+                        ui.add(egui::DragValue::new(&mut s.k_factor).speed(0.01))
+                            .labelled_by(cap_kf.id);
                     });
                     ui.label(
                         egui::RichText::new("k-factor = neutral-axis fraction (0.33–0.5 typical)")
@@ -185,7 +242,7 @@ fn bend_profile(
 
 /// Build the bent-sheet side profile for the live preview, best-effort `None`
 /// when the form dimensions are invalid (the same preconditions as
-/// [`run_sheetmetal`], minus the k-factor which only affects the scalars).
+/// `run_sheetmetal`, minus the k-factor which only affects the scalars).
 fn preview_bend(s: &SheetmetalWorkbenchState) -> Option<Vec<Vector3<f64>>> {
     if !(s.thickness_mm.is_finite() && s.thickness_mm > 0.0) {
         return None;
@@ -397,6 +454,29 @@ mod tests {
     }
 
     #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        use crate::agent_commands::AgentValue;
+        let mut s = SheetmetalWorkbenchState::default();
+        // A representative float set lands in state.
+        s.agent_set("thickness (mm)", &AgentValue::Float(2.0))
+            .unwrap();
+        assert_eq!(s.thickness_mm, 2.0);
+        // The non-ASCII bend-angle caption resolves.
+        s.agent_set("bend angle (\u{00B0})", &AgentValue::Float(120.0))
+            .unwrap();
+        assert_eq!(s.bend_angle_deg, 120.0);
+        // Unknown caption -> Err.
+        assert!(s
+            .agent_set("no such control", &AgentValue::Float(1.0))
+            .is_err());
+        // Type mismatch (string into the float thickness) -> Err, field untouched.
+        assert!(s
+            .agent_set("thickness (mm)", &AgentValue::Str("thick".into()))
+            .is_err());
+        assert_eq!(s.thickness_mm, 2.0, "rejected set leaves field untouched");
+    }
+
+    #[test]
     fn compute_default_90deg_bend() {
         let mut s = SheetmetalWorkbenchState::default();
         run_sheetmetal(&mut s);
@@ -495,6 +575,7 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     /// Render the whole workbench panel once in a headless egui context.
     fn draw_workbench(app: &mut ValenxApp) {
@@ -502,6 +583,19 @@ mod headless_ui_tests {
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_sheetmetal_workbench(app, ctx);
         });
+    }
+
+    /// Render the workbench with accesskit enabled and return its a11y nodes.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_sheetmetal_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -525,5 +619,32 @@ mod headless_ui_tests {
         run_sheetmetal(&mut app.sheetmetal);
         app.sheetmetal.error = Some("invalid bend parameters".to_string());
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        let mut app = ValenxApp::default();
+        app.show_sheetmetal_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 4,
+            "expected the numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+        for caption in ["thickness (mm)", "k-factor"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

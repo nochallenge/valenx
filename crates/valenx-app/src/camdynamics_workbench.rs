@@ -83,12 +83,14 @@ pub fn draw_camdynamics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Rise").strong());
                     ui.horizontal(|ui| {
-                        ui.label("lift L (mm)");
-                        ui.add(egui::DragValue::new(&mut s.lift_mm).speed(0.5));
+                        let cap = ui.label("lift L (mm)");
+                        ui.add(egui::DragValue::new(&mut s.lift_mm).speed(0.5))
+                            .labelled_by(cap.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("rise angle β (deg)");
-                        ui.add(egui::DragValue::new(&mut s.beta_deg).speed(1.0));
+                        let cap = ui.label("rise angle β (deg)");
+                        ui.add(egui::DragValue::new(&mut s.beta_deg).speed(1.0))
+                            .labelled_by(cap.id);
                     });
 
                     ui.add_space(4.0);
@@ -431,5 +433,44 @@ mod headless_ui_tests {
         app.show_camdynamics_workbench = true;
         run_camdynamics(&mut app.camdynamics);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::{Node, NodeId, Role};
+
+        let mut app = ValenxApp::default();
+        app.show_camdynamics_workbench = true;
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_camdynamics_workbench(&mut app, ctx);
+        });
+        let nodes: Vec<(NodeId, Node)> = out
+            .platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes;
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 2,
+            "expected the camdynamics numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every camdynamics DragValue must be labelled_by its caption"
+        );
+        for caption in ["lift L (mm)", "rise angle β (deg)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

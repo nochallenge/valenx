@@ -102,6 +102,76 @@ impl Default for OpticsWorkbenchState {
     }
 }
 
+impl OpticsWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set
+    /// via `SetControl` (returned by `ListControls`). These are the two
+    /// thin-lens imaging inputs the `optics.compute` bridge id drives —
+    /// object distance + focal length — so an agent can set them by caption
+    /// and read back the image distance + magnification + real/virtual.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &["object distance (m)", "focal length f (m)"]
+    }
+
+    /// Set one labelled control by its caption, for the agent `SetControl`
+    /// bridge. Fail-loud on an unknown caption / wrong type / out-of-range;
+    /// no state is written on error and nothing panics. `object distance (m)`
+    /// reads a positive `f64`; `focal length f (m)` reads a non-zero finite
+    /// `f64` (positive converging, negative diverging).
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        match name {
+            "object distance (m)" => {
+                let v = value.as_f64()?;
+                if !v.is_finite() || v <= 0.0 {
+                    return Err(format!("object distance must be finite and > 0, got {v}"));
+                }
+                self.object_distance_m = v;
+            }
+            "focal length f (m)" => {
+                let v = value.as_f64()?;
+                if !v.is_finite() || v == 0.0 {
+                    return Err(format!("focal length must be finite and non-zero, got {v}"));
+                }
+                self.focal_length_m = v;
+            }
+            other => return Err(format!("unknown optics control: {other:?}")),
+        }
+        Ok(())
+    }
+
+    /// The current readout for the agent `ReadReadout` bridge: the thin-lens
+    /// imaging answer (image distance + transverse magnification + the
+    /// real/virtual classification) for the current `(do, f)`. Computed live
+    /// from [`valenx_optics::thin_lens`]; `None` only if the inputs are out of
+    /// domain (e.g. a non-positive object distance), in which case the panel's
+    /// error line explains why.
+    pub fn agent_readout(&self) -> Option<String> {
+        let lens = ThinLens::new(self.focal_length_m).ok()?;
+        let img = lens.image(self.object_distance_m).ok()?;
+        let kind = match img.kind {
+            ImageKind::Real => "real image",
+            ImageKind::Virtual => "virtual image",
+        };
+        Some(format!(
+            "Optics \u{00B7} do={:.4} f={:.4} \u{00B7} di={:.5} \u{00B7} m={:.5} \u{00B7} {kind}",
+            self.object_distance_m, self.focal_length_m, img.distance, img.magnification,
+        ))
+    }
+}
+
+/// Run the in-panel **Analyze** action in thin-lens imaging mode. Factored
+/// out so the `optics.compute` bridge id routes to the SAME compute the
+/// button runs — it switches to the imaging mode, then analyzes, so the
+/// reported answer is always the image distance + magnification + real/
+/// virtual the bridge documents.
+pub(crate) fn run(app: &mut ValenxApp) {
+    app.optics.mode = OpticsMode::ThinLensImaging;
+    run_optics(&mut app.optics);
+}
+
 /// Draw the Optics Workbench right-side panel. A no-op when the
 /// `show_optics_workbench` toggle is off.
 pub fn draw_optics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
@@ -144,16 +214,19 @@ pub fn draw_optics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         OpticsMode::Lensmaker => {
                             ui.label(egui::RichText::new("Lens").strong());
                             ui.horizontal(|ui| {
-                                ui.label("index n");
-                                ui.add(egui::DragValue::new(&mut s.lens_n).speed(0.01));
+                                let l = ui.label("index n");
+                                ui.add(egui::DragValue::new(&mut s.lens_n).speed(0.01))
+                                    .labelled_by(l.id);
                             });
                             ui.horizontal(|ui| {
-                                ui.label("R1 (m)");
-                                ui.add(egui::DragValue::new(&mut s.lens_r1_m).speed(0.005));
+                                let l = ui.label("R1 (m)");
+                                ui.add(egui::DragValue::new(&mut s.lens_r1_m).speed(0.005))
+                                    .labelled_by(l.id);
                             });
                             ui.horizontal(|ui| {
-                                ui.label("R2 (m)");
-                                ui.add(egui::DragValue::new(&mut s.lens_r2_m).speed(0.005));
+                                let l = ui.label("R2 (m)");
+                                ui.add(egui::DragValue::new(&mut s.lens_r2_m).speed(0.005))
+                                    .labelled_by(l.id);
                             });
                             ui.label(
                                 egui::RichText::new(
@@ -166,33 +239,38 @@ pub fn draw_optics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         OpticsMode::Refraction => {
                             ui.label(egui::RichText::new("Interface").strong());
                             ui.horizontal(|ui| {
-                                ui.label("n1 (incident)");
-                                ui.add(egui::DragValue::new(&mut s.iface_n1).speed(0.01));
+                                let l = ui.label("n1 (incident)");
+                                ui.add(egui::DragValue::new(&mut s.iface_n1).speed(0.01))
+                                    .labelled_by(l.id);
                             });
                             ui.horizontal(|ui| {
-                                ui.label("n2 (transmitted)");
-                                ui.add(egui::DragValue::new(&mut s.iface_n2).speed(0.01));
+                                let l = ui.label("n2 (transmitted)");
+                                ui.add(egui::DragValue::new(&mut s.iface_n2).speed(0.01))
+                                    .labelled_by(l.id);
                             });
                             ui.horizontal(|ui| {
-                                ui.label("incidence (°)");
+                                let l = ui.label("incidence (°)");
                                 ui.add(
                                     egui::DragValue::new(&mut s.incidence_deg)
                                         .speed(0.5)
                                         .range(0.0..=90.0),
-                                );
+                                )
+                                .labelled_by(l.id);
                             });
                         }
                         OpticsMode::ThinLensImaging => {
                             ui.label(egui::RichText::new("Thin lens").strong());
                             ui.horizontal(|ui| {
-                                ui.label("focal length f (m)");
-                                ui.add(egui::DragValue::new(&mut s.focal_length_m).speed(0.005));
+                                let l = ui.label("focal length f (m)");
+                                ui.add(egui::DragValue::new(&mut s.focal_length_m).speed(0.005))
+                                    .labelled_by(l.id);
                             });
                             ui.horizontal(|ui| {
-                                ui.label("object distance (m)");
+                                let l = ui.label("object distance (m)");
                                 ui.add(
                                     egui::DragValue::new(&mut s.object_distance_m).speed(0.01),
-                                );
+                                )
+                                .labelled_by(l.id);
                             });
                             ui.label(
                                 egui::RichText::new(
@@ -577,6 +655,81 @@ mod tests {
         assert!(s.result.contains("real, inverted, same size"));
     }
 
+    /// Ground truth: the Gaussian thin-lens equation `1/f = 1/do + 1/di`
+    /// must hold for the image distance the imaging compute reports.
+    #[test]
+    fn thin_lens_equation_holds_ground_truth() {
+        let f = 0.1_f64;
+        let do_ = 0.3_f64;
+        let lens = ThinLens::new(f).unwrap();
+        let img = lens.image(do_).unwrap();
+        let lhs = 1.0 / f;
+        let rhs = 1.0 / do_ + 1.0 / img.distance;
+        assert!((lhs - rhs).abs() < 1e-9, "1/f={lhs} vs 1/do+1/di={rhs}");
+        // 1/0.1 = 1/0.3 + 1/di => di = 0.15, m = -di/do = -0.5.
+        assert!((img.distance - 0.15).abs() < 1e-9, "di = {}", img.distance);
+        assert!(
+            (img.magnification - (-0.5)).abs() < 1e-9,
+            "m = {}",
+            img.magnification
+        );
+    }
+
+    #[test]
+    fn agent_set_and_readout_drive_imaging() {
+        use crate::agent_commands::AgentValue;
+        let mut s = OpticsWorkbenchState::default();
+        s.agent_set("focal length f (m)", &AgentValue::Float(0.1))
+            .expect("f");
+        s.agent_set("object distance (m)", &AgentValue::Float(0.3))
+            .expect("do");
+        assert!((s.focal_length_m - 0.1).abs() < 1e-12);
+        assert!((s.object_distance_m - 0.3).abs() < 1e-12);
+        let readout = s.agent_readout().expect("readout computes live");
+        assert!(readout.contains("Optics"), "readout: {readout}");
+        assert!(readout.contains("di="), "readout names di: {readout}");
+        assert!(
+            readout.contains("real image"),
+            "do=0.3,f=0.1 is real: {readout}"
+        );
+    }
+
+    #[test]
+    fn agent_set_rejects_bad_values() {
+        use crate::agent_commands::AgentValue;
+        let mut s = OpticsWorkbenchState::default();
+        assert!(s
+            .agent_set("object distance (m)", &AgentValue::Float(-1.0))
+            .is_err());
+        assert!(s
+            .agent_set("focal length f (m)", &AgentValue::Float(0.0))
+            .is_err());
+        assert!(s
+            .agent_set("focal length f (m)", &AgentValue::Float(f64::NAN))
+            .is_err());
+        assert!(s.agent_set("bogus", &AgentValue::Float(1.0)).is_err());
+    }
+
+    #[test]
+    fn run_bridge_helper_computes_imaging_through_app() {
+        let mut app = ValenxApp::default();
+        run(&mut app);
+        assert_eq!(app.optics.mode, OpticsMode::ThinLensImaging);
+        assert!(
+            !app.optics.result.is_empty(),
+            "the optics.compute bridge produces a readout"
+        );
+        assert!(app.optics.result.contains("image distance"));
+    }
+
+    #[test]
+    fn control_names_are_listed() {
+        let names = OpticsWorkbenchState::agent_control_names();
+        for c in ["object distance (m)", "focal length f (m)"] {
+            assert!(names.contains(&c), "missing control name {c}");
+        }
+    }
+
     #[test]
     fn imaging_rejects_nonpositive_object_distance() {
         let mut s = OpticsWorkbenchState {
@@ -605,12 +758,28 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_optics_workbench(app, ctx);
         });
+    }
+
+    /// As [`draw_workbench`], but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_optics_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -626,5 +795,37 @@ mod headless_ui_tests {
         app.show_optics_workbench = true;
         run_optics(&mut app.optics);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // Every DragValue is a SpinButton that must be `labelled_by` its caption
+        // (egui clears a DragValue's own Name), so an AI / screen reader can find
+        // the control by the caption text.
+        let mut app = ValenxApp::default();
+        app.show_optics_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 3,
+            "expected the numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["index n", "R1 (m)", "R2 (m)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

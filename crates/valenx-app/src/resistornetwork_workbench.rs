@@ -113,18 +113,26 @@ pub fn draw_resistornetwork_workbench(app: &mut ValenxApp, ctx: &egui::Context) 
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Resistors").strong());
+                    // Associate each numeric `DragValue` with its caption via
+                    // `labelled_by`, so the spin button carries the caption as
+                    // its accessibility / UI-Automation Name (egui clears a
+                    // DragValue's own Name otherwise, leaving it anonymous to a
+                    // screen reader / AI driver).
                     ui.horizontal(|ui| {
-                        ui.label("R1 (Ω)");
-                        ui.add(egui::DragValue::new(&mut s.r1).speed(5.0));
+                        let l = ui.label("R1 (Ω)");
+                        ui.add(egui::DragValue::new(&mut s.r1).speed(5.0))
+                            .labelled_by(l.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("R2 (Ω)");
-                        ui.add(egui::DragValue::new(&mut s.r2).speed(5.0));
+                        let l = ui.label("R2 (Ω)");
+                        ui.add(egui::DragValue::new(&mut s.r2).speed(5.0))
+                            .labelled_by(l.id);
                     });
                     if s.mode != NetworkMode::Divider {
                         ui.horizontal(|ui| {
-                            ui.label("R3 (Ω)");
-                            ui.add(egui::DragValue::new(&mut s.r3).speed(5.0));
+                            let l = ui.label("R3 (Ω)");
+                            ui.add(egui::DragValue::new(&mut s.r3).speed(5.0))
+                                .labelled_by(l.id);
                         });
                     }
 
@@ -132,12 +140,14 @@ pub fn draw_resistornetwork_workbench(app: &mut ValenxApp, ctx: &egui::Context) 
                         ui.add_space(4.0);
                         ui.label(egui::RichText::new("Source").strong());
                         ui.horizontal(|ui| {
-                            ui.label("Vin (V)");
-                            ui.add(egui::DragValue::new(&mut s.vin).speed(0.5));
+                            let l = ui.label("Vin (V)");
+                            ui.add(egui::DragValue::new(&mut s.vin).speed(0.5))
+                                .labelled_by(l.id);
                         });
                         ui.horizontal(|ui| {
-                            ui.label("I_in (A)");
-                            ui.add(egui::DragValue::new(&mut s.i_in).speed(0.1));
+                            let l = ui.label("I_in (A)");
+                            ui.add(egui::DragValue::new(&mut s.i_in).speed(0.1))
+                                .labelled_by(l.id);
                         });
                     }
 
@@ -501,12 +511,28 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_resistornetwork_workbench(app, ctx);
         });
+    }
+
+    /// As [`draw_workbench`], but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_resistornetwork_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -522,5 +548,38 @@ mod headless_ui_tests {
         app.show_resistornetwork_workbench = true;
         run_resistornetwork(&mut app.resistornetwork);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // Each numeric DragValue is a SpinButton; each must be `labelled_by`
+        // its caption (egui clears a DragValue's own Name), so an AI / screen
+        // reader can find the control by the caption text. The default mode is
+        // Series, which renders R1 / R2 / R3 (Vin / I_in are divider-only).
+        let mut app = ValenxApp::default();
+        app.show_resistornetwork_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 3,
+            "expected the resistornetwork numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every resistornetwork DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["R1 (Ω)", "R2 (Ω)", "R3 (Ω)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

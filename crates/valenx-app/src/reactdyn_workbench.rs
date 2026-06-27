@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use eframe::egui;
-use egui_plot::{Legend, Line, Plot, PlotPoints};
+use egui_plot::{Legend, Line, PlotPoints};
 
 use valenx_qchem::element::Element;
 use valenx_qchem::geometry::{MolecularGeometry, BOHR_PER_ANGSTROM};
@@ -26,6 +26,7 @@ use valenx_reactdyn::{
 };
 
 use crate::genetics::molecule_view::{self, ViewAtom, ViewMolecule};
+use crate::plot_ui::managed_plot_mem_cfg;
 use crate::ValenxApp;
 
 /// A built-in small-molecule starting point.
@@ -161,10 +162,163 @@ impl Default for ReactdynWorkbenchState {
     }
 }
 
+/// Parse a backend name (agent `SetControl` bridge) into a [`Backend`].
+/// Case-insensitive; accepts the radio words. Fail-loud on an unknown name.
+fn parse_backend(s: &str) -> Result<Backend, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "aimd" | "aimd (vacuum)" | "vacuum" => Ok(Backend::Aimd),
+        "qmmm" | "qm/mm" | "qm/mm (solvent)" | "solvent" => Ok(Backend::QmMm),
+        "reactive" | "reactive (materials)" | "materials" => Ok(Backend::Reactive),
+        other => Err(format!(
+            "unknown backend '{other}' (expected 'aimd', 'qm/mm', or 'reactive')"
+        )),
+    }
+}
+
+/// Parse a geometry-preset name into a [`Preset`]. Case-insensitive; accepts
+/// short names + the picker words. Fail-loud on an unknown name.
+fn parse_preset(s: &str) -> Result<Preset, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "h2" | "h₂" | "h2 (stretched)" => Ok(Preset::H2),
+        "water" | "h2o" | "h₂o" | "water (h₂o)" => Ok(Preset::Water),
+        "hf" | "hydrogen fluoride" | "hydrogen fluoride (hf)" => Ok(Preset::Hf),
+        "custom" | "custom (xyz)" | "xyz" => Ok(Preset::Custom),
+        other => Err(format!(
+            "unknown geometry preset '{other}' (expected 'h2', 'water', 'hf', or 'custom')"
+        )),
+    }
+}
+
+/// Parse a method name into a [`Method`]. Case-insensitive; accepts the radio
+/// words. Fail-loud on an unknown name.
+fn parse_method(s: &str) -> Result<Method, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "rhf" => Ok(Method::Rhf),
+        "uhf" => Ok(Method::Uhf),
+        "dft" | "b3lyp" | "dft (b3lyp)" => Ok(Method::Dft),
+        other => Err(format!(
+            "unknown method '{other}' (expected 'rhf', 'uhf', or 'dft')"
+        )),
+    }
+}
+
+/// Parse a basis-set name; validates against the three offered in the combo.
+/// Case-insensitive on the right-hand side but returns the canonical spelling.
+fn parse_basis(s: &str) -> Result<String, String> {
+    match s.trim().to_ascii_uppercase().as_str() {
+        "STO-3G" => Ok("STO-3G".to_string()),
+        "3-21G" => Ok("3-21G".to_string()),
+        "6-31G" => Ok("6-31G".to_string()),
+        other => Err(format!(
+            "unknown basis '{other}' (expected 'STO-3G', '3-21G', or '6-31G')"
+        )),
+    }
+}
+
+/// Parse an embedding name into an [`Embedding`]. Case-insensitive. Fail-loud.
+fn parse_embedding(s: &str) -> Result<Embedding, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "mechanical" => Ok(Embedding::Mechanical),
+        "electrostatic" => Ok(Embedding::Electrostatic),
+        other => Err(format!(
+            "unknown embedding '{other}' (expected 'mechanical' or 'electrostatic')"
+        )),
+    }
+}
+
+/// Parse a thermostat name into a [`ThermostatKind`]. Case-insensitive.
+fn parse_thermostat(s: &str) -> Result<ThermostatKind, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "nve" => Ok(ThermostatKind::Nve),
+        "berendsen" => Ok(ThermostatKind::Berendsen),
+        other => Err(format!(
+            "unknown thermostat '{other}' (expected 'nve' or 'berendsen')"
+        )),
+    }
+}
+
 impl ReactdynWorkbenchState {
     /// `true` while a background run is in flight.
     pub fn is_running(&self) -> bool {
         self.run.is_some()
+    }
+
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Covers the four
+    /// enum-by-name selectors (`backend`, `geometry preset`, `method`,
+    /// `embedding`, `thermostat`, `basis`), the free-text `xyz`, and the numeric
+    /// dynamics / system-size parameters. Some controls are only *drawn* for the
+    /// matching backend / thermostat (e.g. `solvent atoms`, `T (K)`), but
+    /// `agent_set` writes the field regardless — the build step reads only the
+    /// relevant ones.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "backend",
+            "geometry preset",
+            "xyz",
+            "method",
+            "basis",
+            "embedding",
+            "thermostat",
+            "solvent atoms",
+            "cluster atoms (carbon)",
+            "dt (fs)",
+            "steps",
+            "T (K)",
+            "\u{03C4} (fs)",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Enum captions read `AgentValue::as_str` and match a
+    /// small name set; `xyz` reads a string; numeric fields read
+    /// `AgentValue::as_f64` / `AgentValue::as_i64`. Fail-loud: an unknown
+    /// caption, a wrong type, an unrecognised enum name, or a negative count
+    /// returns `Err` — never a panic, no field written on error.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        match name {
+            // -- Enum-by-name selectors --
+            "backend" => self.backend = parse_backend(value.as_str()?)?,
+            "geometry preset" => self.preset = parse_preset(value.as_str()?)?,
+            "method" => self.method = parse_method(value.as_str()?)?,
+            "basis" => self.basis = parse_basis(value.as_str()?)?,
+            "embedding" => self.embedding = parse_embedding(value.as_str()?)?,
+            "thermostat" => self.thermostat = parse_thermostat(value.as_str()?)?,
+            // -- Free-text geometry --
+            "xyz" => self.xyz = value.as_str()?.to_string(),
+            // -- System-size counts --
+            "solvent atoms" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("solvent atoms must be >= 0, got {n}"));
+                }
+                self.n_solvent = n as usize;
+            }
+            "cluster atoms (carbon)" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("cluster atoms must be >= 0, got {n}"));
+                }
+                self.n_cluster = n as usize;
+            }
+            // -- Dynamics --
+            "dt (fs)" => self.dt_fs = value.as_f64()?,
+            "steps" => {
+                let n = value.as_i64()?;
+                if n < 0 {
+                    return Err(format!("steps must be >= 0, got {n}"));
+                }
+                self.n_steps = n as usize;
+            }
+            "T (K)" => self.target_kelvin = value.as_f64()?,
+            "\u{03C4} (fs)" => self.tau_fs = value.as_f64()?,
+            other => return Err(format!("unknown Reaction Dynamics control: {other:?}")),
+        }
+        Ok(())
     }
 
     fn build_thermostat(&self) -> Thermostat {
@@ -408,6 +562,70 @@ fn start_run(s: &mut ReactdynWorkbenchState) {
     });
 }
 
+/// Run the molecular-dynamics trajectory **synchronously** (no background
+/// thread) and store it in `last` / `error`. Unlike [`start_run`] this blocks
+/// until the run finishes — used by the product self-test ([`crate::self_test`]),
+/// which needs a deterministic, already-complete trajectory to check NVE energy
+/// conservation. Drives the SAME `AimdEngine`/`QmMmEngine`/`ReactiveEngine`
+/// `run` the background path calls.
+pub(crate) fn run(app: &mut ValenxApp) {
+    let s = &mut app.reactdyn;
+    s.error = None;
+    let outcome = match s.backend {
+        Backend::Aimd => build_aimd_inputs(s).and_then(|(sys, c)| {
+            AimdEngine
+                .run(&sys, &c, &mut |_| {})
+                .map_err(|e| e.to_string())
+        }),
+        Backend::QmMm => build_qmmm_inputs(s).and_then(|(sys, c)| {
+            QmMmEngine
+                .run(&sys, &c, &mut |_| {})
+                .map_err(|e| e.to_string())
+        }),
+        Backend::Reactive => build_reactive_inputs(s).and_then(|(sys, c)| {
+            ReactiveEngine
+                .run(&sys, &c, &mut |_| {})
+                .map_err(|e| e.to_string())
+        }),
+    };
+    match outcome {
+        Ok(traj) => {
+            s.status = format!("done — {} frames", traj.frames.len());
+            s.last = Some(traj);
+            s.frame_idx = 0;
+            s.playing = false;
+            s.last_pushed = None;
+        }
+        Err(e) => {
+            s.status = "failed".into();
+            s.error = Some(e);
+        }
+    }
+}
+
+impl ReactdynWorkbenchState {
+    /// The relative total-energy drift `max|E(t) − E₀| / |E₀|` of the last
+    /// trajectory — the NVE energy-conservation diagnostic (small for a correct
+    /// velocity-Verlet integrator). `None` before the first run or for an empty
+    /// trajectory. Read-only; used by the product self-test.
+    pub(crate) fn last_energy_rel_drift(&self) -> Option<f64> {
+        let frames = &self.last.as_ref()?.frames;
+        let e0 = frames.first()?.total_hartree();
+        let denom = e0.abs().max(1e-12);
+        let max_drift = frames
+            .iter()
+            .map(|f| (f.total_hartree() - e0).abs())
+            .fold(0.0_f64, f64::max);
+        Some(max_drift / denom)
+    }
+
+    /// The current status / error line (used by the product self-test to report
+    /// why a synchronous run produced no trajectory). Read-only.
+    pub(crate) fn status_line(&self) -> String {
+        self.status.clone()
+    }
+}
+
 /// Move a finished background run's result into `last` / `error`.
 fn poll_run(s: &mut ReactdynWorkbenchState) {
     let done = if let Some(run) = &s.run {
@@ -476,8 +694,9 @@ pub fn draw_reactdyn_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     });
                     if s.backend == Backend::QmMm {
                         ui.horizontal(|ui| {
-                            ui.label("solvent atoms");
-                            ui.add(egui::DragValue::new(&mut s.n_solvent).speed(0.5));
+                            let lbl = ui.label("solvent atoms");
+                            ui.add(egui::DragValue::new(&mut s.n_solvent).speed(0.5))
+                                .labelled_by(lbl.id);
                         });
                         ui.horizontal(|ui| {
                             ui.radio_value(&mut s.embedding, Embedding::Mechanical, "mechanical")
@@ -502,8 +721,9 @@ pub fn draw_reactdyn_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     }
                     if s.backend == Backend::Reactive {
                         ui.horizontal(|ui| {
-                            ui.label("cluster atoms (carbon)");
-                            ui.add(egui::DragValue::new(&mut s.n_cluster).speed(0.5));
+                            let lbl = ui.label("cluster atoms (carbon)");
+                            ui.add(egui::DragValue::new(&mut s.n_cluster).speed(0.5))
+                                .labelled_by(lbl.id);
                         });
                         ui.label(
                             egui::RichText::new(
@@ -516,13 +736,16 @@ pub fn draw_reactdyn_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                             .small(),
                         );
                     } else {
+                        let preset_lbl = ui.label("geometry preset");
                         egui::ComboBox::from_id_source("reactdyn_preset")
                             .selected_text(s.preset.label())
                             .show_ui(ui, |ui| {
                                 for p in Preset::ALL {
                                     ui.selectable_value(&mut s.preset, p, p.label());
                                 }
-                            });
+                            })
+                            .response
+                            .labelled_by(preset_lbl.id);
                         if s.preset == Preset::Custom {
                             ui.add(
                                 egui::TextEdit::multiline(&mut s.xyz)
@@ -543,23 +766,27 @@ pub fn draw_reactdyn_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.radio_value(&mut s.method, Method::Dft, "DFT (B3LYP)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("basis");
+                        let basis_lbl = ui.label("basis");
                         egui::ComboBox::from_id_source("reactdyn_basis")
                             .selected_text(&s.basis)
                             .show_ui(ui, |ui| {
                                 for b in ["STO-3G", "3-21G", "6-31G"] {
                                     ui.selectable_value(&mut s.basis, b.to_string(), b);
                                 }
-                            });
+                            })
+                            .response
+                            .labelled_by(basis_lbl.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Dynamics").strong());
                     ui.horizontal(|ui| {
-                        ui.label("dt (fs)");
-                        ui.add(egui::DragValue::new(&mut s.dt_fs).speed(0.05));
-                        ui.label("steps");
-                        ui.add(egui::DragValue::new(&mut s.n_steps).speed(1.0));
+                        let lbl_dt = ui.label("dt (fs)");
+                        ui.add(egui::DragValue::new(&mut s.dt_fs).speed(0.05))
+                            .labelled_by(lbl_dt.id);
+                        let lbl_steps = ui.label("steps");
+                        ui.add(egui::DragValue::new(&mut s.n_steps).speed(1.0))
+                            .labelled_by(lbl_steps.id);
                     });
                     ui.horizontal(|ui| {
                         ui.radio_value(&mut s.thermostat, ThermostatKind::Nve, "NVE")
@@ -569,10 +796,12 @@ pub fn draw_reactdyn_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     });
                     if s.thermostat == ThermostatKind::Berendsen {
                         ui.horizontal(|ui| {
-                            ui.label("T (K)");
-                            ui.add(egui::DragValue::new(&mut s.target_kelvin).speed(5.0));
-                            ui.label("τ (fs)");
-                            ui.add(egui::DragValue::new(&mut s.tau_fs).speed(1.0));
+                            let lbl_t = ui.label("T (K)");
+                            ui.add(egui::DragValue::new(&mut s.target_kelvin).speed(5.0))
+                                .labelled_by(lbl_t.id);
+                            let lbl_tau = ui.label("τ (fs)");
+                            ui.add(egui::DragValue::new(&mut s.tau_fs).speed(1.0))
+                                .labelled_by(lbl_tau.id);
                         });
                     }
                     ui.label(
@@ -692,14 +921,17 @@ fn draw_results_and_playback(
     });
     ui.add(egui::Slider::new(&mut s.frame_idx, 0..=n - 1).text("frame"));
 
-    Plot::new("reactdyn_energy")
-        .height(150.0)
-        .legend(Legend::default())
-        .show(ui, |pui| {
+    managed_plot_mem_cfg(
+        ui,
+        "reactdyn_energy",
+        150.0,
+        |plot| plot.legend(Legend::default()),
+        |pui| {
             pui.line(Line::new(PlotPoints::from(pe)).name("potential"));
             pui.line(Line::new(PlotPoints::from(ke)).name("kinetic"));
             pui.line(Line::new(PlotPoints::from(tot)).name("total"));
-        });
+        },
+    );
 
     // Current-frame readout + stage the viewport mesh when the frame
     // changes (recompute bonds each frame → bonds visibly form/break).
@@ -856,6 +1088,43 @@ mod tests {
     }
 
     #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        use crate::agent_commands::AgentValue;
+        let mut s = ReactdynWorkbenchState::default();
+        // A representative integer set lands in state.
+        s.agent_set("steps", &AgentValue::Int(25)).unwrap();
+        assert_eq!(s.n_steps, 25);
+        // A float dynamics field accepts a real value.
+        s.agent_set("dt (fs)", &AgentValue::Float(0.25)).unwrap();
+        assert_eq!(s.dt_fs, 0.25);
+        // Enum-by-name selectors set their fields.
+        s.agent_set("backend", &AgentValue::Str("reactive".into()))
+            .unwrap();
+        assert_eq!(s.backend, Backend::Reactive);
+        s.agent_set("method", &AgentValue::Str("uhf".into()))
+            .unwrap();
+        assert_eq!(s.method, Method::Uhf);
+        s.agent_set("basis", &AgentValue::Str("6-31g".into()))
+            .unwrap();
+        assert_eq!(s.basis, "6-31G");
+        // The non-ASCII τ caption resolves.
+        s.agent_set("\u{03C4} (fs)", &AgentValue::Float(40.0))
+            .unwrap();
+        assert_eq!(s.tau_fs, 40.0);
+        // Unknown caption -> Err.
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Unknown enum name -> Err.
+        assert!(s
+            .agent_set("method", &AgentValue::Str("ccsd".into()))
+            .is_err());
+        // Type mismatch (string into the integer steps) -> Err, field untouched.
+        assert!(s
+            .agent_set("steps", &AgentValue::Str("lots".into()))
+            .is_err());
+        assert_eq!(s.n_steps, 25, "rejected set leaves field untouched");
+    }
+
+    #[test]
     fn bad_custom_xyz_fails_loud() {
         let s = ReactdynWorkbenchState {
             preset: Preset::Custom,
@@ -933,5 +1202,45 @@ mod tests {
             .expect("reactive run");
         assert_eq!(traj.system.n_atoms(), 6);
         assert_eq!(traj.frames.len(), 6);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
+mod headless_ui_tests {
+    use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
+
+    fn draw_and_collect_nodes(app: &mut crate::ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_reactdyn_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        let mut app = crate::ValenxApp::default();
+        app.show_reactdyn_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            !spin_buttons.is_empty(),
+            "reactdyn panels should have at least one numeric spin button"
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every reactdyn DragValue must be labelled_by its caption (AI-drivable name)"
+        );
     }
 }

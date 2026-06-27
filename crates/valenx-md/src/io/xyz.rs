@@ -20,6 +20,7 @@ use nalgebra::Vector3;
 
 use crate::error::{MdError, Result};
 use crate::io::pdb::element_mass;
+use crate::io::trajectory::Trajectory;
 use crate::io::ANGSTROM_PER_NM;
 use crate::system::{Atom, System, Topology};
 
@@ -66,6 +67,32 @@ pub fn read_xyz_frames(text: &str) -> Result<Vec<Vec<Vector3<f64>>>> {
         return Err(MdError::parse("xyz", "file is empty"));
     }
     Ok(frames)
+}
+
+/// Parses a multi-frame XYZ string into a [`Trajectory`].
+///
+/// Coordinates are converted from Ångström to the crate's nm. Every
+/// frame must declare the same atom count (the first frame's count
+/// fixes the trajectory width); the XYZ format carries no per-frame
+/// time, so the trajectory's nominal frame spacing is set to `dt` ps.
+///
+/// # Errors
+/// [`MdError::Parse`] on an empty file or any malformed frame;
+/// [`MdError::DimensionMismatch`] if a later frame's atom count differs
+/// from the first; [`MdError::Invalid`] if `dt` is not finite and
+/// positive.
+pub fn read_xyz_trajectory(text: &str, dt: f64) -> Result<Trajectory> {
+    let frames = read_xyz_frames(text)?;
+    // `read_xyz_frames` already guarantees at least one frame and a
+    // consistent atom count across frames, but it may legitimately be a
+    // zero-atom frame ("0\ncomment\n"); `Trajectory::new` rejects that
+    // with a clear error, so surface it rather than panicking.
+    let natoms = frames[0].len();
+    let mut traj = Trajectory::new(natoms, dt)?;
+    for frame in frames {
+        traj.push_frame(frame)?;
+    }
+    Ok(traj)
 }
 
 /// Reads one frame from a line iterator. Returns `Ok(None)` at clean
@@ -211,6 +238,51 @@ H   -0.240   0.927   0.000
     fn frame_count_mismatch_is_rejected() {
         let bad = "2\na\nO 0 0 0\nH 1 0 0\n1\nb\nO 0 0 0\n";
         assert!(read_xyz_frames(bad).is_err());
+    }
+
+    #[test]
+    fn two_frame_trajectory_has_exact_positions() {
+        // Two frames, two atoms, distinct known coordinates (Å). The
+        // second frame nudges both atoms by +1 Å in x.
+        let xyz = "\
+2
+frame 0
+C   0.000   1.000   2.000
+O   3.000   4.000   5.000
+2
+frame 1
+C   1.000   1.000   2.000
+O   4.000   4.000   5.000
+";
+        let traj = read_xyz_trajectory(xyz, 0.001).unwrap();
+        assert_eq!(traj.len(), 2);
+        assert_eq!(traj.n_atoms(), 2);
+        // Å -> nm conversion is a factor of 10.
+        let f0 = traj.frame(0).unwrap();
+        assert!((f0[0] - Vector3::new(0.0, 0.1, 0.2)).norm() < 1e-9);
+        assert!((f0[1] - Vector3::new(0.3, 0.4, 0.5)).norm() < 1e-9);
+        let f1 = traj.frame(1).unwrap();
+        assert!((f1[0] - Vector3::new(0.1, 0.1, 0.2)).norm() < 1e-9);
+        assert!((f1[1] - Vector3::new(0.4, 0.4, 0.5)).norm() < 1e-9);
+        // XYZ carries no per-frame time / box.
+        assert_eq!(traj.frame_time(0), None);
+        assert!(traj.frame_box(0).is_none());
+    }
+
+    #[test]
+    fn trajectory_rejects_malformed_input() {
+        // Empty file.
+        assert!(read_xyz_trajectory("", 0.001).is_err());
+        // Bad atom-count line.
+        assert!(read_xyz_trajectory("notanumber\nc\nC 0 0 0\n", 0.001).is_err());
+        // Short final frame (declares 2 atoms, supplies 1).
+        let short = "2\na\nC 0 0 0\nO 1 0 0\n2\nb\nC 0 0 0\n";
+        assert!(read_xyz_trajectory(short, 0.001).is_err());
+        // Inconsistent atom count between frames.
+        let drift = "2\na\nC 0 0 0\nO 1 0 0\n1\nb\nC 0 0 0\n";
+        assert!(read_xyz_trajectory(drift, 0.001).is_err());
+        // Non-positive dt is rejected by Trajectory::new.
+        assert!(read_xyz_trajectory("1\nc\nC 0 0 0\n", 0.0).is_err());
     }
 
     #[test]

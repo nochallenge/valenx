@@ -1,0 +1,27 @@
+[package]
+name        = "valenx-uas"
+description = "Small-UAS (drone) design → integrated performance → trade-study loop, plus DEFENSIVE counter-UAS detect/track/intercept GEOMETRY. Composes valenx-rotor (BEMT), valenx-drone (multirotor hover momentum theory), and valenx-fixedwing (parabolic-polar point performance) into a single UasVehicle for multirotor and fixed-wing: hover power/endurance, electric-Breguet & cruise-power range, payload margin, an N-parameter design sweep with a Pareto (non-dominated) front, and pure-kinematic constant-speed intercept time/point + sensor detection timeline. Dual-use: civilian drone design is the same tool; counter-UAS is defensive intercept GEOMETRY only — no weapon employment, targeting, or lethality. Research/educational grade."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Reused in-house physics crates — composed, not reimplemented.
+valenx-drone     = { path = "../valenx-drone" }
+valenx-rotor     = { path = "../valenx-rotor" }
+valenx-fixedwing = { path = "../valenx-fixedwing" }
+
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

@@ -51,6 +51,39 @@ impl Default for PipingWorkbenchState {
     }
 }
 
+impl PipingWorkbenchState {
+    /// The user-visible captions of every (numeric) control the agent bridge can
+    /// set via `SetControl` (see [`crate::agent_commands`]). Returned by
+    /// `ListControls`. The pipe size / schedule / material are combo selections
+    /// (string / enum) and are not part of this scalar setter; only the section
+    /// `length (mm)` is a settable numeric.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &["length (mm)"]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the
+    /// wrong type / non-positive value returns `Err(String)` — never a panic.
+    /// `length (mm)` must be a finite `> 0` (mirrors `run_piping`'s check).
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        match name {
+            "length (mm)" => {
+                let v = value.as_f64()?;
+                if !(v.is_finite() && v > 0.0) {
+                    return Err(format!("length must be > 0, got {v}"));
+                }
+                self.length_mm = v;
+            }
+            other => return Err(format!("unknown Piping control: {other:?}")),
+        }
+        Ok(())
+    }
+}
+
 /// Draw the Piping Workbench right-side panel. A no-op when the
 /// `show_piping_workbench` toggle is off.
 pub fn draw_piping_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
@@ -75,14 +108,16 @@ pub fn draw_piping_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
-                    ui.label(egui::RichText::new("Nominal pipe size").strong());
+                    let nps_lbl = ui.label(egui::RichText::new("Nominal pipe size").strong());
                     egui::ComboBox::from_id_source("valenx_piping_nps")
                         .selected_text(format!("NPS {}", s.nominal_size))
                         .show_ui(ui, |ui| {
                             for nps in NPS_OPTIONS {
                                 ui.selectable_value(&mut s.nominal_size, (*nps).to_string(), *nps);
                             }
-                        });
+                        })
+                        .response
+                        .labelled_by(nps_lbl.id);
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Schedule").strong());
@@ -105,8 +140,9 @@ pub fn draw_piping_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Geometry").strong());
                     ui.horizontal(|ui| {
-                        ui.label("length (mm)");
-                        ui.add(egui::DragValue::new(&mut s.length_mm).speed(10.0));
+                        let cap = ui.label("length (mm)");
+                        ui.add(egui::DragValue::new(&mut s.length_mm).speed(10.0))
+                            .labelled_by(cap.id);
                     });
 
                     ui.add_space(6.0);
@@ -331,6 +367,24 @@ pub(crate) fn piping_product() -> crate::WorkspaceProduct {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_commands::AgentValue;
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        let mut s = PipingWorkbenchState::default();
+        s.agent_set("length (mm)", &AgentValue::Float(2500.0))
+            .unwrap();
+        assert_eq!(s.length_mm, 2500.0);
+        // Unknown caption -> Err (no panic).
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (string into a numeric field) -> Err.
+        assert!(s
+            .agent_set("length (mm)", &AgentValue::Str("long".into()))
+            .is_err());
+        // Non-positive -> Err, field untouched.
+        assert!(s.agent_set("length (mm)", &AgentValue::Float(0.0)).is_err());
+        assert_eq!(s.length_mm, 2500.0, "rejected set leaves field untouched");
+    }
 
     #[test]
     fn default_state_is_idle() {
@@ -500,5 +554,43 @@ mod headless_ui_tests {
         run_piping(&mut app.piping);
         app.piping.error = Some("invalid pipe parameters".to_string());
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        use egui::accesskit::{Node, NodeId, Role};
+
+        let mut app = ValenxApp::default();
+        app.show_piping_workbench = true;
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_piping_workbench(&mut app, ctx);
+        });
+        let nodes: Vec<(NodeId, Node)> = out
+            .platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes;
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            !spin_buttons.is_empty(),
+            "expected the piping numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every piping DragValue must be labelled_by its caption"
+        );
+        let caption = "length (mm)";
+        assert!(
+            nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+            "caption '{caption}' should be a named node in the a11y tree"
+        );
     }
 }

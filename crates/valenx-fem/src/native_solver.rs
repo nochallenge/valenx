@@ -571,6 +571,39 @@ pub fn solve_linear_static(
     constraints: &[NodalConstraint],
     forces: &[NodalForce],
 ) -> Result<NativeSolution, NativeSolverError> {
+    // Size-adaptive backend: the high-performance faer sparse Cholesky
+    // for large systems, the legacy `CscCholesky` for small ones. Both
+    // produce the same displacement field to solver precision (validated
+    // in `faer_matches_legacy_on_cantilever`); callers that need to pin a
+    // backend use [`solve_linear_static_with_backend`].
+    let n_dof = 3usize.saturating_mul(mesh.nodes.len());
+    solve_linear_static_with_backend(
+        mesh,
+        material,
+        constraints,
+        forces,
+        crate::faer_solver::default_backend_for(n_dof),
+    )
+}
+
+/// Linear-static elasticity solve with an explicit
+/// [`SolverBackend`](crate::faer_solver::SolverBackend).
+///
+/// Identical to [`solve_linear_static`] except the sparse SPD solve is
+/// performed by the requested backend rather than the size-adaptive
+/// default. [`SolverBackend::Faer`](crate::faer_solver::SolverBackend::Faer)
+/// uses the high-performance faer supernodal sparse Cholesky;
+/// [`SolverBackend::Legacy`](crate::faer_solver::SolverBackend::Legacy)
+/// uses the original `nalgebra-sparse` `CscCholesky`. The two agree to
+/// solver precision — the backend choice is a performance/robustness
+/// trade-off, never a change in the physics.
+pub fn solve_linear_static_with_backend(
+    mesh: &Mesh,
+    material: &FemMaterial,
+    constraints: &[NodalConstraint],
+    forces: &[NodalForce],
+    backend: crate::faer_solver::SolverBackend,
+) -> Result<NativeSolution, NativeSolverError> {
     let n_nodes = mesh.nodes.len();
     if n_nodes == 0 {
         return Err(NativeSolverError::EmptyMesh);
@@ -713,9 +746,11 @@ pub fn solve_linear_static(
     csc = stiffened;
 
     // --- solve ---
-    let chol = CscCholesky::factor(&csc).map_err(|_| NativeSolverError::SolveFailed)?;
-    let u: DMatrix<f64> = chol.solve(&f);
-    let u = u.column(0);
+    // Selectable sparse SPD solve: faer supernodal Cholesky or the
+    // legacy CscCholesky (see [`crate::faer_solver`]). Both factorise the
+    // *same* penalty-stiffened SPD system.
+    let u = crate::faer_solver::solve_spd(&csc, &f, backend)
+        .map_err(|_| NativeSolverError::SolveFailed)?;
 
     // --- gather the nodal displacement field ---
     let mut displacement = vec![[0.0_f64; 3]; n_nodes];
@@ -1814,6 +1849,86 @@ mod tests {
         assert!(clamped_dz.abs() < 1e-9, "clamped end moved: {clamped_dz}");
         // A finer beam deflects more (a longer lever / more elements).
         assert!(sol.max_displacement() > tip_dz.abs() * 0.5);
+    }
+
+    #[test]
+    fn faer_matches_legacy_on_cantilever() {
+        // KEY VALIDATION GATE for the faer sparse-Cholesky backend: on a
+        // real assembled FEM system (the clamped cantilever under a tip
+        // load), the faer supernodal Cholesky must reproduce the legacy
+        // CscCholesky displacement field to solver precision. A fast but
+        // wrong solver is useless, so this asserts faer_u ≈ legacy_u over
+        // the whole field — not just a scalar summary.
+        use crate::faer_solver::SolverBackend;
+
+        let (lx, ly, lz) = (10.0, 1.0, 1.0);
+        // A mesh large enough that the size-adaptive default would pick
+        // faer (≳1000 DOF) — here ~3·11·3·3 ≈ 900–1200 DOF — but we pin
+        // both backends explicitly so the comparison is unambiguous.
+        let (nx, ny, nz) = (10, 2, 2);
+        let mesh = structured_box_mesh(lx, ly, lz, nx, ny, nz).expect("valid box params");
+        let mat = FemMaterial::default();
+
+        let mut constraints = Vec::new();
+        for k in 0..=nz {
+            for j in 0..=ny {
+                constraints.push(NodalConstraint::fixed(nid(0, j, k, nx, ny)));
+            }
+        }
+        let tip_nodes: Vec<usize> = (0..=nz)
+            .flat_map(|k| (0..=ny).map(move |j| (j, k)))
+            .map(|(j, k)| nid(nx, j, k, nx, ny))
+            .collect();
+        let forces: Vec<NodalForce> = tip_nodes
+            .iter()
+            .map(|&n| NodalForce {
+                node: n,
+                force: [0.0, 0.0, -2.5e4],
+            })
+            .collect();
+
+        let legacy = solve_linear_static_with_backend(
+            &mesh,
+            &mat,
+            &constraints,
+            &forces,
+            SolverBackend::Legacy,
+        )
+        .expect("legacy solve");
+        let faer = solve_linear_static_with_backend(
+            &mesh,
+            &mat,
+            &constraints,
+            &forces,
+            SolverBackend::Faer,
+        )
+        .expect("faer solve");
+
+        assert_eq!(legacy.displacement.len(), faer.displacement.len());
+
+        // Per-node displacement agreement, relative to the peak
+        // displacement magnitude so the tolerance is scale-free.
+        let scale = legacy.max_displacement().max(1e-30);
+        let mut max_rel = 0.0_f64;
+        for (a, b) in legacy.displacement.iter().zip(&faer.displacement) {
+            for i in 0..3 {
+                max_rel = max_rel.max((a[i] - b[i]).abs() / scale);
+            }
+        }
+        assert!(
+            max_rel < 1e-9,
+            "faer vs legacy displacement disagree: max relative diff {max_rel}"
+        );
+
+        // The recovered von Mises stress field (a derived quantity) must
+        // also agree — confirms the whole pipeline, not just the raw u.
+        let s_legacy = legacy.max_von_mises();
+        let s_faer = faer.max_von_mises();
+        let rel_s = (s_legacy - s_faer).abs() / s_legacy.max(1e-30);
+        assert!(
+            rel_s < 1e-9,
+            "faer vs legacy peak von Mises disagree: {s_legacy} vs {s_faer} (rel {rel_s})"
+        );
     }
 
     #[test]

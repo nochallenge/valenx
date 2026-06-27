@@ -133,49 +133,67 @@ pub fn draw_bjt_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Transistor").strong());
                     ui.horizontal(|ui| {
-                        ui.label("gain β");
-                        ui.add(egui::DragValue::new(&mut s.beta).speed(1.0));
+                        let lbl = ui.label("gain β");
+                        ui.add(egui::DragValue::new(&mut s.beta).speed(1.0))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("gain β");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("VBE (V)");
-                        ui.add(egui::DragValue::new(&mut s.vbe).speed(0.01));
+                        let lbl = ui.label("VBE (V)");
+                        ui.add(egui::DragValue::new(&mut s.vbe).speed(0.01))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("VBE (V)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Vce_sat (V)");
-                        ui.add(egui::DragValue::new(&mut s.vce_sat).speed(0.01));
+                        let lbl = ui.label("Vce_sat (V)");
+                        ui.add(egui::DragValue::new(&mut s.vce_sat).speed(0.01))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("Vce_sat (V)");
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Network").strong());
                     ui.horizontal(|ui| {
-                        ui.label("supply Vcc (V)");
-                        ui.add(egui::DragValue::new(&mut s.vcc).speed(0.5));
+                        let lbl = ui.label("supply Vcc (V)");
+                        ui.add(egui::DragValue::new(&mut s.vcc).speed(0.5))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("supply Vcc (V)");
                     });
                     match s.topology {
                         Topology::Divider => {
                             ui.horizontal(|ui| {
-                                ui.label("R1 (kΩ)");
-                                ui.add(egui::DragValue::new(&mut s.r1_kohm).speed(1.0));
+                                let lbl = ui.label("R1 (kΩ)");
+                                ui.add(egui::DragValue::new(&mut s.r1_kohm).speed(1.0))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("R1 (kΩ)");
                             });
                             ui.horizontal(|ui| {
-                                ui.label("R2 (kΩ)");
-                                ui.add(egui::DragValue::new(&mut s.r2_kohm).speed(1.0));
+                                let lbl = ui.label("R2 (kΩ)");
+                                ui.add(egui::DragValue::new(&mut s.r2_kohm).speed(1.0))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("R2 (kΩ)");
                             });
                         }
                         Topology::FixedBase => {
                             ui.horizontal(|ui| {
-                                ui.label("Rb (kΩ)");
-                                ui.add(egui::DragValue::new(&mut s.rb_kohm).speed(5.0));
+                                let lbl = ui.label("Rb (kΩ)");
+                                ui.add(egui::DragValue::new(&mut s.rb_kohm).speed(5.0))
+                                    .labelled_by(lbl.id)
+                                    .on_hover_text("Rb (kΩ)");
                             });
                         }
                     }
                     ui.horizontal(|ui| {
-                        ui.label("Rc (kΩ)");
-                        ui.add(egui::DragValue::new(&mut s.rc_kohm).speed(0.1));
+                        let lbl = ui.label("Rc (kΩ)");
+                        ui.add(egui::DragValue::new(&mut s.rc_kohm).speed(0.1))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("Rc (kΩ)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Re (kΩ)");
-                        ui.add(egui::DragValue::new(&mut s.re_kohm).speed(0.1));
+                        let lbl = ui.label("Re (kΩ)");
+                        ui.add(egui::DragValue::new(&mut s.re_kohm).speed(0.1))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("Re (kΩ)");
                     });
 
                     ui.add_space(6.0);
@@ -616,12 +634,28 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_bjt_workbench(app, ctx);
         });
+    }
+
+    /// As `draw_workbench`, but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_bjt_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -637,5 +671,46 @@ mod headless_ui_tests {
         app.show_bjt_workbench = true;
         run_bjt(&mut app.bjt);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // The transistor + network DragValues are SpinButtons; each must be
+        // `labelled_by` its caption (egui clears a DragValue's own Name), so an
+        // AI / screen reader can find the control by the caption text. The
+        // default topology is the voltage divider, so the visible controls are
+        // β, VBE, Vce_sat, Vcc, R1, R2, Rc, Re.
+        let mut app = ValenxApp::default();
+        app.show_bjt_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // β, VBE, Vce_sat, Vcc, R1, R2, Rc, Re (default divider topology).
+        assert!(
+            spin_buttons.len() >= 8,
+            "expected the BJT numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every BJT DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["gain β", "supply Vcc (V)", "Rc (kΩ)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        // The Analyze button stays a named, invokable node.
+        assert!(
+            nodes.iter().any(|(_, n)| n.role() == Role::Button
+                && n.name().is_some_and(|s| s.contains("Analyze"))),
+            "the Analyze button is a named, invokable node"
+        );
     }
 }

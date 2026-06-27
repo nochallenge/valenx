@@ -56,6 +56,100 @@ impl Default for GearsWorkbenchState {
     }
 }
 
+impl GearsWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`
+    /// so an agent can discover the name space; each string matches exactly the
+    /// caption the form draws (and what the widget is `labelled_by`).
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "module m (mm)",
+            "teeth z",
+            "pressure angle (°)",
+            "helix angle (°)",
+            "face width (mm)",
+            "mating teeth",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the
+    /// wrong type / out of range returns `Err(String)` (the bridge turns it into
+    /// a `warn` feed note) — never a panic, and no field is written on error.
+    /// Ranges mirror the workbench's own validity checks (module / face width
+    /// `> 0`, tooth counts `>= 1`, pressure angle in `(0, 90)`, helix angle in
+    /// `[0, 90)`), so a value that would make the design invalid is rejected
+    /// here rather than producing a downstream error.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        match name {
+            "module m (mm)" => {
+                let v = value.as_f64()?;
+                if !(v.is_finite() && v > 0.0) {
+                    return Err(format!("module m must be > 0, got {v}"));
+                }
+                self.module_mm = v;
+            }
+            "teeth z" => {
+                let z = value.as_i64()?;
+                if !(1..=u32::MAX as i64).contains(&z) {
+                    return Err(format!("teeth z must be in [1, {}], got {z}", u32::MAX));
+                }
+                self.teeth = z as u32;
+            }
+            "pressure angle (°)" => {
+                let v = value.as_f64()?;
+                if !(v.is_finite() && v > 0.0 && v < 90.0) {
+                    return Err(format!("pressure angle must be in (0, 90), got {v}"));
+                }
+                self.pressure_angle_deg = v;
+            }
+            "helix angle (°)" => {
+                let v = value.as_f64()?;
+                if !(v.is_finite() && (0.0..90.0).contains(&v)) {
+                    return Err(format!("helix angle must be in [0, 90), got {v}"));
+                }
+                self.helix_angle_deg = v;
+            }
+            "face width (mm)" => {
+                let v = value.as_f64()?;
+                if !(v.is_finite() && v > 0.0) {
+                    return Err(format!("face width must be > 0, got {v}"));
+                }
+                self.face_width_mm = v;
+            }
+            "mating teeth" => {
+                let z = value.as_i64()?;
+                if !(1..=u32::MAX as i64).contains(&z) {
+                    return Err(format!(
+                        "mating teeth must be in [1, {}], got {z}",
+                        u32::MAX
+                    ));
+                }
+                self.mate_teeth = z as u32;
+            }
+            other => return Err(format!("unknown Gears control: {other:?}")),
+        }
+        Ok(())
+    }
+
+    /// The current computed-result text for the agent `ReadReadout` bridge (see
+    /// [`crate::agent_commands`]): the same `Result` string the panel renders
+    /// once the gear design has been computed, else the last `error`, else `None`
+    /// when it has not been run yet. Read-only — lets an agent read the answer
+    /// back after driving a compute, closing the live-driving loop.
+    pub fn agent_readout(&self) -> Option<String> {
+        if !self.result.is_empty() {
+            Some(self.result.clone())
+        } else {
+            self.error.clone()
+        }
+    }
+}
+
 /// Draw the Gears Workbench right-side panel. A no-op when the
 /// `show_gears_workbench` toggle is off.
 pub fn draw_gears_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
@@ -90,32 +184,50 @@ pub fn draw_gears_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Geometry").strong());
+                    // Associate each numeric `DragValue` with its caption via
+                    // `labelled_by`, so the spin button carries the caption as
+                    // its accessibility / UI-Automation Name (egui clears a
+                    // DragValue's own Name, leaving it anonymous to a screen
+                    // reader / AI driver otherwise); the hover text mirrors the
+                    // caption for a mouse user.
                     ui.horizontal(|ui| {
-                        ui.label("module m (mm)");
-                        ui.add(egui::DragValue::new(&mut s.module_mm).speed(0.05));
+                        let m = ui.label("module m (mm)");
+                        ui.add(egui::DragValue::new(&mut s.module_mm).speed(0.05))
+                            .labelled_by(m.id)
+                            .on_hover_text("Module m (mm) — pitch diameter = m·z");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("teeth z");
-                        ui.add(egui::DragValue::new(&mut s.teeth).speed(1.0));
+                        let z = ui.label("teeth z");
+                        ui.add(egui::DragValue::new(&mut s.teeth).speed(1.0))
+                            .labelled_by(z.id)
+                            .on_hover_text("Tooth count z");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("pressure angle (°)");
-                        ui.add(egui::DragValue::new(&mut s.pressure_angle_deg).speed(0.5));
+                        let pa = ui.label("pressure angle (°)");
+                        ui.add(egui::DragValue::new(&mut s.pressure_angle_deg).speed(0.5))
+                            .labelled_by(pa.id)
+                            .on_hover_text("Pressure angle α (degrees)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("helix angle (°)");
-                        ui.add(egui::DragValue::new(&mut s.helix_angle_deg).speed(0.5));
+                        let ha = ui.label("helix angle (°)");
+                        ui.add(egui::DragValue::new(&mut s.helix_angle_deg).speed(0.5))
+                            .labelled_by(ha.id)
+                            .on_hover_text("Helix angle β (degrees; 0 for spur)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("face width (mm)");
-                        ui.add(egui::DragValue::new(&mut s.face_width_mm).speed(0.5));
+                        let fw = ui.label("face width (mm)");
+                        ui.add(egui::DragValue::new(&mut s.face_width_mm).speed(0.5))
+                            .labelled_by(fw.id)
+                            .on_hover_text("Face width (mm)");
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Mesh").strong());
                     ui.horizontal(|ui| {
-                        ui.label("mating teeth");
-                        ui.add(egui::DragValue::new(&mut s.mate_teeth).speed(1.0));
+                        let mt = ui.label("mating teeth");
+                        ui.add(egui::DragValue::new(&mut s.mate_teeth).speed(1.0))
+                            .labelled_by(mt.id)
+                            .on_hover_text("Mating gear tooth count (for the ratio)");
                     });
 
                     // Live hint: the pitch (reference) diameter d = m·z.
@@ -251,6 +363,13 @@ fn draw_profile_preview(ui: &mut egui::Ui, pts: &[Vector3<f64>]) {
 /// Build a [`GearSpec`] from the form, validate it, and format the
 /// design-scalar readout. Extracted from the draw closure so it is
 /// unit-testable.
+/// Run the gear geometry compute (the in-panel **Analyze** action). Factored
+/// out so the button and the product self-test ([`crate::self_test`]) share one
+/// path.
+pub(crate) fn run(app: &mut ValenxApp) {
+    run_gears(&mut app.gears);
+}
+
 fn run_gears(s: &mut GearsWorkbenchState) {
     s.error = None;
 
@@ -532,6 +651,28 @@ pub(crate) fn gear_product() -> crate::WorkspaceProduct {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_commands::AgentValue;
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        let mut s = GearsWorkbenchState::default();
+        // A representative numeric set lands in state.
+        s.agent_set("module m (mm)", &AgentValue::Float(2.5))
+            .unwrap();
+        assert_eq!(s.module_mm, 2.5);
+        // An integer caption accepts a whole number.
+        s.agent_set("teeth z", &AgentValue::Int(31)).unwrap();
+        assert_eq!(s.teeth, 31);
+        // Unknown caption -> Err (no panic).
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (string into a numeric field) -> Err.
+        assert!(s
+            .agent_set("module m (mm)", &AgentValue::Str("big".into()))
+            .is_err());
+        // Out-of-range numeric -> Err, field unchanged.
+        assert!(s.agent_set("teeth z", &AgentValue::Int(0)).is_err());
+        assert_eq!(s.teeth, 31, "rejected set leaves the field untouched");
+    }
 
     #[test]
     fn preview_profile_for_default_is_a_closed_outline() {
@@ -744,6 +885,7 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     /// Render the whole workbench panel once in a headless egui context.
     fn draw_workbench(app: &mut ValenxApp) {
@@ -751,6 +893,21 @@ mod headless_ui_tests {
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_gears_workbench(app, ctx);
         });
+    }
+
+    /// As [`draw_workbench`], but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_gears_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -774,5 +931,50 @@ mod headless_ui_tests {
         run_gears(&mut app.gears);
         app.gears.error = Some("invalid gear parameters".to_string());
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // The geometry + mesh DragValues are SpinButtons; each must be
+        // `labelled_by` its caption (egui clears a DragValue's own Name), so an
+        // AI / screen reader can find the control by the caption text.
+        let mut app = ValenxApp::default();
+        app.show_gears_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // module, teeth, pressure angle, helix angle, face width, mating teeth.
+        assert!(
+            spin_buttons.len() >= 6,
+            "expected the gear numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every gear DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["module m (mm)", "teeth z", "mating teeth"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        // The Analyze button and the family radio buttons stay named/invokable.
+        assert!(
+            nodes.iter().any(|(_, n)| n.role() == Role::Button
+                && n.name().is_some_and(|s| s.contains("Analyze"))),
+            "the Analyze button is a named, invokable node"
+        );
+        assert!(
+            nodes
+                .iter()
+                .any(|(_, n)| n.role() == Role::RadioButton && n.name() == Some("Spur")),
+            "the Spur family radio is a named, selectable node"
+        );
     }
 }

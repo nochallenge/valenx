@@ -31,8 +31,9 @@
 //!   available for systems the force field cannot type.
 //! - **Nonbonded** ([`nonbonded`]) — cutoff + shifted Lennard-Jones,
 //!   direct Coulomb with reaction-field correction, an Ewald / PME v1,
-//!   a cell list + Verlet neighbour list, and the minimum-image
-//!   convention.
+//!   the Wolf damped-shifted-force electrostatics (a mesh-free Ewald
+//!   alternative), a cell list + Verlet neighbour list, and the
+//!   minimum-image convention.
 //! - **Bonded** ([`bonded`]) — harmonic bonds, harmonic angles,
 //!   periodic and Ryckaert-Bellemans proper dihedrals, harmonic
 //!   improper dihedrals — each returning energy *and* analytic forces.
@@ -51,6 +52,10 @@
 //! - **Coarse-grained & implicit solvent** ([`coarse`], [`implicit`])
 //!   — an oxDNA-class coarse-grained DNA bead model and a
 //!   generalized-Born implicit-solvent model.
+//! - **Monte Carlo** ([`mc`]) — a Metropolis Monte Carlo driver that
+//!   samples the NVT ensemble with single-particle translation moves
+//!   over any [`mc::EnergyModel`] (e.g. the crate's force terms),
+//!   driven by the same deterministic seeded RNG.
 //! - **Driver** ([`sim`]) — the [`Simulation`] type wires a system,
 //!   force field, integrator and thermostat into a runnable loop.
 //!
@@ -118,6 +123,7 @@ pub mod forcefield;
 pub mod implicit;
 pub mod integrate;
 pub mod io;
+pub mod mc;
 pub mod minimize;
 pub mod nonbonded;
 pub mod pbc;
@@ -141,7 +147,9 @@ pub use system::{Angle, Atom, Bond, Dihedral, Improper, System, Topology};
 
 pub use bonded::{EnergyForce, ForceTerm};
 pub use integrate::Integrator;
+pub use mc::{EnergyModel, FnEnergy, ForceTermEnergy, McStats, MonteCarlo};
 pub use nonbonded::neighbor::NeighborList;
+pub use nonbonded::wolf::Wolf;
 pub use sim::{Simulation, SimulationReport};
 
 #[cfg(test)]

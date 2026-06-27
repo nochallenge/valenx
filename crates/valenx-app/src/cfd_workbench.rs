@@ -13,11 +13,12 @@
 //! toggled from the View menu.
 
 use eframe::egui;
-use egui_plot::{Line, Plot, PlotPoints, VLine};
+use egui_plot::{Line, PlotPoints, VLine};
 
 use valenx_cfd_native::{solve_simple, Boundaries, FlowSolution, Fluid, Grid, SimpleControls};
 
 use crate::background::{BackgroundJob, JobState};
+use crate::plot_ui::managed_plot_mem_cfg;
 use crate::ValenxApp;
 
 /// Which canonical flow case the workbench solves.
@@ -142,6 +143,101 @@ fn flow_regime(re: f64, case: CfdCase) -> FlowRegime {
     }
 }
 
+impl CfdWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`;
+    /// each string matches exactly the caption the form draws. The drive-speed
+    /// control's caption is **case-dependent** (`lid speed U (m/s)` for the
+    /// cavity, `inlet speed U (m/s)` for the channel) — both spellings address
+    /// the same `speed` field in [`agent_set`](Self::agent_set); the neutral
+    /// `drive speed U (m/s)` is listed here.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "nx",
+            "ny",
+            "Lx",
+            "Ly",
+            "density ρ (kg/m³)",
+            "kinematic ν (m²/s)",
+            "drive speed U (m/s)",
+            "max SIMPLE iterations",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the
+    /// wrong type / out of range returns `Err(String)` — never a panic. Ranges
+    /// mirror `validate_inputs`: grid cells `nx`/`ny >= 1`, domain `Lx`/`Ly`
+    /// and fluid `density`/`viscosity` finite `> 0`, the SIMPLE iteration cap
+    /// `>= 1`. The drive speed accepts any finite value (a negative drive is a
+    /// valid reversed lid/inlet). Both case-dependent speed captions
+    /// (`lid speed U (m/s)` / `inlet speed U (m/s)`) plus the neutral
+    /// `drive speed U (m/s)` map to the same field.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        // A finite, strictly-positive real (domain / fluid props).
+        let positive = |v: f64, what: &str| -> Result<f64, String> {
+            if v.is_finite() && v > 0.0 {
+                Ok(v)
+            } else {
+                Err(format!("{what} must be > 0, got {v}"))
+            }
+        };
+        match name {
+            "nx" => {
+                let n = value.as_i64()?;
+                if n < 1 {
+                    return Err(format!("nx must be >= 1, got {n}"));
+                }
+                self.nx = n as usize;
+            }
+            "ny" => {
+                let n = value.as_i64()?;
+                if n < 1 {
+                    return Err(format!("ny must be >= 1, got {n}"));
+                }
+                self.ny = n as usize;
+            }
+            "Lx" => self.lx = positive(value.as_f64()?, "Lx")?,
+            "Ly" => self.ly = positive(value.as_f64()?, "Ly")?,
+            "density ρ (kg/m³)" => self.density = positive(value.as_f64()?, "density")?,
+            "kinematic ν (m²/s)" => self.viscosity = positive(value.as_f64()?, "viscosity")?,
+            "drive speed U (m/s)" | "lid speed U (m/s)" | "inlet speed U (m/s)" => {
+                let v = value.as_f64()?;
+                if !v.is_finite() {
+                    return Err(format!("drive speed U must be finite, got {v}"));
+                }
+                self.speed = v;
+            }
+            "max SIMPLE iterations" => {
+                let n = value.as_i64()?;
+                if n < 1 {
+                    return Err(format!("max SIMPLE iterations must be >= 1, got {n}"));
+                }
+                self.max_iterations = n as usize;
+            }
+            other => return Err(format!("unknown CFD control: {other:?}")),
+        }
+        Ok(())
+    }
+
+    /// The current computed-result text for the agent `ReadReadout` bridge (see
+    /// [`crate::agent_commands`]): the same `Result` string the panel renders
+    /// when a solve has produced one, else the last `error`, else `None` when the
+    /// case has not been run yet. Read-only — closes the live-driving loop by
+    /// letting an agent read the answer back after a `RunCommand`/solve.
+    pub fn agent_readout(&self) -> Option<String> {
+        if !self.result.is_empty() {
+            Some(self.result.clone())
+        } else {
+            self.error.clone()
+        }
+    }
+}
+
 /// Draw the CFD Workbench right-side panel. A no-op when the
 /// `show_cfd_workbench` toggle is off.
 pub fn draw_cfd_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
@@ -200,36 +296,56 @@ pub(crate) fn cfd_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Grid — staggered finite volume").strong());
+                    // Associate each numeric `DragValue` with its caption via
+                    // `labelled_by` so the spin button carries the caption as its
+                    // accessibility / UI-Automation Name (egui clears a
+                    // DragValue's own Name, so without this it is anonymous to a
+                    // screen reader / AI driver). The hover text mirrors the
+                    // caption for a mouse user.
                     ui.horizontal(|ui| {
-                        ui.label("nx");
-                        ui.add(egui::DragValue::new(&mut s.nx).speed(0.5));
-                        ui.label("ny");
-                        ui.add(egui::DragValue::new(&mut s.ny).speed(0.5));
+                        let nx = ui.label("nx");
+                        ui.add(egui::DragValue::new(&mut s.nx).speed(0.5))
+                            .labelled_by(nx.id)
+                            .on_hover_text("Grid cells along x");
+                        let ny = ui.label("ny");
+                        ui.add(egui::DragValue::new(&mut s.ny).speed(0.5))
+                            .labelled_by(ny.id)
+                            .on_hover_text("Grid cells along y");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Lx");
-                        ui.add(egui::DragValue::new(&mut s.lx).speed(0.05));
-                        ui.label("Ly");
-                        ui.add(egui::DragValue::new(&mut s.ly).speed(0.05));
+                        let lx = ui.label("Lx");
+                        ui.add(egui::DragValue::new(&mut s.lx).speed(0.05))
+                            .labelled_by(lx.id)
+                            .on_hover_text("Domain length Lx (m)");
+                        let ly = ui.label("Ly");
+                        ui.add(egui::DragValue::new(&mut s.ly).speed(0.05))
+                            .labelled_by(ly.id)
+                            .on_hover_text("Domain height Ly (m)");
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Fluid").strong());
                     ui.horizontal(|ui| {
-                        ui.label("density ρ (kg/m³)");
-                        ui.add(egui::DragValue::new(&mut s.density).speed(0.1));
+                        let rho = ui.label("density ρ (kg/m³)");
+                        ui.add(egui::DragValue::new(&mut s.density).speed(0.1))
+                            .labelled_by(rho.id)
+                            .on_hover_text("Fluid density ρ (kg/m³)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("kinematic ν (m²/s)");
-                        ui.add(egui::DragValue::new(&mut s.viscosity).speed(0.001));
+                        let nu = ui.label("kinematic ν (m²/s)");
+                        ui.add(egui::DragValue::new(&mut s.viscosity).speed(0.001))
+                            .labelled_by(nu.id)
+                            .on_hover_text("Kinematic viscosity ν (m²/s)");
                     });
                     let drive = match s.case {
                         CfdCase::LidDrivenCavity => "lid speed U (m/s)",
                         CfdCase::ChannelFlow => "inlet speed U (m/s)",
                     };
                     ui.horizontal(|ui| {
-                        ui.label(drive);
-                        ui.add(egui::DragValue::new(&mut s.speed).speed(0.05));
+                        let u = ui.label(drive);
+                        ui.add(egui::DragValue::new(&mut s.speed).speed(0.05))
+                            .labelled_by(u.id)
+                            .on_hover_text("Drive speed U (m/s)");
                     });
                     if s.viscosity > 0.0 {
                         let re = s.speed.abs() * characteristic_length(s) / s.viscosity;
@@ -261,8 +377,10 @@ pub(crate) fn cfd_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
 
                     ui.add_space(4.0);
                     ui.horizontal(|ui| {
-                        ui.label("max SIMPLE iterations");
-                        ui.add(egui::DragValue::new(&mut s.max_iterations).speed(5.0));
+                        let it = ui.label("max SIMPLE iterations");
+                        ui.add(egui::DragValue::new(&mut s.max_iterations).speed(5.0))
+                            .labelled_by(it.id)
+                            .on_hover_text("Outer SIMPLE iteration cap");
                     });
                     ui.label(
                         egui::RichText::new("Runs on a background thread — the UI stays responsive; a finer grid or more iterations takes longer.")
@@ -300,11 +418,12 @@ pub(crate) fn cfd_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     if let Some(profile) = &s.profile {
                         ui.add_space(4.0);
                         ui.label(egui::RichText::new("Centreline speed vs height").strong());
-                        Plot::new("cfd_profile_plot")
-                            .height(160.0)
-                            .x_axis_label("speed (m/s)")
-                            .y_axis_label("y (m)")
-                            .show(ui, |pui| {
+                        managed_plot_mem_cfg(
+                            ui,
+                            "cfd_profile_plot",
+                            160.0,
+                            |plot| plot.x_axis_label("speed (m/s)").y_axis_label("y (m)"),
+                            |pui| {
                                 pui.line(Line::new(PlotPoints::from(profile.clone())).name("|u|"));
                                 if let Some(analytic) = &s.analytic_profile {
                                     pui.line(
@@ -315,7 +434,8 @@ pub(crate) fn cfd_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                                 if let Some(ub) = s.bulk_velocity {
                                     pui.vline(VLine::new(ub).name("U_bulk (Q/H)"));
                                 }
-                            });
+                            },
+                        );
                     }
                 });
 }
@@ -700,6 +820,26 @@ pub(crate) fn cfd_product() -> crate::WorkspaceProduct {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_commands::AgentValue;
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        let mut s = CfdWorkbenchState::default();
+        // A representative integer-grid set lands in state.
+        s.agent_set("nx", &AgentValue::Int(48)).unwrap();
+        assert_eq!(s.nx, 48);
+        // A float field accepts a real value.
+        s.agent_set("density ρ (kg/m³)", &AgentValue::Float(1.225))
+            .unwrap();
+        assert_eq!(s.density, 1.225);
+        // Unknown caption -> Err (no panic).
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (string into the integer grid count) -> Err.
+        assert!(s.agent_set("nx", &AgentValue::Str("many".into())).is_err());
+        // Out-of-range (zero cells) -> Err, field untouched.
+        assert!(s.agent_set("nx", &AgentValue::Int(0)).is_err());
+        assert_eq!(s.nx, 48, "rejected set leaves field untouched");
+    }
 
     #[test]
     fn background_solve_populates_the_readout() {
@@ -936,5 +1076,87 @@ mod tests {
         );
         // Sign-independent in the drive direction (uses |U|).
         assert!((cell_reynolds(-10.0, 0.1, 0.01) - cell_reynolds(10.0, 0.1, 0.01)).abs() < 1e-9);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
+mod headless_ui_tests {
+    use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
+
+    /// Draw the panel once in a headless egui context **with accesskit enabled**
+    /// and return the emitted accessibility tree nodes — the same tree a screen
+    /// reader / AI UI-Automation driver consumes. `accesskit` is re-exported by
+    /// egui, so this needs no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_cfd_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
+    }
+
+    fn has_named_node(nodes: &[(NodeId, Node)], name: &str) -> bool {
+        nodes.iter().any(|(_, n)| n.name() == Some(name))
+    }
+
+    #[test]
+    fn workbench_is_a_noop_when_hidden() {
+        let mut app = ValenxApp::default();
+        assert!(!app.show_cfd_workbench);
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_cfd_workbench(&mut app, ctx);
+        });
+    }
+
+    #[test]
+    fn workbench_draws_when_shown_without_panic() {
+        let mut app = ValenxApp::default();
+        app.show_cfd_workbench = true;
+        let _ = draw_and_collect_nodes(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // Every DragValue (Role::SpinButton) must be associated with a caption
+        // via `labelled_by` so it is findable by name; egui clears a DragValue's
+        // own Name. The case radio buttons + Solve button carry their text Name.
+        let mut app = ValenxApp::default();
+        app.show_cfd_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // nx, ny, Lx, Ly, density, viscosity, drive speed, max-iterations.
+        assert!(
+            spin_buttons.len() >= 8,
+            "expected the CFD numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every CFD DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["nx", "Lx", "density ρ (kg/m³)", "max SIMPLE iterations"] {
+            assert!(
+                has_named_node(&nodes, caption),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        // The case radio buttons are named, selectable nodes.
+        assert!(
+            has_named_node(&nodes, "Lid-driven cavity"),
+            "the case radio buttons keep their text Name"
+        );
     }
 }

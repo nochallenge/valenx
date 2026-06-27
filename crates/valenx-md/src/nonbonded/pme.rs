@@ -46,25 +46,10 @@ use std::f64::consts::PI;
 
 use crate::bonded::{EnergyForce, ForceTerm};
 use crate::error::{MdError, Result};
+use crate::nonbonded::erfc;
 use crate::nonbonded::ExclusionSet;
 use crate::system::System;
 use crate::units::COULOMB;
-
-/// `erf` / `erfc` via the Abramowitz-&-Stegun 7.1.26 rational
-/// approximation (max abs error ~1.5e-7) — enough for an MD force
-/// field and dependency-free.
-fn erfc(x: f64) -> f64 {
-    let sign = if x < 0.0 { -1.0 } else { 1.0 };
-    let ax = x.abs();
-    let t = 1.0 / (1.0 + 0.327_591_1 * ax);
-    let y = 1.0
-        - (((((1.061_405_429 * t - 1.453_152_027) * t) + 1.421_413_741) * t - 0.284_496_736) * t
-            + 0.254_829_592)
-            * t
-            * (-ax * ax).exp();
-    // y is erf(ax); erf is odd.
-    1.0 - sign * y
-}
 
 /// The Ewald / PME electrostatics force term.
 #[derive(Clone, Debug, PartialEq)]
@@ -509,5 +494,73 @@ mod tests {
         let pme = Pme::from_system(&sys, 1.2, 1e-5).unwrap();
         assert!(pme.beta() > 0.0);
         assert!((1..=12).contains(&pme.k_max()));
+    }
+
+    /// Builds a cubic rock-salt (NaCl-structure) crystal of `per_side`
+    /// ions along each edge with nearest-neighbour spacing `spacing`,
+    /// filling the periodic cubic cell exactly so the lattice is
+    /// continued by the periodic images. `per_side` must be even for the
+    /// cell to be charge-neutral and the periodicity to respect the
+    /// alternating sublattices.
+    fn nacl_crystal(per_side: usize, spacing: f64) -> System {
+        let edge = per_side as f64 * spacing;
+        let mut top = Topology::new();
+        let mut pos = Vec::new();
+        for i in 0..per_side {
+            for j in 0..per_side {
+                for k in 0..per_side {
+                    let charge = if (i + j + k) % 2 == 0 { 1.0 } else { -1.0 };
+                    let (name, mass) = if charge > 0.0 {
+                        ("Na", 23.0)
+                    } else {
+                        ("Cl", 35.45)
+                    };
+                    top.push_atom(Atom::new(name, mass, charge).unwrap());
+                    pos.push(Vector3::new(
+                        i as f64 * spacing,
+                        j as f64 * spacing,
+                        k as f64 * spacing,
+                    ));
+                }
+            }
+        }
+        System::new(top, pos)
+            .unwrap()
+            .with_cell(SimBox::cubic(edge).unwrap())
+    }
+
+    /// **Required test 1 — the standard Ewald validation.** The Ewald
+    /// electrostatic energy of a NaCl rock-salt lattice reproduces the
+    /// Madelung constant `M ≈ 1.747565`.
+    ///
+    /// Convention: the Madelung energy *per formula unit* (one cation +
+    /// one anion ion-pair) is `E_pair = −M · COULOMB / r₀`, with `r₀`
+    /// the nearest-neighbour distance. The total Ewald energy counts
+    /// each interaction once, so dividing it by the number of ion pairs
+    /// `N/2` and by `COULOMB / r₀` recovers `−M`. (Equivalently the
+    /// energy *per ion* is `−M/2 · COULOMB / r₀`.) Ewald is exact up to
+    /// the truncation accuracy, so this is a genuine ground-truth check,
+    /// not a convergence-with-cutoff trend.
+    #[test]
+    fn ewald_recovers_nacl_madelung_constant() {
+        const MADELUNG_NACL: f64 = 1.747_564_594_633;
+        let spacing = 0.282; // NaCl nearest-neighbour distance (nm).
+        let sys = nacl_crystal(6, spacing);
+
+        // A real-space cutoff just under the minimum-image limit, with
+        // β and k_max chosen automatically for a tight accuracy.
+        let cutoff = (sys.cell.max_cutoff() * 0.99).min(0.8);
+        let pme = Pme::from_system(&sys, cutoff, 1e-8).unwrap();
+        let mut ef = EnergyForce::zeros(sys.len());
+        pme.accumulate(&sys, &mut ef).unwrap();
+
+        let n_pairs = sys.len() as f64 / 2.0;
+        let reduced = ef.energy / n_pairs / (COULOMB / spacing);
+        assert!(
+            (reduced + MADELUNG_NACL).abs() < 1e-3,
+            "Ewald NaCl reduced energy per ion pair = {reduced}, expected {} \
+             (Madelung constant {MADELUNG_NACL})",
+            -MADELUNG_NACL
+        );
     }
 }

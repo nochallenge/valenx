@@ -109,31 +109,37 @@ pub fn draw_chaindrive_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Sprockets").strong());
                     ui.horizontal(|ui| {
-                        ui.label("driver teeth");
-                        ui.add(egui::DragValue::new(&mut s.driver_teeth).speed(1.0));
+                        let dt = ui.label("driver teeth");
+                        ui.add(egui::DragValue::new(&mut s.driver_teeth).speed(1.0))
+                            .labelled_by(dt.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("driven teeth");
-                        ui.add(egui::DragValue::new(&mut s.driven_teeth).speed(1.0));
+                        let dn = ui.label("driven teeth");
+                        ui.add(egui::DragValue::new(&mut s.driven_teeth).speed(1.0))
+                            .labelled_by(dn.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("chain pitch (mm)");
-                        ui.add(egui::DragValue::new(&mut s.pitch_mm).speed(0.1));
+                        let pp = ui.label("chain pitch (mm)");
+                        ui.add(egui::DragValue::new(&mut s.pitch_mm).speed(0.1))
+                            .labelled_by(pp.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Operating point").strong());
                     ui.horizontal(|ui| {
-                        ui.label("input speed (rpm)");
-                        ui.add(egui::DragValue::new(&mut s.input_rpm).speed(10.0));
+                        let isp = ui.label("input speed (rpm)");
+                        ui.add(egui::DragValue::new(&mut s.input_rpm).speed(10.0))
+                            .labelled_by(isp.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("input torque (N·m)");
-                        ui.add(egui::DragValue::new(&mut s.input_torque_n_m).speed(0.5));
+                        let it = ui.label("input torque (N·m)");
+                        ui.add(egui::DragValue::new(&mut s.input_torque_n_m).speed(0.5))
+                            .labelled_by(it.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("centre distance (mm)");
-                        ui.add(egui::DragValue::new(&mut s.center_distance_mm).speed(5.0));
+                        let cd = ui.label("centre distance (mm)");
+                        ui.add(egui::DragValue::new(&mut s.center_distance_mm).speed(5.0))
+                            .labelled_by(cd.id);
                     });
 
                     ui.add_space(4.0);
@@ -549,12 +555,25 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_chaindrive_workbench(app, ctx);
         });
+    }
+
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_chaindrive_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -570,5 +589,32 @@ mod headless_ui_tests {
         app.show_chaindrive_workbench = true;
         run_chaindrive(&mut app.chaindrive);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        let mut app = ValenxApp::default();
+        app.show_chaindrive_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 6,
+            "expected numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+        for caption in ["driver teeth", "driven teeth", "input speed (rpm)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

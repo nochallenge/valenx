@@ -127,47 +127,65 @@ pub fn draw_transformer_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         ui.radio_value(&mut s.spec, WindingSpec::Ratio, "direct ratio a");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("primary turns Np");
-                        ui.add(egui::DragValue::new(&mut s.turns_primary).speed(1.0));
+                        let lbl = ui.label("primary turns Np");
+                        ui.add(egui::DragValue::new(&mut s.turns_primary).speed(1.0))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("primary turns Np");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("secondary turns Ns");
-                        ui.add(egui::DragValue::new(&mut s.turns_secondary).speed(1.0));
+                        let lbl = ui.label("secondary turns Ns");
+                        ui.add(egui::DragValue::new(&mut s.turns_secondary).speed(1.0))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("secondary turns Ns");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("ratio a = Np/Ns");
-                        ui.add(egui::DragValue::new(&mut s.ratio_a).speed(0.1));
+                        let lbl = ui.label("ratio a = Np/Ns");
+                        ui.add(egui::DragValue::new(&mut s.ratio_a).speed(0.1))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("ratio a = Np/Ns");
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Primary side").strong());
                     ui.horizontal(|ui| {
-                        ui.label("voltage Vp (V)");
-                        ui.add(egui::DragValue::new(&mut s.voltage_primary).speed(1.0));
+                        let lbl = ui.label("voltage Vp (V)");
+                        ui.add(egui::DragValue::new(&mut s.voltage_primary).speed(1.0))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("voltage Vp (V)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("current Ip (A)");
-                        ui.add(egui::DragValue::new(&mut s.current_primary).speed(0.1));
+                        let lbl = ui.label("current Ip (A)");
+                        ui.add(egui::DragValue::new(&mut s.current_primary).speed(0.1))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("current Ip (A)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("efficiency η");
-                        ui.add(egui::DragValue::new(&mut s.efficiency).speed(0.005));
+                        let lbl = ui.label("efficiency η");
+                        ui.add(egui::DragValue::new(&mut s.efficiency).speed(0.005))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("efficiency η");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("load Zs (Ω)")
+                        let lbl = ui.label("load Zs (Ω)")
                             .on_hover_text("secondary-side load impedance, reflected to the primary as Zp = a²·Zs");
-                        ui.add(egui::DragValue::new(&mut s.load_secondary_ohm).speed(0.5));
+                        ui.add(egui::DragValue::new(&mut s.load_secondary_ohm).speed(0.5))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("load Zs (Ω)");
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("EMF equation").strong());
                     ui.horizontal(|ui| {
-                        ui.label("frequency f (Hz)");
-                        ui.add(egui::DragValue::new(&mut s.frequency_hz).speed(1.0));
+                        let lbl = ui.label("frequency f (Hz)");
+                        ui.add(egui::DragValue::new(&mut s.frequency_hz).speed(1.0))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("frequency f (Hz)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("peak flux Φ (Wb)");
-                        ui.add(egui::DragValue::new(&mut s.peak_flux_wb).speed(0.0005));
+                        let lbl = ui.label("peak flux Φ (Wb)");
+                        ui.add(egui::DragValue::new(&mut s.peak_flux_wb).speed(0.0005))
+                            .labelled_by(lbl.id)
+                            .on_hover_text("peak flux Φ (Wb)");
                     });
 
                     ui.add_space(6.0);
@@ -653,12 +671,28 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_transformer_workbench(app, ctx);
         });
+    }
+
+    /// As `draw_workbench`, but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_transformer_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -674,5 +708,45 @@ mod headless_ui_tests {
         app.show_transformer_workbench = true;
         run_transformer(&mut app.transformer);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // The winding / primary-side / EMF DragValues are SpinButtons; each
+        // must be `labelled_by` its caption (egui clears a DragValue's own
+        // Name), so an AI / screen reader can find the control by the caption
+        // text.
+        let mut app = ValenxApp::default();
+        app.show_transformer_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // Np, Ns, ratio a, Vp, Ip, efficiency, load Zs, frequency, peak flux.
+        assert!(
+            spin_buttons.len() >= 9,
+            "expected the transformer numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every transformer DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["primary turns Np", "voltage Vp (V)", "frequency f (Hz)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        // The Analyze button stays a named, invokable node.
+        assert!(
+            nodes.iter().any(|(_, n)| n.role() == Role::Button
+                && n.name().is_some_and(|s| s.contains("Analyze"))),
+            "the Analyze button is a named, invokable node"
+        );
     }
 }

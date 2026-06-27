@@ -16,8 +16,9 @@
 //! downforce). It is not a full vehicle-dynamics or lap-time simulation.
 
 use eframe::egui;
-use egui_plot::{Line, Plot, PlotPoints};
+use egui_plot::{Line, PlotPoints};
 
+use crate::plot_ui::managed_plot_mem;
 use crate::ValenxApp;
 use valenx_vehicle::{hypercar, sports_car, Car, Drivetrain};
 
@@ -191,7 +192,7 @@ pub(crate) fn car_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             .weak()
                             .small(),
                     );
-                    Plot::new("car_launch_plot").height(200.0).show(ui, |pui| {
+                    managed_plot_mem(ui, "car_launch_plot", 200.0, |pui| {
                         pui.line(
                             Line::new(PlotPoints::from(p.launch_curve.clone()))
                                 .name("speed (km/h)"),

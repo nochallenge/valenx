@@ -168,10 +168,18 @@ impl CommandKind {
 /// one [`CommandKind::OpenSavedProject`] per saved project (so
 /// `Ctrl+P → "<project name>"` reopens it). These navigation entries are
 /// **not** OSS-filtered — the filter is adapter-only.
+///
+/// `focus` is the **domain-focus filter** (see [`crate::workbench_focus`]):
+/// when `Some(category)`, only the `OpenWorkbenchTab` launcher entries whose
+/// [`TabKind::group`] equals `category` are appended; `None` (= "All") appends
+/// one per template as before. The focus narrows *only* the workbench-tab
+/// launcher entries — static commands, per-adapter actions, and saved-project
+/// entries are never hidden by it.
 pub fn build_visible_commands(
     registry: &AdapterRegistry,
     show_non_oss: bool,
     library: &ProjectLibrary,
+    focus: Option<&str>,
 ) -> Vec<CommandKind> {
     let mut cmds: Vec<CommandKind> = static_commands().iter().map(CommandKind::Static).collect();
     // Sort adapter entries by display name so the palette ordering
@@ -194,10 +202,14 @@ pub fn build_visible_commands(
             adapter_id: info.id.to_string(),
         });
     }
-    // Launcher: one "Open tab: <label>" per workbench template. The id is
-    // the short `from_id` token so dispatch can round-trip it back to the
-    // kind; the label carries the search-visible "Open tab:" prefix.
+    // Launcher: one "Open tab: <label>" per workbench template, narrowed to the
+    // focused domain (`None` = "All" shows every template). The id is the short
+    // `from_id` token so dispatch can round-trip it back to the kind; the label
+    // carries the search-visible "Open tab:" prefix.
     for kind in TabKind::TEMPLATES {
+        if !crate::workbench_focus::in_focus(kind, focus) {
+            continue;
+        }
         cmds.push(CommandKind::OpenWorkbenchTab {
             id: tab_kind_id(kind),
             label: format!("Open tab: {}", kind.label()),
@@ -227,11 +239,16 @@ fn tab_kind_id(kind: TabKind) -> String {
         TabKind::Astro => "astro",
         TabKind::Aero => "aero",
         TabKind::Gasdynamics => "gasdynamics",
+        TabKind::Rotor => "rotor",
+        TabKind::BlackHole => "blackhole",
         TabKind::Cfd => "cfd",
         TabKind::Fem => "fem",
         TabKind::Reactdyn => "reactdyn",
         TabKind::Fields => "fields",
+        TabKind::Thermo => "thermo",
+        TabKind::Quantum => "quantum",
         TabKind::Cad => "cad",
+        TabKind::BrepCad => "brep",
         TabKind::MeshToolbox => "meshtoolbox",
         TabKind::Sheetmetal => "sheetmetal",
         TabKind::Reverse => "reverse",
@@ -251,6 +268,28 @@ fn tab_kind_id(kind: TabKind) -> String {
         TabKind::Genetics => "genetics",
         TabKind::Neuro => "neuro",
         TabKind::VariantEffect => "varianteffect",
+        TabKind::Ppi => "ppi",
+        TabKind::Sensors => "sensors",
+        TabKind::Autonomy => "autonomy",
+        TabKind::Fluids => "fluids",
+        TabKind::Ocean => "ocean",
+        TabKind::Rom => "rom",
+        TabKind::Uq => "uq",
+        TabKind::Uas => "uas",
+        TabKind::MissionSim => "missionsim",
+        TabKind::MissionPlanner => "missionplanner",
+        TabKind::Morphogenesis => "morphogenesis",
+        TabKind::Survivability => "survivability",
+        TabKind::Photogrammetry => "photogrammetry",
+        TabKind::Cosim => "cosim",
+        TabKind::Mbd => "mbd",
+        TabKind::TopOpt => "topopt",
+        TabKind::NodeGraph => "nodegraph",
+        TabKind::BondGraph => "bondgraph",
+        TabKind::Surrogate => "surrogate",
+        TabKind::Optics => "optics",
+        TabKind::Acoustics => "acoustics",
+        TabKind::Waveform => "waveform",
     }
     .to_string()
 }
@@ -1128,7 +1167,7 @@ mod tests {
     fn build_visible_commands_empty_registry_returns_static_plus_launcher() {
         let registry = AdapterRegistry::new();
         let library = ProjectLibrary::default();
-        let cmds = build_visible_commands(&registry, false, &library);
+        let cmds = build_visible_commands(&registry, false, &library, None);
         // Empty registry + empty library → static commands + the
         // per-template launcher entries, nothing else.
         assert_eq!(cmds.len(), launcher_floor());
@@ -1157,7 +1196,7 @@ mod tests {
         let mut registry = AdapterRegistry::new();
         registry.register(Arc::new(valenx_adapter_openfoam::OpenFoamAdapter::new()));
         let library = ProjectLibrary::default();
-        let cmds = build_visible_commands(&registry, false, &library);
+        let cmds = build_visible_commands(&registry, false, &library, None);
         // 2 dynamic entries per registered adapter (run + new-case), on
         // top of the static + launcher floor. OpenFOAM is GPL-3.0-only
         // (OSS) so the OSS-only filter keeps it visible.
@@ -1190,14 +1229,14 @@ mod tests {
         let mut registry = AdapterRegistry::new();
         registry.register(Arc::new(valenx_adapter_rosetta::RosettaAdapter::new()));
         let library = ProjectLibrary::default();
-        let cmds = build_visible_commands(&registry, false, &library);
+        let cmds = build_visible_commands(&registry, false, &library, None);
         assert_eq!(
             cmds.len(),
             launcher_floor(),
             "non-OSS adapter must contribute zero dynamic entries when show_non_oss=false"
         );
         // Flipping the flag surfaces both dynamic entries again.
-        let cmds_all = build_visible_commands(&registry, true, &library);
+        let cmds_all = build_visible_commands(&registry, true, &library, None);
         assert_eq!(cmds_all.len(), launcher_floor() + 2);
     }
 
@@ -1233,7 +1272,7 @@ mod tests {
         );
 
         let registry = AdapterRegistry::new();
-        let cmds = build_visible_commands(&registry, false, &library);
+        let cmds = build_visible_commands(&registry, false, &library, None);
 
         // One OpenWorkbenchTab per template, tagged with the round-trippable
         // `from_id` token and the "Open tab:" display prefix.
@@ -1279,6 +1318,52 @@ mod tests {
         let labels: Vec<&str> = proj_entries.iter().map(|c| c.label()).collect();
         assert!(labels.contains(&"Project: My Rocket"), "got {labels:?}");
         assert!(labels.contains(&"Project: My Part"), "got {labels:?}");
+    }
+
+    #[test]
+    fn build_visible_commands_focus_filters_only_workbench_tab_entries() {
+        // A domain-focus filter narrows ONLY the OpenWorkbenchTab launcher
+        // entries to the focused category; static commands stay intact.
+        let registry = AdapterRegistry::new();
+        let library = ProjectLibrary::default();
+
+        // Bio focus → exactly the Life-sciences TabKinds as OpenWorkbenchTab
+        // entries, and nothing from other domains.
+        let bio = TabKind::Genetics.group();
+        let cmds = build_visible_commands(&registry, false, &library, Some(bio));
+        let tab_ids: Vec<&str> = cmds
+            .iter()
+            .filter_map(|c| match c {
+                CommandKind::OpenWorkbenchTab { id, .. } => Some(id.as_str()),
+                _ => None,
+            })
+            .collect();
+        let expected_bio: Vec<String> = TabKind::TEMPLATES
+            .into_iter()
+            .filter(|k| k.group() == bio)
+            .map(tab_kind_id)
+            .collect();
+        assert_eq!(tab_ids.len(), expected_bio.len(), "got {tab_ids:?}");
+        for want in &expected_bio {
+            assert!(tab_ids.contains(&want.as_str()), "missing {want}");
+        }
+        // A non-bio launcher entry (rocket) is filtered out.
+        assert!(!tab_ids.contains(&"rocket"));
+        // Static commands are NOT filtered by focus — the floor of static
+        // entries is unchanged.
+        let static_count = cmds
+            .iter()
+            .filter(|c| matches!(c, CommandKind::Static(_)))
+            .count();
+        assert_eq!(static_count, static_commands().len());
+
+        // "All" (None) shows every template — the unfiltered baseline.
+        let all = build_visible_commands(&registry, false, &library, None);
+        let all_tabs = all
+            .iter()
+            .filter(|c| matches!(c, CommandKind::OpenWorkbenchTab { .. }))
+            .count();
+        assert_eq!(all_tabs, TabKind::TEMPLATES.len());
     }
 
     #[test]

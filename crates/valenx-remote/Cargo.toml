@@ -1,0 +1,35 @@
+[package]
+name        = "valenx-remote"
+description = "Phone-as-2nd-screen companion for Valenx: serves the live Valenx window to a phone browser (PIN-gated, LAN-bound, frame-poll JPEG) and relays touch as OS mouse input. The default build is std-only — a hand-rolled `std::net::TcpListener` HTTP server, the embedded served page, the required `--pin` auth, and full server-side input validation — so it compiles on headless Linux CI with no system GUI libraries. The real screen-capture (xcap → JPEG) and OS input-injection (enigo) compile only behind the off-by-default `live-capture` feature, which the user enables on a desktop with a display. LAN-only, no TLS; HTTPS is a documented follow-up. Best-effort reconstruction of a binary that was originally built privately and never committed."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme.workspace       = true
+
+publish.workspace      = true
+
+[features]
+default = []
+# Off by default: the platform-specific screen-capture + OS input-injection.
+# The std-only default path (the `std::net` HTTP server, the served page, the
+# `--pin` auth, and the input *validation*) needs none of this and is what
+# every test exercises — capturing a real display and injecting OS mouse
+# events is impossible on headless Linux CI, so this path is compiled but
+# untested here. Enabling it pulls in `xcap` (screen capture), `image` (JPEG
+# encode), and `enigo` (mouse injection), all pinned at workspace level.
+# Mirrors `valenx-adapter-fmi`'s `binary-fmu` feature.
+live-capture = ["dep:xcap", "dep:image", "dep:enigo"]
+
+# Only compiled when `live-capture` is on.
+[dependencies]
+xcap  = { workspace = true, optional = true }
+image = { workspace = true, optional = true }
+enigo = { workspace = true, optional = true }
+
+[lints.rust]
+missing_docs   = "warn"
+unused_imports = "warn"

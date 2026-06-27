@@ -17,6 +17,7 @@ use valenx_geomatics::{
     rhumb_distance, LatLon,
 };
 
+use crate::agent_commands::AgentValue;
 use crate::ValenxApp;
 
 /// Persistent form + result state for the Geomatics Workbench.
@@ -57,6 +58,45 @@ impl Default for GeomaticsWorkbenchState {
     }
 }
 
+impl GeomaticsWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`.
+    ///
+    /// The form draws the same `lat` / `lon` caption for each of the three
+    /// points, disambiguated visually by the point header (`Point A` /
+    /// `Point B` / `Query point P`). The agent name space mirrors that:
+    /// `"A lat"`, `"A lon"`, `"B lat"`, `"B lon"`, `"P lat"`, `"P lon"`.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &["A lat", "A lon", "B lat", "B lon", "P lat", "P lon"]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Each point's latitude / longitude is addressed by
+    /// `"<A|B|P> <lat|lon>"` (the point header + the `lat`/`lon` caption the UI
+    /// shows); every component reads [`AgentValue::as_f64`].
+    ///
+    /// Fail-loud: an unknown caption or a value of the wrong type returns
+    /// `Err(String)` — never a panic, and no field is written on error. Values
+    /// are stored verbatim; `run_geomatics` is what validates the lat/lon ranges
+    /// at Compute time (matching the manual drag flow, where an intermediate
+    /// out-of-range value is allowed until Compute).
+    pub fn agent_set(&mut self, name: &str, value: &AgentValue) -> Result<(), String> {
+        let field: &mut f64 = match name {
+            "A lat" => &mut self.lat_a,
+            "A lon" => &mut self.lon_a,
+            "B lat" => &mut self.lat_b,
+            "B lon" => &mut self.lon_b,
+            "P lat" => &mut self.lat_p,
+            "P lon" => &mut self.lon_p,
+            other => return Err(format!("unknown geomatics control: {other:?}")),
+        };
+        // Read first so a type error leaves the field untouched.
+        let v = value.as_f64()?;
+        *field = v;
+        Ok(())
+    }
+}
+
 /// Draw the Geomatics Workbench right-side panel. A no-op when the
 /// `show_geomatics_workbench` toggle is off.
 pub fn draw_geomatics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
@@ -83,28 +123,34 @@ pub fn draw_geomatics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Point A (deg)").strong());
                     ui.horizontal(|ui| {
-                        ui.label("lat");
-                        ui.add(egui::DragValue::new(&mut s.lat_a).speed(0.01));
-                        ui.label("lon");
-                        ui.add(egui::DragValue::new(&mut s.lon_a).speed(0.01));
+                        let la = ui.label("lat");
+                        ui.add(egui::DragValue::new(&mut s.lat_a).speed(0.01))
+                            .labelled_by(la.id);
+                        let lo = ui.label("lon");
+                        ui.add(egui::DragValue::new(&mut s.lon_a).speed(0.01))
+                            .labelled_by(lo.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Point B (deg)").strong());
                     ui.horizontal(|ui| {
-                        ui.label("lat");
-                        ui.add(egui::DragValue::new(&mut s.lat_b).speed(0.01));
-                        ui.label("lon");
-                        ui.add(egui::DragValue::new(&mut s.lon_b).speed(0.01));
+                        let la = ui.label("lat");
+                        ui.add(egui::DragValue::new(&mut s.lat_b).speed(0.01))
+                            .labelled_by(la.id);
+                        let lo = ui.label("lon");
+                        ui.add(egui::DragValue::new(&mut s.lon_b).speed(0.01))
+                            .labelled_by(lo.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Query point P (deg)").strong());
                     ui.horizontal(|ui| {
-                        ui.label("lat");
-                        ui.add(egui::DragValue::new(&mut s.lat_p).speed(0.01));
-                        ui.label("lon");
-                        ui.add(egui::DragValue::new(&mut s.lon_p).speed(0.01));
+                        let la = ui.label("lat");
+                        ui.add(egui::DragValue::new(&mut s.lat_p).speed(0.01))
+                            .labelled_by(la.id);
+                        let lo = ui.label("lon");
+                        ui.add(egui::DragValue::new(&mut s.lon_p).speed(0.01))
+                            .labelled_by(lo.id);
                     });
                     ui.label(
                         egui::RichText::new(
@@ -297,12 +343,42 @@ mod tests {
             assert!(s.result.is_empty());
         }
     }
+
+    #[test]
+    fn agent_set_addresses_each_point_component_and_rejects_bad_input() {
+        let mut s = GeomaticsWorkbenchState::default();
+
+        // The repeated lat/lon captions are disambiguated by point (A/B/P).
+        s.agent_set("A lat", &AgentValue::Float(51.5))
+            .expect("set A lat");
+        s.agent_set("A lon", &AgentValue::Float(-0.12))
+            .expect("set A lon");
+        s.agent_set("B lat", &AgentValue::Int(48)) // Int widens to f64
+            .expect("set B lat");
+        s.agent_set("P lon", &AgentValue::Float(1.0))
+            .expect("set P lon");
+        assert_eq!(s.lat_a, 51.5);
+        assert_eq!(s.lon_a, -0.12);
+        assert_eq!(s.lat_b, 48.0);
+        assert_eq!(s.lon_p, 1.0);
+
+        // Unknown caption -> Err.
+        assert!(s.agent_set("Q lat", &AgentValue::Float(0.0)).is_err());
+        // A bare "lat" is ambiguous → not a valid name.
+        assert!(s.agent_set("lat", &AgentValue::Float(0.0)).is_err());
+        // Wrong type (a coordinate needs a number) -> Err, field intact.
+        assert!(s
+            .agent_set("A lat", &AgentValue::Str("north".into()))
+            .is_err());
+        assert_eq!(s.lat_a, 51.5, "rejected set leaves the field unchanged");
+    }
 }
 
 #[cfg(test)]
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     /// Render the whole workbench panel once in a headless egui context.
     fn draw_workbench(app: &mut ValenxApp) {
@@ -310,6 +386,21 @@ mod headless_ui_tests {
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_geomatics_workbench(app, ctx);
         });
+    }
+
+    /// As [`draw_workbench`], but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_geomatics_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -333,5 +424,40 @@ mod headless_ui_tests {
         run_geomatics(&mut app.geomatics);
         app.geomatics.error = Some("invalid coordinates".to_string());
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // The three points (A, B, P) each contribute a lat + lon DragValue;
+        // every one is a SpinButton and must be `labelled_by` its caption
+        // (egui clears a DragValue's own Name) so an AI / screen reader can
+        // find the control by the caption ("lat" / "lon"). All six rows are
+        // unconditionally rendered.
+        let mut app = ValenxApp::default();
+        app.show_geomatics_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // lat/lon for each of points A, B, P.
+        assert!(
+            spin_buttons.len() >= 6,
+            "expected the geomatics numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every geomatics DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["lat", "lon"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

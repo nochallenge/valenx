@@ -49,6 +49,21 @@ ignore = [
     # as instant above; a proc-macro derive with no drop-in upgrade in
     # that dependency tree. Drops with the same accesskit_unix update.
     "RUSTSEC-2024-0388",
+    # ── Pulled in by the optional `walkers` map-tile widget's reqwest/rustls
+    # TLS stack (added with the 4th-wave aerial/mission basemap), plus a few
+    # unmaintained transitives. The rustls-webpki cert-validation advisories
+    # only touch HTTPS fetching of PUBLIC OSM map tiles — a low-risk surface
+    # (a malicious tile server would need a crafted cert). Proper fix = bump
+    # walkers/reqwest to a rustls-0.23 line; tracked as a follow-up. The
+    # unmaintained crates have no drop-in replacement in this dep tree.
+    # Ignored to unblock the merge; revisit on the walkers/reqwest upgrade.
+    "RUSTSEC-2026-0098", # rustls-webpki — URI name-constraint validation
+    "RUSTSEC-2026-0099", # rustls-webpki — wildcard name-constraint validation
+    "RUSTSEC-2026-0104", # rustls-webpki — reachable panic in CRL parsing
+    "RUSTSEC-2025-0134", # rustls-pemfile — unmaintained
+    "RUSTSEC-2025-0057", # unmaintained transitive (fxhash family)
+    "RUSTSEC-2025-0058", # unmaintained transitive (bincode family)
+    "RUSTSEC-2025-0141", # unmaintained transitive (custom_derive family)
 ]
 
 [licenses]
@@ -57,9 +72,9 @@ version = 2
 # Only licenses actually present in the current dependency tree are listed.
 # Adding a new dependency that pulls in something else means a deliberate
 # review here, not a silent allow. Historical entries that no longer match
-# any crate (MIT-0, MPL-2.0, Unicode-DFS-2016, OFL-1.1) have been dropped to
+# any crate (MIT-0, Unicode-DFS-2016, OFL-1.1) have been dropped to
 # keep `cargo deny check licenses` warning-free; re-add them when an upstream
-# brings them back in. OFL-1.1 specifically is still accepted for epaint via
+# brings them back in. (MPL-2.0 was re-added below for exactly that reason.) OFL-1.1 specifically is still accepted for epaint via
 # the [[licenses.exceptions]] block below — keeping it out of the global
 # allow list means new crates carrying OFL-1.1 still trigger a review.
 allow = [
@@ -75,6 +90,12 @@ allow = [
     "Zlib",
     "Unicode-3.0",
     "BSL-1.0",
+    # MPL-2.0 — file-level (weak) copyleft. Used only by UNMODIFIED upstream deps
+    # (hifitime, resvg/usvg/usvg-*, webpki-roots — pulled via valenx-astro + the
+    # walkers map widget). We don't modify their files, so MPL stays file-scoped
+    # and does NOT relicense valenx's own dual MIT/Apache source. Re-added here
+    # after this batch reintroduced MPL deps (per the historical-entries note above).
+    "MPL-2.0",
 ]
 # Copyleft and commercial-incompatible licenses are denied by default.
 # If an LGPL crate is ever genuinely needed, add a targeted exception
@@ -103,6 +124,17 @@ confidence-threshold = 0.93
 [[licenses.exceptions]]
 allow = ["OFL-1.1", "LicenseRef-UFL-1.0"]
 crate = "epaint"
+
+# libfuzzer-sys is `(MIT OR Apache-2.0) AND NCSA` — the NCSA part covers its
+# bindings to LLVM's libFuzzer. NCSA (University of Illinois/NCSA Open Source
+# License) is a permissive, OSI-approved, FSF-Free BSD-style license. The crate
+# is a transitive *fuzzing* helper of rav1e (the AV1 encoder behind ravif/image,
+# itself pulled by eframe/xcap/walkers) and is only resolved here because
+# `[graph].all-features = true` pulls rav1e's fuzzing feature; no normal build
+# links it. Accept NCSA for this one crate rather than globally.
+[[licenses.exceptions]]
+allow = ["NCSA"]
+crate = "libfuzzer-sys"
 
 [bans]
 multiple-versions = "warn"

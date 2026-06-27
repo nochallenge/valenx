@@ -94,23 +94,27 @@ pub fn draw_rectifier_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Input").strong());
                     ui.horizontal(|ui| {
-                        ui.label("peak voltage Vpeak (V)");
-                        ui.add(egui::DragValue::new(&mut s.v_peak).speed(0.5));
+                        let cap_vpk = ui.label("peak voltage Vpeak (V)");
+                        ui.add(egui::DragValue::new(&mut s.v_peak).speed(0.5))
+                            .labelled_by(cap_vpk.id);
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Capacitor filter").strong());
                     ui.horizontal(|ui| {
-                        ui.label("load current I (A)");
-                        ui.add(egui::DragValue::new(&mut s.load_current_a).speed(0.05));
+                        let cap_iload = ui.label("load current I (A)");
+                        ui.add(egui::DragValue::new(&mut s.load_current_a).speed(0.05))
+                            .labelled_by(cap_iload.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("mains frequency f (Hz)");
-                        ui.add(egui::DragValue::new(&mut s.mains_freq_hz).speed(1.0));
+                        let cap_freq = ui.label("mains frequency f (Hz)");
+                        ui.add(egui::DragValue::new(&mut s.mains_freq_hz).speed(1.0))
+                            .labelled_by(cap_freq.id);
                     });
                     ui.horizontal(|ui| {
-                        ui.label("capacitance C (F)");
-                        ui.add(egui::DragValue::new(&mut s.cap_farads).speed(0.0001));
+                        let cap_cap = ui.label("capacitance C (F)");
+                        ui.add(egui::DragValue::new(&mut s.cap_farads).speed(0.0001))
+                            .labelled_by(cap_cap.id);
                     });
 
                     ui.add_space(6.0);
@@ -485,12 +489,26 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_rectifier_workbench(app, ctx);
         });
+    }
+
+    /// Render the workbench with accesskit enabled and return its a11y nodes.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_rectifier_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -506,5 +524,32 @@ mod headless_ui_tests {
         app.show_rectifier_workbench = true;
         run_rectifier(&mut app.rectifier);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        let mut app = ValenxApp::default();
+        app.show_rectifier_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 4,
+            "expected the numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+        for caption in ["peak voltage Vpeak (V)", "capacitance C (F)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
     }
 }

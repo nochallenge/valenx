@@ -1,0 +1,27 @@
+[package]
+name        = "valenx-mission-sim"
+description = "General discrete-event / agent constructive-simulation framework (AFSIM-class, M2 of the defense M&S roadmap) — equally for logistics, epidemiology, traffic, and policy wargaming. A deterministic min-heap event scheduler, entities with constant-velocity / waypoint movers, range-based sensor detection (reusing valenx-uas detection geometry), and ABSTRACT, PROBABILISTIC engagement: probability-of-kill (Pk) is an INPUT parameter (seeded draw) and a Lanchester-square-law attrition ODE for aggregate forces. Builds simulation INFRASTRUCTURE + analysis only — NO detailed lethality, NO targeting / fire-control, NO kill chains. Dual-use, research/educational grade."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+# Reused in-house crate: valenx-uas::detection_timeline / ThreatTrack give the
+# exact constant-velocity range-crossing geometry the sensor model needs (pure
+# kinematics; no weapon/targeting). Composed, not reimplemented.
+valenx-uas = { path = "../valenx-uas" }
+
+nalgebra  = { workspace = true }
+serde     = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

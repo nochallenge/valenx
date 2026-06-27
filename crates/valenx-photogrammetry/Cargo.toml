@@ -1,0 +1,23 @@
+[package]
+name        = "valenx-photogrammetry"
+description = "In-house structure-from-motion building blocks (Stages 1-3: features + matching + two-view geometry). A clean-room Rust reimplementation of the standard computer-vision pipeline used by COLMAP — FAST-9 corner detection and an ORB-style 256-bit steered-BRIEF descriptor (Stage 1), brute-force Hamming descriptor matching with the Lowe ratio test and mutual cross-check plus RANSAC fundamental-matrix estimation via the Hartley normalized 8-point algorithm scored by Sampson distance (Stage 2), and the calibrated two-view geometry step — essential matrix (E = K2ᵀ F K1), relative pose (R, t) by SVD decomposition with the cheirality test, and linear DLT triangulation (Stage 3). Operates on a plain row-major 8-bit grayscale buffer; pure Rust, no `unsafe`. Research/educational grade — textbook FAST/ORB/Lowe/Hartley/RANSAC and Hartley & Zisserman two-view algorithms, NOT a calibrated metrology / survey-grade product. Stage 3 is the calibrated path (intrinsics supplied, not auto-calibrated) and recovers translation/structure only up to a global scale. COLMAP (BSD-3-Clause) is credited as the method reference in THIRD-PARTY-NOTICES; no COLMAP or OpenCV source is used."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+nalgebra  = { workspace = true }
+
+# Crash-safe durable writes: `write_ply` / `write_camera_poses` persist via
+# `valenx_core::io_caps::atomic_write_str` (sidecar → fsync → rename) so a
+# torn/concurrent write can never leave a truncated export on disk.
+valenx-core = { path = "../valenx-core" }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

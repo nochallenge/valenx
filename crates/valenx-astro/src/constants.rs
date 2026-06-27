@@ -11,8 +11,25 @@ pub const MU_EARTH: f64 = 3.986_004_418e14;
 /// of the geopotential (dimensionless), WGS-84.
 pub const J2_EARTH: f64 = 1.082_626_68e-3;
 
-/// Earth equatorial radius (m), WGS-84.
+/// Earth equatorial radius (m), WGS-84. This is the semi-major axis `a` of
+/// the WGS-84 reference ellipsoid (and the equatorial radius used by the
+/// spherical-Earth models elsewhere in the crate).
 pub const R_EARTH: f64 = 6_378_137.0;
+
+/// WGS-84 ellipsoid flattening `f = (a − b)/a` (dimensionless) — the defining
+/// shape parameter of the reference geoid. The polar semi-axis is
+/// `b = a(1 − f)` ([`R_EARTH_POLAR`]). Used by the geodetic ↔ Earth-fixed
+/// (ECEF) coordinate transforms in [`crate::frames`].
+pub const WGS84_FLATTENING: f64 = 1.0 / 298.257_223_563;
+
+/// WGS-84 polar (semi-minor) Earth radius `b = a(1 − f)` (m).
+pub const R_EARTH_POLAR: f64 = R_EARTH * (1.0 - WGS84_FLATTENING);
+
+/// First eccentricity *squared* of the WGS-84 ellipsoid,
+/// `e² = f(2 − f) = 1 − (b/a)²` (dimensionless). The core quantity in the
+/// geodetic-latitude ↔ ECEF conversion (the prime-vertical radius of
+/// curvature `N = a/√(1 − e²·sin²φ)`).
+pub const WGS84_ECC_SQ: f64 = WGS84_FLATTENING * (2.0 - WGS84_FLATTENING);
 
 /// Earth sidereal rotation rate (rad/s).
 pub const OMEGA_EARTH: f64 = 7.292_115_9e-5;

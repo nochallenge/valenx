@@ -40,6 +40,15 @@ eframe     = { workspace = true }
 egui       = { workspace = true }
 egui_plot  = { workspace = true }
 egui_tiles = { workspace = true }
+# `walkers` 0.24 is the slippy-map widget for **egui 0.28** (its hard
+# requirement `egui ^0.28` matches the workspace pin exactly; 0.25+ jump
+# to egui 0.29). It backs the Mission Planner's real OpenStreetMap tile
+# basemap. `HttpTiles` runs its own self-contained current-thread Tokio
+# runtime on a dedicated std::thread for tile downloads — it needs no
+# `#[tokio::main]` and does not touch eframe's wgpu/winit stack. Tiles are
+# decoded internally via `image` 0.25 (already in the tree), so no
+# egui_extras image-loader install is required.
+walkers    = "0.24"
 rfd        = { workspace = true }
 bytemuck   = { workspace = true }
 # `opener` opens a URL or filesystem path in the user's default
@@ -78,6 +87,9 @@ valenx-export        = { path = "../valenx-export" }
 valenx-fonts         = { path = "../valenx-fonts" }
 valenx-design-tokens = { path = "../valenx-design-tokens" }
 valenx-cad           = { path = "../valenx-cad" }
+valenx-truck-cad     = { path = "../valenx-truck-cad" }
+valenx-thermo        = { path = "../valenx-thermo" }
+valenx-quantum       = { path = "../valenx-quantum" }
 valenx-dock          = { path = "../valenx-dock" }
 valenx-bio           = { path = "../valenx-bio" }
 valenx-sketch        = { path = "../valenx-sketch" }
@@ -94,6 +106,11 @@ valenx-macro         = { path = "../valenx-macro" }
 valenx-addons        = { path = "../valenx-addons" }
 valenx-mesh-to-brep  = { path = "../valenx-mesh-to-brep" }
 valenx-fem           = { path = "../valenx-fem" }
+# In-house 2-D SIMP topology optimization (generative minimum-compliance
+# structural design), surfaced by the Topology Optimization workbench
+# (src/topopt_workbench.rs). Reuses valenx-fem's faer sparse solver for the FE
+# solves; no new external deps.
+valenx-topopt        = { path = "../valenx-topopt" }
 
 # The coupled rocket design→simulate example engine, surfaced by the
 # Rocket workbench (src/rocket_workbench.rs). Couples valenx-astro
@@ -204,9 +221,67 @@ valenx-straingauge   = { path = "../valenx-straingauge" }
 # Native multirotor hover performance — surfaced by the Drone workbench
 # (src/drone_workbench.rs).
 valenx-drone         = { path = "../valenx-drone" }
-# Native rectangular-room reverberation + SPL — surfaced by the Acoustics
-# workbench (src/acoustics_workbench.rs).
+# Native sensor suite (LiDAR + radar + IMU + GPS + camera) — surfaced by
+# the Sensors workbench (src/sensors_workbench.rs). Pure-Rust ray-cast and
+# link-budget models; the workbench calls its real API directly (no subprocess).
+valenx-sensors       = { path = "../valenx-sensors" }
+# Native autonomy V&V framework (scenario-based verification of an autonomous
+# vehicle with simulated sensors) — surfaced by the Autonomy V&V workbench
+# (src/autonomy_workbench.rs). Layered on valenx-sensors; pure-Rust, no new
+# external deps.
+valenx-autonomy-vnv  = { path = "../valenx-autonomy-vnv" }
+# Native particle-based SPH fluid simulation — surfaced by the Fluids (SPH)
+# workbench (src/fluids_workbench.rs). Pure-Rust; no new external deps.
+valenx-fluids        = { path = "../valenx-fluids" }
+# Native ocean wave field (sum-of-N Gerstner / trochoidal waves with deep-water
+# dispersion) + quasi-static Archimedes buoyancy — surfaced by the Ocean
+# workbench (src/ocean_workbench.rs). Pure-Rust; no new external deps.
+valenx-ocean         = { path = "../valenx-ocean" }
+# Native reduced-order & surrogate modelling (POD / DMD / DEIM) — surfaced by
+# the ROM workbench (src/rom_workbench.rs). Pure-Rust (nalgebra SVD); no new
+# external deps.
+valenx-rom           = { path = "../valenx-rom" }
+# Native uncertainty quantification (Monte-Carlo propagation, Sobol sensitivity,
+# FORM reliability) — surfaced by the UQ workbench (src/uq_workbench.rs).
+# Pure-Rust, dependency-light (nalgebra + a seeded in-crate PRNG, no `rand`).
+valenx-uq            = { path = "../valenx-uq" }
+# Native small-UAS design → performance → trade study (+ defensive counter-UAS
+# intercept GEOMETRY / detection timeline — no weapon employment) — surfaced by
+# the UAS workbench (src/uas_workbench.rs). Composes the in-house valenx-drone /
+# valenx-rotor / valenx-fixedwing aero crates; pure-Rust, no new external deps.
+valenx-uas           = { path = "../valenx-uas" }
+# General discrete-event / agent constructive-simulation framework (M2 of the
+# defense M&S roadmap; equally logistics / epidemiology / traffic / wargaming) —
+# surfaced by the Mission-Sim workbench (src/missionsim_workbench.rs). Abstract,
+# probabilistic engagement only (Pk INPUT + Lanchester square-law ODE); NO
+# lethality / targeting / kill-chain. Composes valenx-uas detection geometry;
+# pure-Rust (nalgebra + a seeded in-crate PRNG), no new external deps.
+valenx-mission-sim   = { path = "../valenx-mission-sim" }
+# Defensive survivability & protection (M7 of the defense M&S roadmap) — the
+# PROTECTIVE side of the shared blast/impact physics: free-field blast loading
+# (Brode/Newmark-Hansen), SDOF protective response + the pressure-impulse
+# iso-damage diagram (reusing the valenx-fem transient solver), minimum-armor
+# sizing (plug-shear ballistic-limit), and an occupant tolerance screen —
+# surfaced by the Survivability / protection workbench
+# (src/survivability_workbench.rs). Every output is "minimum protection to
+# survive threat X"; NO penetration / lethality / warhead model. Composes
+# valenx-fem; pure-Rust (nalgebra), no new external deps.
+valenx-survivability = { path = "../valenx-survivability" }
+# Native structure-from-motion / photogrammetry (COLMAP-style SfM: FAST/ORB
+# features, descriptor matching, two-view geometry, the incremental mapper +
+# bundle adjustment) — surfaced by the Photogrammetry workbench
+# (src/photogrammetry_workbench.rs). Pure-Rust (nalgebra); no new external deps.
+valenx-photogrammetry = { path = "../valenx-photogrammetry" }
+# Native propeller / rotor blade-element-momentum (BEMT) performance —
+# surfaced by the Rotor / Drone (BEMT) workbench (src/rotor_workbench.rs).
+# Pure-Rust solver; the workbench calls its real API directly (no subprocess).
+valenx-rotor         = { path = "../valenx-rotor" }
+# Native rectangular-room reverberation + SPL + monopole radiation —
+# surfaced by the Acoustics workbench (src/acoustics_workbench.rs).
 valenx-acoustics     = { path = "../valenx-acoustics" }
+# In-house Value Change Dump (VCD) waveform parser — surfaced by the
+# Waveform (VCD viewer) workbench (src/waveform_workbench.rs).
+valenx-waveform      = { path = "../valenx-waveform" }
 # Native aqueous pH / buffer equilibria — surfaced by the Acid-Base
 # workbench (src/acidbase_workbench.rs).
 valenx-acidbase      = { path = "../valenx-acidbase" }
@@ -365,6 +440,10 @@ valenx-solvespace-3d = { path = "../valenx-solvespace-3d" }
 valenx-librecad-2d = { path = "../valenx-librecad-2d" }
 valenx-reinforcement = { path = "../valenx-reinforcement" }
 valenx-pathtrace = { path = "../valenx-pathtrace" }
+# In-house general-relativity engine (Kerr–Newman family, observables,
+# thermodynamics, shadow ray-tracer) — surfaced by the Black-Hole / Relativity
+# workbench (src/blackhole_workbench.rs).
+valenx-relativity = { path = "../valenx-relativity" }
 valenx-hvac = { path = "../valenx-hvac" }
 valenx-beam = { path = "../valenx-beam" }
 valenx-reverse = { path = "../valenx-reverse" }
@@ -392,6 +471,15 @@ valenx-rnastruct     = { path = "../valenx-rnastruct" }
 valenx-md            = { path = "../valenx-md" }
 valenx-cheminf       = { path = "../valenx-cheminf" }
 valenx-biostruct     = { path = "../valenx-biostruct" }
+# In-house sequence-first protein-protein interaction / interactome
+# inference (APC-corrected MI coevolution -> fused PPI score -> ranked
+# all-vs-all screen), surfaced by the PPI / interactome workbench
+# (src/ppi_workbench.rs).
+valenx-ppi           = { path = "../valenx-ppi" }
+# Native planar multibody-dynamics solver (constrained-DAE System +
+# Featherstone articulated-body algorithm + penalty contact / Coulomb
+# friction), surfaced by the Multibody-dynamics workbench (src/mbd_workbench.rs).
+valenx-mbd           = { path = "../valenx-mbd" }
 valenx-qchem         = { path = "../valenx-qchem" }
 valenx-genomics      = { path = "../valenx-genomics" }
 valenx-sysbio        = { path = "../valenx-sysbio" }
@@ -428,6 +516,12 @@ valenx-adapter-meep        = { path = "../valenx-adapters/em/valenx-adapter-meep
 valenx-adapter-pybamm      = { path = "../valenx-adapters/battery/valenx-adapter-pybamm" }
 valenx-adapter-mujoco      = { path = "../valenx-adapters/dynamics/valenx-adapter-mujoco" }
 valenx-adapter-precice     = { path = "../valenx-adapters/coupling/valenx-adapter-precice" }
+# The in-house FMI / HELICS co-simulation coupling engine — surfaced by the
+# Co-Simulation workbench (src/cosim_workbench.rs). Native co-sim master
+# (Jacobi / Gauss-Seidel over a Subsystem graph) + a strongly-coupled
+# fixed-point implicit coupler; the workbench calls its real API directly
+# (no subprocess, default features only — no binary FMU).
+valenx-adapter-fmi         = { path = "../valenx-adapters/coupling/valenx-adapter-fmi" }
 
 # Biology (Phase 17) — text-driven subprocess adapters covering the
 # common biomolecular workflows (sequence / cheminformatics / MD /

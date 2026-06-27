@@ -49,8 +49,88 @@ use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 
+use valenx_viz::ViewDirection;
+
 use crate::project_tabs::{self, TabKind};
 use crate::ValenxApp;
+
+/// A typed value an agent can assign to a labelled workbench control via
+/// [`SetControl`](AgentCommand::SetControl). **Untagged** on the wire, so the
+/// JSON literal is written directly — `42`, `4000`, `0.55`, `true`,
+/// `"linear"` — and serde picks the first matching arm. Order matters: `bool`
+/// is tried before the numbers (a JSON `true` is *only* a bool), then the
+/// integer arm (so a whole number like `4000` arrives as `Int`, not a lossy
+/// float), then the float arm, then the string fallback.
+///
+/// The receiving workbench's `agent_set` decides how to interpret the value for
+/// a given control (e.g. a `usize` sample-count reads [`as_i64`](AgentValue::as_i64),
+/// a `f64` coefficient reads [`as_f64`](AgentValue::as_f64), an enum-by-name
+/// reads [`as_str`](AgentValue::as_str)); a value of the wrong shape for the
+/// named control yields a fail-loud `Err(String)` (→ a `warn` feed note), never
+/// a panic.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(untagged)]
+pub enum AgentValue {
+    /// A boolean (`true` / `false`) — for checkbox / toggle controls.
+    Bool(bool),
+    /// A whole number — for integer controls (`usize` / `u32` / `u64` counts,
+    /// sample sizes, seeds). Also coercible to `f64` for a float control.
+    Int(i64),
+    /// A real number — for floating-point controls.
+    Float(f64),
+    /// A string — for enum-by-name controls (a combo selection like
+    /// `"linear"`), or a free-text field.
+    Str(String),
+}
+
+impl AgentValue {
+    /// Interpret this value as an `f64` for a floating-point control. NaN/Inf is
+    /// rejected (fail-loud, mirroring `as_i64`) so a hostile value can never be
+    /// written to a control and reported `Ok` — this single gate closes the
+    /// write-then-Ok gap across every bare `as_f64()?` setter. An `Int` widens
+    /// losslessly; a `Bool` / `Str` is a type error.
+    pub fn as_f64(&self) -> Result<f64, String> {
+        match self {
+            AgentValue::Float(v) if v.is_finite() => Ok(*v),
+            AgentValue::Float(v) => Err(format!("expected a finite number, got {v}")),
+            AgentValue::Int(v) => Ok(*v as f64),
+            other => Err(format!("expected a number, got {other:?}")),
+        }
+    }
+
+    /// Interpret this value as an `i64` for an integer control. A whole-valued
+    /// `Float` (e.g. `4000.0`) is accepted and truncated to the integer; a
+    /// fractional `Float`, a `Bool`, or a `Str` is a type error (fail-loud).
+    pub fn as_i64(&self) -> Result<i64, String> {
+        match self {
+            AgentValue::Int(v) => Ok(*v),
+            // Accept a float that is exactly integral so `{"value": 4000.0}`
+            // still sets a usize control; reject a fractional float loudly.
+            AgentValue::Float(v) if v.fract() == 0.0 && v.is_finite() => Ok(*v as i64),
+            other => Err(format!("expected an integer, got {other:?}")),
+        }
+    }
+
+    /// Interpret this value as a `bool` for a toggle control. Only a JSON
+    /// boolean qualifies; a number / string is a type error (fail-loud) so a
+    /// stray `1` never silently flips a flag.
+    pub fn as_bool(&self) -> Result<bool, String> {
+        match self {
+            AgentValue::Bool(v) => Ok(*v),
+            other => Err(format!("expected a boolean, got {other:?}")),
+        }
+    }
+
+    /// Interpret this value as a string slice for an enum-by-name / text
+    /// control. Only a JSON string qualifies (a number is a type error) so an
+    /// enum selection is always written explicitly as text.
+    pub fn as_str(&self) -> Result<&str, String> {
+        match self {
+            AgentValue::Str(s) => Ok(s),
+            other => Err(format!("expected a string, got {other:?}")),
+        }
+    }
+}
 
 /// Throttle: poll the command files at most this often (matches the ~1 s the
 /// chat feed itself re-reads at).
@@ -320,6 +400,278 @@ pub enum AgentCommand {
         #[serde(default)]
         speed: Option<f32>,
     },
+    /// **Run a command-palette action by its stable id.** Bridges the file
+    /// channel into the *existing* command-palette registry
+    /// ([`crate::commands::static_commands`]): `id` is matched against a
+    /// [`crate::commands::Command::id`] (the stable `&'static str` like
+    /// `"view.front"`, `"run.selected-case"`, `"settings.open"`) and the
+    /// matching command is invoked through the **same** `(cmd.invoke)(app)`
+    /// function pointer a user click / `Ctrl+P` selection runs — so the ~66
+    /// palette actions become drivable over the robust polled file-bridge with
+    /// **no duplicated action logic**. An unknown `id` posts an "unknown command
+    /// id" feed note and is otherwise a no-op (never a panic); a successful run
+    /// posts a `"ran <id>"` ack note.
+    ///
+    /// Honest scope: most ids are pure in-process state (the 8 camera views,
+    /// shading, run/sweep/cancel, settings, audit-tail) and drive cleanly
+    /// headless. A handful open a **native file dialog** (`file.new-project`,
+    /// `file.open-project`, `file.import-stl`, `file.load-mesh`,
+    /// `file.save-mesh-stl`, the HTML/CSV/audit-open file-browser actions) —
+    /// they are still exposed (a user driving the GUI may want them) but are not
+    /// usefully driven headless. The bridge does **not** try to suppress those
+    /// dialogs.
+    RunCommand {
+        /// The stable command id to run (e.g. `"view.front"`).
+        id: String,
+    },
+    /// **Enumerate the available command-palette ids** into this channel's chat
+    /// feed, so an agent can *discover* what [`RunCommand`](AgentCommand::RunCommand)
+    /// accepts without hard-coding the list. Posts a single feed note listing
+    /// every [`crate::commands::static_commands`] id (the same registry
+    /// `RunCommand` resolves against). No app state changes.
+    ListCommands,
+    /// **Set a labelled workbench parameter by its user-visible caption.** This
+    /// closes the param-setting half of AI-drivability: where
+    /// [`RunCommand`](AgentCommand::RunCommand) fires *actions*, `SetControl`
+    /// writes a tool's *input values* over the robust polled file-bridge.
+    ///
+    /// `name` is the exact caption the user sees next to the control (e.g.
+    /// `"Monte-Carlo samples N"`, `"a1 (coeff on x1)"`, `"sensor range (m)"`) —
+    /// the **same** string the widget is `labelled_by`, so an agent that read a
+    /// caption from the accessibility tree (or from
+    /// [`ListControls`](AgentCommand::ListControls)) can set it by that name.
+    /// `value` is the typed [`AgentValue`] to assign.
+    ///
+    /// `workbench` selects the target tool by id (a [`TabKind::from_id`] alias,
+    /// e.g. `"uq"`); when omitted the **active tab's** workbench is used (so an
+    /// agent driving the visible tool needn't name it). Resolution + the
+    /// per-workbench validated assignment go through `set_control` → that
+    /// workbench's `agent_set`; an unknown workbench, an unknown caption, or a
+    /// value of the wrong type posts a `warn` feed note and changes nothing
+    /// (never a panic). A successful set posts an ack note naming the control
+    /// and its new value, so the change is visible in the unit's chat.
+    SetControl {
+        /// The control's user-visible caption (== its `labelled_by` text).
+        name: String,
+        /// The typed value to assign (untagged: `42`, `0.55`, `true`, `"sum"`).
+        value: AgentValue,
+        /// Optional target workbench id (default: the active tab's workbench).
+        #[serde(default)]
+        workbench: Option<String>,
+    },
+    /// **Enumerate the settable control captions** of a workbench into this
+    /// channel's chat feed, so an agent can *discover* what
+    /// [`SetControl`](AgentCommand::SetControl) accepts without hard-coding the
+    /// names. `workbench` selects the tool by id (default: the active tab's
+    /// workbench). Posts a single feed note listing every caption that
+    /// workbench's `agent_set` recognises; a workbench with no `SetControl`
+    /// support yet posts a note saying so. No app state changes.
+    ListControls {
+        /// Optional target workbench id (default: the active tab's workbench).
+        #[serde(default)]
+        workbench: Option<String>,
+    },
+    /// **Read a workbench's COMPUTED result back into this channel's chat feed.**
+    /// This closes the live-driving loop: where [`SetControl`](AgentCommand::SetControl)
+    /// writes a tool's inputs and [`RunCommand`](AgentCommand::RunCommand) fires
+    /// the solve, `ReadReadout` reads the *answer* back so an agent can
+    /// **self-verify** what it just drove — no screenshot, no GUI focus needed.
+    ///
+    /// `workbench` selects the target tool by id (a [`TabKind::from_id`] alias,
+    /// e.g. `"uq"`); when omitted the **active tab's** workbench is used. The
+    /// resolved workbench's read-only `agent_readout` returns its current result
+    /// text (the same string the panel renders) — posted as a `result` feed note.
+    /// A workbench that has not been run yet (or has no readout wired) posts a
+    /// `warn` "not run yet / no readout" note instead; an unknown/unresolved
+    /// workbench posts a `warn` and changes nothing (never a panic). Purely
+    /// read-only: no app state is modified.
+    ReadReadout {
+        /// Optional target workbench id (default: the active tab's workbench).
+        #[serde(default)]
+        workbench: Option<String>,
+    },
+    /// **Click any button / widget in the active workbench by its accessible
+    /// name** — the generic, no-per-workbench-wiring drive command. Where
+    /// [`SetControl`](AgentCommand::SetControl) writes a tool's *inputs* and
+    /// [`RunCommand`](AgentCommand::RunCommand) fires a *registered* action,
+    /// `invoke_named` triggers the workbench's own in-panel buttons (its
+    /// "▶ Compute" / "Run" / "Apply" / "Analyze") **by the exact caption a
+    /// screen reader / UI-Automation client sees** — closing the AI-drivability
+    /// gap for the ~40 workbenches that have named controls + buttons but no
+    /// bespoke bridge run-id.
+    ///
+    /// Mechanism (identical to how an external UIA client clicks by name):
+    /// `invoke_named` runs a **headless probe** of the active workbench's panel
+    /// in a throwaway accesskit-enabled context, finds the node whose accessible
+    /// `name` matches `name`, and queues an `accesskit` `Default` action on that
+    /// node id ([`crate::ValenxApp::pending_accesskit_actions`]). On the **next**
+    /// frame `crate::ValenxApp::raw_input_hook` injects it as an
+    /// `AccessKitActionRequest`, and egui reports the matching button as
+    /// `.clicked()` — the same path a real click takes (the bridge keeps frames
+    /// alive via the unfocused `request_repaint`, so the queued action fires
+    /// promptly). The node id is a deterministic hash of the widget's egui id, so
+    /// the id resolved in the probe is the *same* id the live frame uses.
+    ///
+    /// Matching is exact, then a case-insensitive fallback. No match (or no
+    /// active workbench) posts a `warn` feed note and changes nothing (never a
+    /// panic); a match posts an ack naming the button it queued.
+    InvokeNamed {
+        /// The button/widget's accessible name (== the caption the user sees,
+        /// the same string the UI-Automation tree exposes as `Name`).
+        name: String,
+    },
+    /// **Enumerate the clickable button captions in the active workbench** into
+    /// this channel's chat feed, so an agent can *discover* what
+    /// [`InvokeNamed`](AgentCommand::InvokeNamed) accepts without hard-coding
+    /// them. Runs the same headless accesskit probe and lists every node whose
+    /// role is a button (i.e. invokable), by name. No app state changes; an
+    /// empty/closed workbench posts a note saying so.
+    ListButtons,
+    /// **Read the active workbench panel's visible text back into this channel's
+    /// chat feed**, generically — the accessibility-tree counterpart to
+    /// [`ReadReadout`](AgentCommand::ReadReadout) that needs no per-workbench
+    /// `agent_readout`. Runs the same headless accesskit probe and concatenates
+    /// the readable text nodes (labels / values) of the active workbench, so an
+    /// agent can self-verify a computed result by name even on a tool that has
+    /// no bespoke readout wired. Posted as a `result` feed note (bounded in
+    /// length). Purely read-only; a closed workbench posts a `warn`.
+    ReadText,
+    /// **Snap the central 3-D viewport camera to a canonical view.** `dir` is one
+    /// of `front` / `back` / `left` / `right` / `top` / `bottom` / `iso`
+    /// (case-insensitive), mapped to a [`valenx_viz::ViewDirection`] and applied
+    /// via the **same** `OrbitCamera::set_view` the ViewCube buttons drive
+    /// ([`crate::ValenxApp::camera_mut`]). This closes the camera half of the
+    /// viewport AI-drivability gap over the robust polled file-bridge. An
+    /// unrecognised `dir` posts a `warn` feed note and changes nothing (never a
+    /// panic); a successful snap posts an ack note. The camera *target*/distance
+    /// are untouched — only the orbit angles snap, exactly like the ViewCube.
+    SetView {
+        /// Canonical view name (case-insensitive): `front`, `back`, `left`,
+        /// `right`, `top`, `bottom`, `iso`.
+        dir: String,
+    },
+    /// **Orbit the central 3-D camera by a degree delta** — the file-driven
+    /// equivalent of a middle-mouse drag. `dx_deg` changes azimuth, `dy_deg`
+    /// changes elevation (clamped to `±89.9°` by `OrbitCamera::orbit`, the same
+    /// vetted method the drag uses). Always succeeds (any finite delta is valid;
+    /// a non-finite delta is ignored with a `warn` note); posts an ack note with
+    /// the new azimuth/elevation.
+    Orbit {
+        /// Azimuth delta in degrees (horizontal orbit).
+        dx_deg: f32,
+        /// Elevation delta in degrees (vertical orbit, clamped to ±89.9°).
+        dy_deg: f32,
+    },
+    /// **Dolly the central 3-D camera in/out** — the file-driven equivalent of a
+    /// scroll-wheel zoom. `factor` is the fractional zoom `OrbitCamera::zoom`
+    /// takes: positive zooms **in** (e.g. `0.1` = 10% closer), negative zooms
+    /// out; the method clamps so the camera can't invert through the target. A
+    /// non-finite `factor` is ignored with a `warn` note; a valid zoom posts an
+    /// ack note with the new distance.
+    Zoom {
+        /// Fractional zoom amount (positive = in, negative = out).
+        factor: f32,
+    },
+    /// **Frame the whole loaded model in the central 3-D viewport** — the
+    /// file-driven equivalent of the "Fit / Frame all" action. Reframes the
+    /// camera around the loaded mesh's (or STL's) axis-aligned bounding box via
+    /// the **same** [`crate::ValenxApp::frame_current_mesh`] /
+    /// [`crate::ValenxApp::frame_current_stl`] methods the menu uses. When
+    /// **nothing** is loaded the camera is left unchanged and a `warn` feed note
+    /// says so (never a panic); on success an ack note is posted.
+    FrameAll,
+    /// **Auto-tile / organize the open workspace panels into a balanced grid**
+    /// — the file-driven equivalent of the tab-strip "Tile" button. Routes
+    /// through the **same** `crate::dock_layout::ValenxApp::auto_tile_dock`
+    /// the button calls: every open central-workspace panel (workbenches, the
+    /// Assistant, any Workbench+Agent tiles) is reflowed into a
+    /// `ceil(sqrt(N))`-column grid so all of them stay visible and legible
+    /// instead of one being crushed to a sliver. A no-op (warn note) when no
+    /// panel is open or on a clean agent product tab; on success an ack note
+    /// reports how many panels were tiled.
+    Tile,
+    /// **Add a straight-line vertex to the in-house CAD sketch** by explicit
+    /// model-space coordinates — the file-driven equivalent of a Line-tool click
+    /// on the sketch canvas. Routes through the **same**
+    /// [`crate::cad_workbench::CadWorkbenchState::sketch_add_point`] the mouse
+    /// click uses (first point seeds the start anchor, each later point appends a
+    /// `Line` segment; a no-op once the loop is closed). Always parses; posts an
+    /// ack note with the new anchor count.
+    AddSketchPoint {
+        /// Sketch-plane X (model units).
+        x: f64,
+        /// Sketch-plane Y (model units).
+        y: f64,
+    },
+    /// **Add a 3-point circular arc to the in-house CAD sketch** — the
+    /// file-driven equivalent of the Arc tool's three clicks (`start`, then a
+    /// point `via` ON the arc, then `end`). Routes through the **same**
+    /// [`crate::cad_workbench::CadWorkbenchState::sketch_add_arc`] the canvas
+    /// uses (if the sketch is empty `start` seeds the start anchor; a no-op once
+    /// the loop is closed). Always parses; posts an ack note.
+    AddSketchArc {
+        /// Arc start point `[x, y]` (model units).
+        start: [f64; 2],
+        /// A point ON the arc between start and end `[x, y]` (model units).
+        via: [f64; 2],
+        /// Arc end point `[x, y]` (model units).
+        end: [f64; 2],
+    },
+    /// **Extrude the current in-house CAD sketch profile into a solid** — the
+    /// file-driven equivalent of the panel's "Extrude sketch" button. Sweeps the
+    /// drawn profile (from
+    /// [`crate::cad_workbench::CadWorkbenchState::sketch_points`]) along +Z by
+    /// `height` through the **same**
+    /// [`crate::cad_workbench::CadWorkbenchState::add_extrude_from_sketch`] +
+    /// `request_rebuild` path the button uses. `height` must be `> 0` (and
+    /// finite) — otherwise a `warn` feed note is posted and nothing changes
+    /// (never a panic). A profile of fewer than 3 anchors is also reported. On a
+    /// valid extrude an ack note is posted and the tree is flagged to rebuild
+    /// into the viewport on the next frame.
+    ExtrudeSketch {
+        /// Extrude depth along +Z (model units); must be `> 0`.
+        height: f64,
+    },
+    /// **Add a straight line to the in-house 2-D drafting drawing** by explicit
+    /// endpoints — the file-driven equivalent of the 2-D form's line `+` button.
+    /// Routes through the **same** `Drawing2D::add(Entity2D::Line { .. })` path
+    /// (via [`crate::draft2d_workbench::Draft2dWorkbenchState::agent_add_line`],
+    /// layer `"0"`). Always parses; posts an ack note with the new entity count.
+    ///
+    /// Note the explicit `rename`: the enum's `rename_all = "snake_case"` would
+    /// map `Add2dLine` to `"add2d_line"` (no underscore before the digit), but
+    /// the wire tag is pinned to `"add_2d_line"` (matching the `show_2d` style).
+    #[serde(rename = "add_2d_line")]
+    Add2dLine {
+        /// First endpoint X (drawing units).
+        x1: f64,
+        /// First endpoint Y (drawing units).
+        y1: f64,
+        /// Second endpoint X (drawing units).
+        x2: f64,
+        /// Second endpoint Y (drawing units).
+        y2: f64,
+    },
+    /// **Add a circle to the in-house 2-D drafting drawing** by centre + radius —
+    /// the file-driven equivalent of the 2-D form's circle `+` button. Routes
+    /// through the **same** `Drawing2D::add(Entity2D::Circle { .. })` path (via
+    /// [`crate::draft2d_workbench::Draft2dWorkbenchState::agent_add_circle`],
+    /// layer `"0"`). `r` must be `> 0` (and finite) — otherwise a `warn` feed
+    /// note is posted and nothing changes (never a panic). On success an ack note
+    /// with the new entity count is posted.
+    ///
+    /// Explicit `rename` for the same reason as [`Add2dLine`](AgentCommand::Add2dLine):
+    /// `rename_all` would yield `"add2d_circle"`, but the wire tag is pinned to
+    /// `"add_2d_circle"`.
+    #[serde(rename = "add_2d_circle")]
+    Add2dCircle {
+        /// Circle centre X (drawing units).
+        cx: f64,
+        /// Circle centre Y (drawing units).
+        cy: f64,
+        /// Circle radius (drawing units); must be `> 0`.
+        r: f64,
+    },
 }
 
 /// The per-channel **command file** path for agent channel `n`:
@@ -355,6 +707,29 @@ pub fn global_cmd_path(app: &ValenxApp) -> PathBuf {
         .map(Path::to_path_buf)
         .unwrap_or_else(std::env::temp_dir);
     base_dir.join(format!("{CMD_STEM}.jsonl"))
+}
+
+/// Is the agent file-bridge **active** this session? True when an external
+/// agent is (or is about to be) driving valenx, used by the eframe `update()`
+/// loop to decide whether to schedule the faster ~6 fps heartbeat that keeps
+/// queued commands flowing while the window is unfocused/idle (see `update.rs`).
+///
+/// Two independent signals, either of which means "drive me":
+/// - the chat-bridge **env channels** are configured
+///   (`$VALENX_ASSISTANT_INBOX` / `$VALENX_ASSISTANT_FEED`) — set by the launcher
+///   whenever the in-app Assistant bridge is wired up; or
+/// - a **global command file** ([`global_cmd_path`]) already exists on disk —
+///   the moment an agent appends its first command (even with no env override
+///   and no unit yet), so a cold agent that just writes the global file is
+///   served promptly.
+///
+/// Cheap: an env lookup plus one `Path::exists` (a single `stat`), called once
+/// per frame. When neither holds the normal interactive build pays nothing
+/// beyond that.
+pub fn bridge_active(app: &ValenxApp) -> bool {
+    std::env::var_os("VALENX_ASSISTANT_INBOX").is_some()
+        || std::env::var_os("VALENX_ASSISTANT_FEED").is_some()
+        || global_cmd_path(app).exists()
 }
 
 /// **Wipe stale command files at launch.** Deletes every
@@ -512,13 +887,32 @@ pub fn poll_and_apply_agent_commands(app: &mut ValenxApp) {
 }
 
 /// Apply **one** command from the **global** channel
-/// (`<base-dir>/valenx_chat_cmd.jsonl`). Only [`NewUnit`](AgentCommand::NewUnit)
-/// is meaningful here — it opens a fresh Workbench+Agent unit (the bootstrap an
-/// agent needs before any unit exists) and optionally builds a product into it.
-/// Every other variant is a per-*unit* command and is ignored on the global
-/// channel (it has no unit to act on); a malformed line never reaches here (the
-/// poll loop skips unparseable lines). Like [`apply`], every branch is a
-/// no-op-on-bad-input rather than a panic.
+/// (`<base-dir>/valenx_chat_cmd.jsonl`).
+///
+/// [`NewUnit`](AgentCommand::NewUnit) is the global-channel **bootstrap** — it
+/// opens a fresh Workbench+Agent unit (the only place that can, since a per-unit
+/// channel already *is* a unit) and optionally builds a product into it. It is
+/// handled inline below.
+///
+/// **Every other drive command is ALSO honoured here**, so an external agent can
+/// drive the whole app from the one global file with no unit-bootstrap: the
+/// app/tab-level commands (`new_tab`, `open_workbench`, `focus_tab`,
+/// `rename_tab`, `close_tab`), the control/readout commands (`set_control`,
+/// `run_command`, `read_readout`, `list_controls`, `list_commands`), the camera
+/// /sketch/2-D commands, `note`, and `animate` (which carries its own target
+/// `n`) are dispatched through the **same** [`apply`] reducer the per-unit
+/// channel uses, against the **active tab / app** — with the special **channel
+/// `0`** sentinel so their ack/`warn` feed notes land in the **GLOBAL** feed
+/// (`valenx_chat_feed.jsonl`, see
+/// [`crate::assistant_workbench::append_feed_note`]) that an agent reading the
+/// global channel watches, not a per-unit feed.
+///
+/// The inherently per-unit *product* commands (`show_product`, `show_3d`,
+/// `show_2d`) target a `workspace:<n>` pane that the global channel has no unit
+/// for, so they are a deliberate no-op here (use `new_unit` to mint a unit
+/// first, then drive them on that unit's channel). A malformed line never
+/// reaches here (the poll loop skips unparseable lines). Like [`apply`], every
+/// branch is a no-op-on-bad-input rather than a panic.
 fn apply_global(app: &mut ValenxApp, cmd: AgentCommand) {
     let AgentCommand::NewUnit {
         kind,
@@ -527,8 +921,19 @@ fn apply_global(app: &mut ValenxApp, cmd: AgentCommand) {
         group,
     } = cmd
     else {
-        // Non-`new_unit` commands are per-unit; the global channel has no unit
-        // to target, so they are ignored here.
+        match cmd {
+            // Inherently per-unit product renders: no `workspace:<n>` pane on
+            // the global channel, so skip (mint a unit with `new_unit` first).
+            AgentCommand::ShowProduct { .. }
+            | AgentCommand::Show3d { .. }
+            | AgentCommand::Show2d { .. } => {}
+            // `new_unit` is the early-bound arm above; it can't reach here.
+            AgentCommand::NewUnit { .. } => {}
+            // Everything else (tab ops, set/run/read/list, camera, sketch, 2-D,
+            // note, animate) drives the active tab / app through the SAME
+            // `apply` reducer, with channel `0` so acks go to the GLOBAL feed.
+            other => apply(app, 0, other),
+        }
         return;
     };
 
@@ -981,12 +1386,1657 @@ fn apply(app: &mut ValenxApp, ch: usize, cmd: AgentCommand) {
                 }
             }
         }
+        AgentCommand::RunCommand { id } => {
+            // A few workbench RUN actions live only as in-panel buttons (no
+            // palette command), but still need to be bridge-drivable. Handle
+            // those ids here BEFORE the palette lookup; they resolve the active
+            // workbench and fire the SAME `*_and_store` path the button calls.
+            // Bridge-only on purpose — kept out of the user-facing palette.
+            if matches!(id.as_str(), "missionsim.run" | "missionsim.run-monte-carlo") {
+                run_missionsim_bridge(app, ch, &id);
+            } else if matches!(
+                id.as_str(),
+                "missionplanner.play"
+                    | "missionplanner.pause"
+                    | "missionplanner.route"
+                    | "missionplanner.los"
+            ) {
+                run_mission_planner_bridge(app, ch, &id);
+            } else if matches!(id.as_str(), "morphogenesis.play" | "morphogenesis.pause") {
+                run_morphogenesis_bridge(app, ch, &id);
+            } else if id.as_str() == "topopt.run" {
+                run_topopt_bridge(app, ch, &id);
+            } else if id.as_str() == "brep.build" {
+                run_brep_bridge(app, ch, &id);
+            } else if id.as_str() == "thermo.compute" {
+                run_thermo_bridge(app, ch, &id);
+            } else if id.as_str() == "quantum.run" {
+                run_quantum_bridge(app, ch, &id);
+            } else if id.as_str() == "nodegraph.eval" {
+                run_nodegraph_bridge(app, ch, &id);
+            } else if id.as_str() == "bondgraph.solve" {
+                run_bondgraph_bridge(app, ch, &id);
+            } else if id.as_str() == "surrogate.train" {
+                run_surrogate_bridge(app, ch, &id);
+            } else if id.as_str() == "optics.compute" {
+                run_optics_bridge(app, ch, &id);
+            } else if id.as_str() == "acoustics.compute" {
+                run_acoustics_bridge(app, ch, &id);
+            } else if id.as_str() == "waveform.parse" {
+                run_waveform_bridge(app, ch, &id);
+            } else {
+                // Resolve `id` against the EXISTING command-palette registry and
+                // invoke the matching command through the SAME `(cmd.invoke)(app)`
+                // function pointer a user click / Ctrl+P selection runs (see
+                // `commands::dispatch`'s `Static` arm) — no action logic is
+                // duplicated here. An unknown id is a feed note + no-op (no panic).
+                match crate::commands::static_commands()
+                    .iter()
+                    .find(|c| c.id.0 == id)
+                {
+                    Some(cmd) => {
+                        (cmd.invoke)(app);
+                        crate::assistant_workbench::append_feed_note(
+                            app,
+                            ch,
+                            "Claude",
+                            &format!("ran {id}"),
+                            "result",
+                        );
+                    }
+                    None => {
+                        crate::assistant_workbench::append_feed_note(
+                            app,
+                            ch,
+                            "Claude",
+                            &format!("unknown command id: {id}"),
+                            "warn",
+                        );
+                    }
+                }
+            }
+        }
+        AgentCommand::ListCommands => {
+            // Enumerate the SAME registry `RunCommand` resolves against so an
+            // agent can discover the runnable ids. One feed note listing every
+            // static command id; no app state changes.
+            let ids: Vec<&str> = crate::commands::static_commands()
+                .iter()
+                .map(|c| c.id.0)
+                .collect();
+            let body = format!("commands ({}): {}", ids.len(), ids.join(", "));
+            crate::assistant_workbench::append_feed_note(app, ch, "Claude", &body, "result");
+        }
+        AgentCommand::SetControl {
+            name,
+            value,
+            workbench,
+        } => {
+            set_control(app, ch, &name, &value, workbench.as_deref());
+        }
+        AgentCommand::ListControls { workbench } => {
+            list_controls(app, ch, workbench.as_deref());
+        }
+        AgentCommand::ReadReadout { workbench } => {
+            read_readout(app, ch, workbench.as_deref());
+        }
+        AgentCommand::InvokeNamed { name } => {
+            invoke_named(app, ch, &name);
+        }
+        AgentCommand::ListButtons => {
+            list_buttons(app, ch);
+        }
+        AgentCommand::ReadText => {
+            read_text(app, ch);
+        }
+        AgentCommand::SetView { dir } => {
+            // Snap the central viewport camera to a canonical ViewCube
+            // orientation through the SAME `OrbitCamera::set_view` the ViewCube
+            // buttons drive. An unrecognised name is a fail-loud warn note.
+            match view_direction_from_str(&dir) {
+                Some(vd) => {
+                    app.camera_mut().set_view(vd);
+                    crate::assistant_workbench::append_feed_note(
+                        app,
+                        ch,
+                        "Claude",
+                        &format!("view → {dir}"),
+                        "result",
+                    );
+                }
+                None => crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    &format!("set_view: unknown view direction: {dir:?} (use front/back/left/right/top/bottom/iso)"),
+                    "warn",
+                ),
+            }
+        }
+        AgentCommand::Orbit { dx_deg, dy_deg } => {
+            // Orbit by a degree delta through `OrbitCamera::orbit` (which clamps
+            // elevation). Guard non-finite deltas so a stray NaN can't poison the
+            // camera angles.
+            if dx_deg.is_finite() && dy_deg.is_finite() {
+                app.camera_mut().orbit(dx_deg, dy_deg);
+                let cam = app.camera_mut();
+                let (az, el) = (cam.azimuth_deg, cam.elevation_deg);
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    &format!("orbit → az {az:.1}°, el {el:.1}°"),
+                    "result",
+                );
+            } else {
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    "orbit: non-finite delta ignored",
+                    "warn",
+                );
+            }
+        }
+        AgentCommand::Zoom { factor } => {
+            // Dolly in/out through `OrbitCamera::zoom` (which clamps so the
+            // camera can't invert through the target). Guard a non-finite factor.
+            if factor.is_finite() {
+                app.camera_mut().zoom(factor);
+                let dist = app.camera_mut().distance;
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    &format!("zoom → distance {dist:.3}"),
+                    "result",
+                );
+            } else {
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    "zoom: non-finite factor ignored",
+                    "warn",
+                );
+            }
+        }
+        AgentCommand::FrameAll => {
+            // Reframe around the loaded model's AABB through the SAME
+            // `frame_current_*` methods the menu uses. Prefer a loaded mesh,
+            // fall back to a loaded STL; if neither is loaded leave the camera
+            // unchanged and say so (fail-loud, no panic).
+            if app.mesh.is_some() {
+                app.frame_current_mesh();
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    "framed loaded mesh",
+                    "result",
+                );
+            } else if app.stl.is_some() {
+                app.frame_current_stl();
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    "framed loaded STL",
+                    "result",
+                );
+            } else {
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    "frame_all: no mesh or STL loaded (camera unchanged)",
+                    "warn",
+                );
+            }
+        }
+        AgentCommand::Tile => {
+            // Organize the open workspace panels into a balanced grid through the
+            // SAME `auto_tile_dock` the tab-strip "Tile" button drives. A clean
+            // agent product tab or an empty workspace is a deliberate no-op
+            // (warn note, never a panic); otherwise report the panel count.
+            if app.dock_agent_only {
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    "tile: this is a single agent unit (nothing to re-grid)",
+                    "warn",
+                );
+            } else {
+                let count = app.open_tileable_count();
+                if count == 0 {
+                    crate::assistant_workbench::append_feed_note(
+                        app,
+                        ch,
+                        "Claude",
+                        "tile: no workspace panels open",
+                        "warn",
+                    );
+                } else {
+                    app.auto_tile_dock();
+                    crate::assistant_workbench::append_feed_note(
+                        app,
+                        ch,
+                        "Claude",
+                        &format!("tiled {count} panel(s) into a balanced grid"),
+                        "result",
+                    );
+                }
+            }
+        }
+        AgentCommand::AddSketchPoint { x, y } => {
+            // Append a Line-tool vertex to the in-house CAD sketch through the
+            // SAME `sketch_add_point` the canvas click uses. Guard non-finite
+            // coordinates (a real click can't produce them) so a hostile 1e400
+            // can't seed a degenerate profile for a later extrude.
+            if !(x.is_finite() && y.is_finite()) {
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    &format!("add_sketch_point: non-finite coordinate ignored ({x}, {y})"),
+                    "warn",
+                );
+            } else {
+                app.cad.sketch_add_point(x, y);
+                let n = app.cad.sketch_anchor_count();
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    &format!("sketch point ({x}, {y}) — {n} anchor(s)"),
+                    "result",
+                );
+            }
+        }
+        AgentCommand::AddSketchArc { start, via, end } => {
+            // Append a 3-point arc to the in-house CAD sketch through the SAME
+            // `sketch_add_arc` the Arc tool uses.
+            app.cad.sketch_add_arc(start, via, end);
+            let n = app.cad.sketch_anchor_count();
+            crate::assistant_workbench::append_feed_note(
+                app,
+                ch,
+                "Claude",
+                &format!("sketch arc → {n} anchor(s)"),
+                "result",
+            );
+        }
+        AgentCommand::ExtrudeSketch { height } => {
+            // Extrude the current sketch profile into a solid through the SAME
+            // `add_extrude_from_sketch` + `request_rebuild` path the panel button
+            // uses. Validate height > 0 (and finite) and a ≥3-anchor profile;
+            // both failures are fail-loud warn notes (no panic, no state change).
+            if !(height.is_finite() && height > 0.0) {
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    &format!("extrude_sketch: height must be > 0 (got {height})"),
+                    "warn",
+                );
+            } else {
+                // `sketch_points()` borrows `app.cad`; clone the profile so the
+                // following `&mut` call to `add_extrude_from_sketch` doesn't
+                // overlap the borrow.
+                let profile = app.cad.sketch_points();
+                if profile.len() < 3 {
+                    crate::assistant_workbench::append_feed_note(
+                        app,
+                        ch,
+                        "Claude",
+                        &format!(
+                            "extrude_sketch: need ≥3 sketch anchors to extrude (have {})",
+                            profile.len()
+                        ),
+                        "warn",
+                    );
+                } else {
+                    app.cad.add_extrude_from_sketch(&profile, height);
+                    app.cad.request_rebuild();
+                    crate::assistant_workbench::append_feed_note(
+                        app,
+                        ch,
+                        "Claude",
+                        &format!("extruded sketch ({} anchors) by {height}", profile.len()),
+                        "result",
+                    );
+                }
+            }
+        }
+        AgentCommand::Add2dLine { x1, y1, x2, y2 } => {
+            // Add a line to the in-house 2-D drawing through the SAME
+            // `Drawing2D::add(Entity2D::Line)` path the form's `+` button uses.
+            // Guard non-finite endpoints (matching add_2d_circle's r guard).
+            if !(x1.is_finite() && y1.is_finite() && x2.is_finite() && y2.is_finite()) {
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    "add_2d_line: non-finite coordinate ignored",
+                    "warn",
+                );
+            } else {
+                app.draft2d.agent_add_line([x1, y1], [x2, y2]);
+                let n = app.draft2d.entity_count();
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    &format!(
+                        "2-D line added — {n} entit{}",
+                        if n == 1 { "y" } else { "ies" }
+                    ),
+                    "result",
+                );
+            }
+        }
+        AgentCommand::Add2dCircle { cx, cy, r } => {
+            // Add a circle to the in-house 2-D drawing through the SAME
+            // `Drawing2D::add(Entity2D::Circle)` path the form's `+` button uses.
+            // Validate r > 0 (the button also floors at 0.1) — fail-loud on a
+            // non-positive radius rather than silently drawing a dot.
+            if !(r.is_finite() && r > 0.0) {
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    &format!("add_2d_circle: radius must be > 0 (got {r})"),
+                    "warn",
+                );
+            } else {
+                app.draft2d.agent_add_circle([cx, cy], r);
+                let n = app.draft2d.entity_count();
+                crate::assistant_workbench::append_feed_note(
+                    app,
+                    ch,
+                    "Claude",
+                    &format!(
+                        "2-D circle added — {n} entit{}",
+                        if n == 1 { "y" } else { "ies" }
+                    ),
+                    "result",
+                );
+            }
+        }
         AgentCommand::NewUnit { .. } => {
             // `new_unit` is a **global-channel bootstrap** command (it opens a
             // brand-new unit), handled by `apply_global`. On a per-unit channel
             // there is no new unit to open, so it is a deliberate no-op here.
         }
     }
+}
+
+/// Map a case-insensitive view name to a [`ViewDirection`] for
+/// [`SetView`](AgentCommand::SetView). Accepts the seven ViewCube faces
+/// (`front` / `back` / `left` / `right` / `top` / `bottom`) plus `iso` (with
+/// `isometric` / `home` as friendly aliases). Anything else → `None`, which the
+/// caller turns into a fail-loud `warn` note.
+fn view_direction_from_str(s: &str) -> Option<ViewDirection> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "front" => Some(ViewDirection::Front),
+        "back" | "rear" => Some(ViewDirection::Back),
+        "left" => Some(ViewDirection::Left),
+        "right" => Some(ViewDirection::Right),
+        "top" => Some(ViewDirection::Top),
+        "bottom" => Some(ViewDirection::Bottom),
+        "iso" | "isometric" | "home" => Some(ViewDirection::Iso),
+        _ => None,
+    }
+}
+
+/// Resolve the target workbench for a [`SetControl`](AgentCommand::SetControl) /
+/// [`ListControls`](AgentCommand::ListControls): an explicit `workbench` id
+/// ([`TabKind::from_id`], case-insensitive, alias-tolerant) when given, else the
+/// **active tab's** workbench. `None` means neither resolved (no active tab, or
+/// an unknown id) — the caller turns that into a fail-loud `warn` note.
+fn resolve_target_kind(app: &ValenxApp, workbench: Option<&str>) -> Option<TabKind> {
+    match workbench {
+        Some(id) => TabKind::from_id(id),
+        None => app.tab_bar.active_kind(),
+    }
+}
+
+/// Fire a Mission-simulation RUN action from the bridge. The Run / Run
+/// Monte-Carlo actions exist only as in-panel buttons; this routes the two
+/// bridge ids (`missionsim.run`, `missionsim.run-monte-carlo`) to the SAME
+/// `*_and_store` functions the buttons call, so a `RunCommand` drives them.
+///
+/// The active tab must be a [`TabKind::MissionSim`] (so the run lands on the
+/// workbench the user is looking at); otherwise this posts a fail-loud `warn`
+/// note and changes nothing. After a run it acks with the workbench status line
+/// (which already carries the single-run summary, plus the Monte-Carlo headline
+/// for the ensemble path); `read_readout` then returns the full MC summary.
+fn run_missionsim_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::MissionSim) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Mission-simulation workbench"),
+            "warn",
+        );
+        return;
+    }
+    match id {
+        "missionsim.run" => crate::missionsim_workbench::run_and_store(app),
+        "missionsim.run-monte-carlo" => crate::missionsim_workbench::run_monte_carlo_and_store(app),
+        _ => unreachable!("run_missionsim_bridge called with a non-missionsim id"),
+    }
+    let status = app.missionsim.status.clone();
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {status}"),
+        "result",
+    );
+}
+
+/// Fire a Mission Planner action from the bridge. The Play / Pause toggles and
+/// the `Compute route` / `Compute LoS` actions exist only as in-panel buttons;
+/// this routes the bridge ids (`missionplanner.play`, `missionplanner.pause`,
+/// `missionplanner.route`, `missionplanner.los`) to the SAME `play` / `pause` /
+/// `route` / `los` functions the buttons call, so a `RunCommand` drives
+/// real-time playback, computes the tactical A\* route, or computes line of
+/// sight.
+///
+/// The active tab must be a [`TabKind::MissionPlanner`]; otherwise this posts a
+/// fail-loud `warn` note and changes nothing. After acting it acks with the
+/// planner readout (sim time + entity count + playing/paused + route status).
+fn run_mission_planner_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::MissionPlanner) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Mission Planner workbench"),
+            "warn",
+        );
+        return;
+    }
+    match id {
+        "missionplanner.play" => crate::mission_planner_workbench::play(app),
+        "missionplanner.pause" => crate::mission_planner_workbench::pause(app),
+        "missionplanner.route" => crate::mission_planner_workbench::route(app),
+        "missionplanner.los" => crate::mission_planner_workbench::los(app),
+        _ => unreachable!("run_mission_planner_bridge called with a non-missionplanner id"),
+    }
+    let readout = app
+        .mission_planner
+        .agent_readout()
+        .unwrap_or_else(|| "(no readout)".to_string());
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {readout}"),
+        "result",
+    );
+}
+
+/// Fire a Morphogenesis playback action from the bridge. The Play / Pause
+/// toggles exist only as in-panel buttons; this routes the two bridge ids
+/// (`morphogenesis.play`, `morphogenesis.pause`) to the SAME `play` / `pause`
+/// functions the buttons call, so a `RunCommand` drives real-time growth.
+///
+/// The active tab must be a [`TabKind::Morphogenesis`]; otherwise this posts a
+/// fail-loud `warn` note and changes nothing. After toggling it acks with the
+/// morphogenesis readout (preset + step count + mean V + playing/paused).
+fn run_morphogenesis_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::Morphogenesis) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Morphogenesis workbench"),
+            "warn",
+        );
+        return;
+    }
+    match id {
+        "morphogenesis.play" => crate::morphogenesis_workbench::play(app),
+        "morphogenesis.pause" => crate::morphogenesis_workbench::pause(app),
+        _ => unreachable!("run_morphogenesis_bridge called with a non-morphogenesis id"),
+    }
+    let readout = app
+        .morphogenesis
+        .agent_readout()
+        .unwrap_or_else(|| "(no readout)".to_string());
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {readout}"),
+        "result",
+    );
+}
+
+/// Fire the Topology Optimization run from the bridge. The **Run optimization**
+/// action exists only as an in-panel button; this routes the bridge id
+/// `topopt.run` to the SAME `run` function the button calls, so a `RunCommand`
+/// drives the full SIMP optimisation.
+///
+/// The active tab must be a [`TabKind::TopOpt`]; otherwise this posts a
+/// fail-loud `warn` note and changes nothing. After running it acks with the
+/// topopt readout (load case + grid + iterations + final compliance + volume).
+fn run_topopt_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::TopOpt) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Topology Optimization workbench"),
+            "warn",
+        );
+        return;
+    }
+    crate::topopt_workbench::run(app);
+    let readout = app
+        .topopt
+        .agent_readout()
+        .unwrap_or_else(|| "(no readout)".to_string());
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {readout}"),
+        "result",
+    );
+}
+
+/// Fire the Part B-Rep build from the bridge. The **Build** action exists
+/// only as an in-panel button; this routes the bridge id `brep.build` to
+/// the SAME `run` function the button calls, so a `RunCommand` drives the
+/// full primitive-build → boolean → tessellation pipeline.
+///
+/// The active tab must be a [`TabKind::BrepCad`]; otherwise this posts a
+/// fail-loud `warn` note and changes nothing. After building it acks with
+/// the brep readout (primitives + boolean op + solid topology + mesh
+/// counts + volume + bounding box).
+fn run_brep_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::BrepCad) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Part B-Rep workbench"),
+            "warn",
+        );
+        return;
+    }
+    crate::brep_workbench::run(app);
+    let readout = app
+        .brep
+        .agent_readout()
+        .unwrap_or_else(|| "(no readout)".to_string());
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {readout}"),
+        "result",
+    );
+}
+
+/// Fire the Thermodynamics compute from the bridge. The **Compute** action
+/// exists only as an in-panel button; this routes the bridge id
+/// `thermo.compute` to the SAME `run` function the button calls.
+///
+/// The active tab must be a [`TabKind::Thermo`]; otherwise this posts a
+/// fail-loud `warn` note and changes nothing. After computing it acks with
+/// the thermo readout (fluid + model + state + Z roots + Psat).
+fn run_thermo_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::Thermo) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Thermodynamics workbench"),
+            "warn",
+        );
+        return;
+    }
+    crate::thermo_workbench::run(app);
+    let readout = app
+        .thermo
+        .agent_readout()
+        .unwrap_or_else(|| "(no readout)".to_string());
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {readout}"),
+        "result",
+    );
+}
+
+/// Fire the Optics thin-lens compute from the bridge. The **Analyze** action
+/// exists only as an in-panel button; this routes the bridge id
+/// `optics.compute` to the SAME `run` function the button calls.
+///
+/// The active tab must be a [`TabKind::Optics`]; otherwise this posts a
+/// fail-loud `warn` note and changes nothing. After computing it acks with
+/// the optics readout (object distance + focal length + image distance +
+/// magnification + real/virtual).
+fn run_optics_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::Optics) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Optics workbench"),
+            "warn",
+        );
+        return;
+    }
+    crate::optics_workbench::run(app);
+    let readout = app
+        .optics
+        .agent_readout()
+        .unwrap_or_else(|| "(no readout)".to_string());
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {readout}"),
+        "result",
+    );
+}
+
+/// Fire the Acoustics monopole-radiation compute from the bridge. The
+/// **Radiate** action exists only as an in-panel button; this routes the
+/// bridge id `acoustics.compute` to the SAME `run` function the button
+/// calls.
+///
+/// The active tab must be a [`TabKind::Acoustics`]; otherwise this posts a
+/// fail-loud `warn` note and changes nothing. After computing it acks with
+/// the acoustics readout (source radius + surface velocity + frequency +
+/// observer distance + radiated pressure + SPL).
+fn run_acoustics_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::Acoustics) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Acoustics workbench"),
+            "warn",
+        );
+        return;
+    }
+    crate::acoustics_workbench::run(app);
+    let readout = app
+        .acoustics
+        .agent_readout()
+        .unwrap_or_else(|| "(no readout)".to_string());
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {readout}"),
+        "result",
+    );
+}
+
+/// Fire the Waveform VCD parse from the bridge. The **Parse** action exists
+/// only as an in-panel button; this routes the bridge id `waveform.parse` to
+/// the SAME `run` function the button calls.
+///
+/// The active tab must be a [`TabKind::Waveform`]; otherwise this posts a
+/// fail-loud `warn` note and changes nothing. After parsing it acks with the
+/// waveform readout (signal count + per-signal name/width/transition count +
+/// time range).
+fn run_waveform_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::Waveform) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Waveform workbench"),
+            "warn",
+        );
+        return;
+    }
+    crate::waveform_workbench::run(app);
+    let readout = app
+        .waveform
+        .agent_readout()
+        .unwrap_or_else(|| "(no readout)".to_string());
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {readout}"),
+        "result",
+    );
+}
+
+/// Fire the Quantum circuit run from the bridge. The **Run** action exists
+/// only as an in-panel button; this routes the bridge id `quantum.run` to
+/// the SAME `run` function the button calls.
+///
+/// The active tab must be a [`TabKind::Quantum`]; otherwise this posts a
+/// fail-loud `warn` note and changes nothing. After running it acks with
+/// the quantum readout (qubit count + gate count + basis-state probs).
+fn run_quantum_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::Quantum) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Quantum circuit workbench"),
+            "warn",
+        );
+        return;
+    }
+    crate::quantum_workbench::run(app);
+    let readout = app
+        .quantum
+        .agent_readout()
+        .unwrap_or_else(|| "(no readout)".to_string());
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {readout}"),
+        "result",
+    );
+}
+
+/// Fire the Node Graph topological evaluation from the bridge. The **Evaluate**
+/// action exists only as an in-panel button; this routes the bridge id
+/// `nodegraph.eval` to the SAME `run` function the button calls, so a
+/// `RunCommand` drives the full evaluation pass.
+///
+/// The active tab must be a [`TabKind::NodeGraph`]; otherwise this posts a
+/// fail-loud `warn` note and changes nothing. After evaluating it acks with the
+/// node-graph readout (node count + edge count + Output value(s)).
+fn run_nodegraph_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::NodeGraph) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Node Graph workbench"),
+            "warn",
+        );
+        return;
+    }
+    crate::nodegraph_workbench::run(app);
+    let readout = app
+        .nodegraph
+        .agent_readout()
+        .unwrap_or_else(|| "(no readout)".to_string());
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {readout}"),
+        "result",
+    );
+}
+
+/// Fire the Bond Graph derive-then-integrate solve from the bridge. The
+/// **Solve** action exists only as an in-panel button; this routes the bridge
+/// id `bondgraph.solve` to the SAME `run` function the button calls, so a
+/// `RunCommand` derives the bond-graph state equations and integrates them.
+///
+/// The active tab must be a [`TabKind::BondGraph`]; otherwise this posts a
+/// fail-loud `warn` note and changes nothing. After solving it acks with the
+/// bond-graph readout (preset + ODE order + natural frequency / damping +
+/// final state).
+fn run_bondgraph_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::BondGraph) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Bond Graph workbench"),
+            "warn",
+        );
+        return;
+    }
+    crate::bondgraph_workbench::run(app);
+    let readout = app
+        .bondgraph
+        .agent_readout()
+        .unwrap_or_else(|| "(no readout)".to_string());
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {readout}"),
+        "result",
+    );
+}
+
+/// Fire the Surrogate Model sample-then-train from the bridge. The **Train**
+/// action exists only as an in-panel button; this routes the bridge id
+/// `surrogate.train` to the SAME `run` function the button calls, so a
+/// `RunCommand` samples the truth and fits the MLP.
+///
+/// The active tab must be a [`TabKind::Surrogate`]; otherwise this posts a
+/// fail-loud `warn` note and changes nothing. After training it acks with the
+/// surrogate readout (train/test MSE + the live surrogate-vs-true prediction).
+fn run_surrogate_bridge(app: &mut ValenxApp, ch: usize, id: &str) {
+    if resolve_target_kind(app, None) != Some(TabKind::Surrogate) {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("{id}: active tab is not the Surrogate Model workbench"),
+            "warn",
+        );
+        return;
+    }
+    crate::surrogate_workbench::run(app);
+    let readout = app
+        .surrogate
+        .agent_readout()
+        .unwrap_or_else(|| "(no readout)".to_string());
+    crate::assistant_workbench::append_feed_note(
+        app,
+        ch,
+        "Claude",
+        &format!("ran {id} \u{2014} {readout}"),
+        "result",
+    );
+}
+
+/// Apply one [`SetControl`](AgentCommand::SetControl): resolve the target
+/// workbench (explicit id or the active tab), then assign `value` to the
+/// caption-named control through that workbench's **own** validated `agent_set`.
+/// Every failure path posts a `warn` feed note to channel `ch` and changes
+/// nothing — an unresolved/unsupported workbench, an unknown caption, or a
+/// wrong-typed value — so a bad command is loud but never a panic. A successful
+/// set posts an ack note naming the control and its new value.
+///
+/// Dispatch mirrors [`crate::project_tabs::set_workbench_flag`]: a `match` over
+/// the resolved [`TabKind`] routes to the right workbench module. Only the
+/// workbenches wired this round have an `agent_set`; the rest fall through to a
+/// "no settable controls" note (the honest follow-up-sweep surface).
+fn set_control(
+    app: &mut ValenxApp,
+    ch: usize,
+    name: &str,
+    value: &AgentValue,
+    workbench: Option<&str>,
+) {
+    let warn = |app: &mut ValenxApp, msg: String| {
+        crate::assistant_workbench::append_feed_note(app, ch, "Claude", &msg, "warn");
+    };
+
+    let Some(kind) = resolve_target_kind(app, workbench) else {
+        warn(
+            app,
+            match workbench {
+                Some(id) => format!("set_control: unknown workbench id: {id}"),
+                None => "set_control: no active tab to target (pass a workbench id)".to_string(),
+            },
+        );
+        return;
+    };
+
+    // Route to the resolved workbench's validated setter. Each arm calls a
+    // `agent_set(name, value) -> Result<(), String>` that owns the caption ->
+    // field mapping + range validation for that tool.
+    let result: Result<(), String> = match kind {
+        TabKind::Uq => app.uq.agent_set(name, value),
+        TabKind::Uas => app.uas.agent_set(name, value),
+        TabKind::MissionSim => app.missionsim.agent_set(name, value),
+        TabKind::MissionPlanner => app.mission_planner.agent_set(name, value),
+        TabKind::Morphogenesis => app.morphogenesis.agent_set(name, value),
+        TabKind::Survivability => app.survivability.agent_set(name, value),
+        TabKind::Draft2d => app.draft2d.agent_set(name, value),
+        // ---- agent_set sweep, batch 1 ----
+        TabKind::Cfd => app.cfd.agent_set(name, value),
+        TabKind::Fem => app.fem.agent_set(name, value),
+        TabKind::Gears => app.gears.agent_set(name, value),
+        TabKind::Springs => app.springs.agent_set(name, value),
+        TabKind::Gasdynamics => app.gasdynamics.agent_set(name, value),
+        TabKind::Rotor => app.rotor.agent_set(name, value),
+        TabKind::Fluids => app.fluids.agent_set(name, value),
+        TabKind::Ocean => app.ocean.agent_set(name, value),
+        TabKind::Rom => app.rom.agent_set(name, value),
+        TabKind::Reinforcement => app.reinforcement.agent_set(name, value),
+        TabKind::Sensors => app.sensors.agent_set(name, value),
+        TabKind::Hvac => app.hvac.agent_set(name, value),
+        TabKind::Frames => app.frames.agent_set(name, value),
+        TabKind::Mbd => app.mbd.agent_set(name, value),
+        TabKind::Piping => app.piping.agent_set(name, value),
+        // ---- agent_set sweep, batch 2 ----
+        TabKind::Aero => app.aero.agent_set(name, value),
+        TabKind::Astro => app.astro.agent_set(name, value),
+        TabKind::BlackHole => app.blackhole.agent_set(name, value),
+        TabKind::Reactdyn => app.reactdyn.agent_set(name, value),
+        TabKind::Render => app.render.agent_set(name, value),
+        TabKind::Reverse => app.reverse.agent_set(name, value),
+        TabKind::Sheetmetal => app.sheetmetal.agent_set(name, value),
+        TabKind::Fields => app.fields.agent_set(name, value),
+        TabKind::Animate => app.animate.agent_set(name, value),
+        TabKind::Fasteners => app.fasteners.agent_set(name, value),
+        TabKind::Collision => app.collision.agent_set(name, value),
+        TabKind::Interior => app.interior.agent_set(name, value),
+        TabKind::Geomatics => app.geomatics.agent_set(name, value),
+        TabKind::Genetics => app.genetics.agent_set(name, value),
+        TabKind::Neuro => app.neuro.agent_set(name, value),
+        TabKind::Ppi => app.ppi.agent_set(name, value),
+        TabKind::Autonomy => app.autonomy.agent_set(name, value),
+        TabKind::Photogrammetry => app.photogrammetry.agent_set(name, value),
+        TabKind::Cosim => app.cosim.agent_set(name, value),
+        TabKind::VariantEffect => app.variant_effect.agent_set(name, value),
+        TabKind::MeshToolbox => app.mesh_toolbox.agent_set(name, value),
+        // ---- agent_set sweep, batch 3 (rocket / engine / cad) ----
+        TabKind::Rocket => app.rocket.agent_set(name, value),
+        TabKind::Engine => app.engine.agent_set(name, value),
+        TabKind::Cad => app.cad.agent_set(name, value),
+        TabKind::BrepCad => app.brep.agent_set(name, value),
+        TabKind::Thermo => app.thermo.agent_set(name, value),
+        TabKind::Quantum => app.quantum.agent_set(name, value),
+        TabKind::TopOpt => app.topopt.agent_set(name, value),
+        TabKind::NodeGraph => app.nodegraph.agent_set(name, value),
+        TabKind::BondGraph => app.bondgraph.agent_set(name, value),
+        TabKind::Surrogate => app.surrogate.agent_set(name, value),
+        TabKind::Optics => app.optics.agent_set(name, value),
+        TabKind::Acoustics => app.acoustics.agent_set(name, value),
+        TabKind::Waveform => app.waveform.agent_set(name, value),
+        other => Err(format!(
+            "set_control: workbench {other:?} ({}) has no settable controls yet",
+            kind.label()
+        )),
+    };
+
+    match result {
+        Ok(()) => crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            &format!("set {name} = {value:?}"),
+            "result",
+        ),
+        Err(e) => warn(app, format!("set_control: {e}")),
+    }
+}
+
+/// Apply one [`ListControls`](AgentCommand::ListControls): resolve the target
+/// workbench (explicit id or the active tab) and post a single feed note listing
+/// every settable caption that workbench's `agent_set` recognises, so an agent
+/// can discover the [`SetControl`](AgentCommand::SetControl) name space. A
+/// workbench with no setter yet posts a "no settable controls" note; an
+/// unresolved workbench posts a `warn`. No app state changes.
+fn list_controls(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
+    let Some(kind) = resolve_target_kind(app, workbench) else {
+        let msg = match workbench {
+            Some(id) => format!("list_controls: unknown workbench id: {id}"),
+            None => "list_controls: no active tab to target (pass a workbench id)".to_string(),
+        };
+        crate::assistant_workbench::append_feed_note(app, ch, "Claude", &msg, "warn");
+        return;
+    };
+
+    let names: &[&str] = match kind {
+        TabKind::Uq => crate::uq_workbench::UqWorkbenchState::agent_control_names(),
+        TabKind::Uas => crate::uas_workbench::UasWorkbenchState::agent_control_names(),
+        TabKind::MissionSim => {
+            crate::missionsim_workbench::MissionSimWorkbenchState::agent_control_names()
+        }
+        TabKind::MissionPlanner => {
+            crate::mission_planner_workbench::MissionPlannerWorkbenchState::agent_control_names()
+        }
+        TabKind::Morphogenesis => {
+            crate::morphogenesis_workbench::MorphogenesisWorkbenchState::agent_control_names()
+        }
+        TabKind::Survivability => {
+            crate::survivability_workbench::SurvivabilityWorkbenchState::agent_control_names()
+        }
+        TabKind::Draft2d => crate::draft2d_workbench::Draft2dWorkbenchState::agent_control_names(),
+        // ---- agent_set sweep, batch 1 ----
+        TabKind::Cfd => crate::cfd_workbench::CfdWorkbenchState::agent_control_names(),
+        TabKind::Fem => crate::fem_workbench::FemWorkbenchState::agent_control_names(),
+        TabKind::Gears => crate::gears_workbench::GearsWorkbenchState::agent_control_names(),
+        TabKind::Springs => crate::springs_workbench::SpringsWorkbenchState::agent_control_names(),
+        TabKind::Gasdynamics => {
+            crate::gasdynamics_workbench::GasDynamicsWorkbenchState::agent_control_names()
+        }
+        TabKind::Rotor => crate::rotor_workbench::RotorWorkbenchState::agent_control_names(),
+        TabKind::Fluids => crate::fluids_workbench::FluidsWorkbenchState::agent_control_names(),
+        TabKind::Ocean => crate::ocean_workbench::OceanWorkbenchState::agent_control_names(),
+        TabKind::Rom => crate::rom_workbench::RomWorkbenchState::agent_control_names(),
+        TabKind::Reinforcement => {
+            crate::reinforcement_workbench::ReinforcementWorkbenchState::agent_control_names()
+        }
+        TabKind::Sensors => crate::sensors_workbench::SensorsWorkbenchState::agent_control_names(),
+        TabKind::Hvac => crate::hvac_workbench::HvacWorkbenchState::agent_control_names(),
+        TabKind::Frames => crate::frames_workbench::FramesWorkbenchState::agent_control_names(),
+        TabKind::Mbd => crate::mbd_workbench::MbdWorkbenchState::agent_control_names(),
+        TabKind::Piping => crate::piping_workbench::PipingWorkbenchState::agent_control_names(),
+        // ---- agent_set sweep, batch 2 ----
+        TabKind::Aero => crate::aero_workbench::AeroWorkbenchState::agent_control_names(),
+        TabKind::Astro => crate::astro_workbench::AstroWorkbenchState::agent_control_names(),
+        TabKind::BlackHole => {
+            crate::blackhole_workbench::BlackHoleWorkbenchState::agent_control_names()
+        }
+        TabKind::Reactdyn => {
+            crate::reactdyn_workbench::ReactdynWorkbenchState::agent_control_names()
+        }
+        TabKind::Render => crate::render_workbench::RenderWorkbenchState::agent_control_names(),
+        TabKind::Reverse => crate::reverse_workbench::ReverseWorkbenchState::agent_control_names(),
+        TabKind::Sheetmetal => {
+            crate::sheetmetal_workbench::SheetmetalWorkbenchState::agent_control_names()
+        }
+        TabKind::Fields => crate::fields_workbench::FieldsWorkbenchState::agent_control_names(),
+        TabKind::Animate => crate::animate_workbench::AnimateWorkbenchState::agent_control_names(),
+        TabKind::Fasteners => {
+            crate::fasteners_workbench::FastenersWorkbenchState::agent_control_names()
+        }
+        TabKind::Collision => {
+            crate::collision_workbench::CollisionWorkbenchState::agent_control_names()
+        }
+        TabKind::Interior => {
+            crate::interior_workbench::InteriorWorkbenchState::agent_control_names()
+        }
+        TabKind::Geomatics => {
+            crate::geomatics_workbench::GeomaticsWorkbenchState::agent_control_names()
+        }
+        TabKind::Genetics => {
+            crate::genetics_workbench::GeneticsWorkbenchState::agent_control_names()
+        }
+        TabKind::Neuro => crate::neuro_workbench::NeuroWorkbenchState::agent_control_names(),
+        TabKind::Ppi => crate::ppi_workbench::PpiWorkbenchState::agent_control_names(),
+        TabKind::Autonomy => {
+            crate::autonomy_workbench::AutonomyWorkbenchState::agent_control_names()
+        }
+        TabKind::Photogrammetry => {
+            crate::photogrammetry_workbench::PhotogrammetryWorkbenchState::agent_control_names()
+        }
+        TabKind::Cosim => crate::cosim_workbench::CosimWorkbenchState::agent_control_names(),
+        TabKind::VariantEffect => {
+            crate::variant_effect_workbench::VariantEffectWorkbenchState::agent_control_names()
+        }
+        TabKind::MeshToolbox => crate::mesh_toolbox::MeshToolboxState::agent_control_names(),
+        // ---- agent_set sweep, batch 3 (rocket / engine / cad) ----
+        TabKind::Rocket => crate::rocket_workbench::RocketWorkbenchState::agent_control_names(),
+        TabKind::Engine => crate::engine_workbench::EngineWorkbenchState::agent_control_names(),
+        TabKind::Cad => crate::cad_workbench::CadWorkbenchState::agent_control_names(),
+        TabKind::BrepCad => crate::brep_workbench::BrepWorkbenchState::agent_control_names(),
+        TabKind::Thermo => crate::thermo_workbench::ThermoWorkbenchState::agent_control_names(),
+        TabKind::Quantum => crate::quantum_workbench::QuantumWorkbenchState::agent_control_names(),
+        TabKind::TopOpt => crate::topopt_workbench::TopOptWorkbenchState::agent_control_names(),
+        TabKind::NodeGraph => {
+            crate::nodegraph_workbench::NodeGraphWorkbenchState::agent_control_names()
+        }
+        TabKind::BondGraph => {
+            crate::bondgraph_workbench::BondGraphWorkbenchState::agent_control_names()
+        }
+        TabKind::Surrogate => {
+            crate::surrogate_workbench::SurrogateWorkbenchState::agent_control_names()
+        }
+        TabKind::Optics => crate::optics_workbench::OpticsWorkbenchState::agent_control_names(),
+        TabKind::Acoustics => {
+            crate::acoustics_workbench::AcousticsWorkbenchState::agent_control_names()
+        }
+        TabKind::Waveform => {
+            crate::waveform_workbench::WaveformWorkbenchState::agent_control_names()
+        }
+        _ => &[],
+    };
+
+    let body = if names.is_empty() {
+        format!(
+            "no settable controls for workbench {} ({kind:?}) yet",
+            kind.label()
+        )
+    } else {
+        format!("controls ({}): {}", names.len(), names.join(", "))
+    };
+    crate::assistant_workbench::append_feed_note(app, ch, "Claude", &body, "result");
+}
+
+/// Apply one [`ReadReadout`](AgentCommand::ReadReadout): resolve the target
+/// workbench (explicit id or the active tab), read its **computed result text**
+/// through that workbench's read-only `agent_readout`, and post it to channel
+/// `ch`'s chat feed as a `result` note — so an agent can read the answer back
+/// and self-verify what it just drove (the read half of the live-driving loop).
+///
+/// Fail-loud, never a panic: an unresolved/unknown workbench posts a `warn`
+/// note; a workbench that has not been run yet, or one with no readout wired,
+/// posts a `warn` "not run yet / no readout" note. A successful read posts the
+/// result text. No app state is modified (purely read-only).
+///
+/// Dispatch mirrors [`set_control`] / [`list_controls`]: a `match` over the
+/// resolved [`TabKind`] routes to the right workbench's `agent_readout`. Only
+/// the workbenches wired this round have one; the rest fall through to the
+/// "no readout" note (the honest follow-up-sweep surface, exactly like
+/// `agent_set` started).
+fn read_readout(app: &mut ValenxApp, ch: usize, workbench: Option<&str>) {
+    let Some(kind) = resolve_target_kind(app, workbench) else {
+        let msg = match workbench {
+            Some(id) => format!("read_readout: unknown workbench id: {id}"),
+            None => "read_readout: no active tab to target (pass a workbench id)".to_string(),
+        };
+        crate::assistant_workbench::append_feed_note(app, ch, "Claude", &msg, "warn");
+        return;
+    };
+
+    // Route to the resolved workbench's read-only readout. Each arm returns
+    // `Option<String>` — `Some(text)` once the tool has a computed result (or its
+    // error line), `None` when it has not been run yet. Only the workbenches
+    // wired this round have an `agent_readout`; `other` means "no readout wired".
+    let readout: Option<Option<String>> = match kind {
+        TabKind::Uq => Some(app.uq.agent_readout()),
+        TabKind::Cfd => Some(app.cfd.agent_readout()),
+        TabKind::Fem => Some(app.fem.agent_readout()),
+        TabKind::Gears => Some(app.gears.agent_readout()),
+        TabKind::Springs => Some(app.springs.agent_readout()),
+        TabKind::Gasdynamics => Some(app.gasdynamics.agent_readout()),
+        TabKind::Fluids => Some(app.fluids.agent_readout()),
+        TabKind::Uas => Some(app.uas.agent_readout()),
+        TabKind::MissionSim => Some(app.missionsim.agent_readout()),
+        TabKind::MissionPlanner => Some(app.mission_planner.agent_readout()),
+        TabKind::Morphogenesis => Some(app.morphogenesis.agent_readout()),
+        TabKind::Survivability => Some(app.survivability.agent_readout()),
+        TabKind::Genetics => Some(app.genetics.agent_readout()),
+        TabKind::TopOpt => Some(app.topopt.agent_readout()),
+        TabKind::BrepCad => Some(app.brep.agent_readout()),
+        TabKind::Thermo => Some(app.thermo.agent_readout()),
+        TabKind::Quantum => Some(app.quantum.agent_readout()),
+        TabKind::NodeGraph => Some(app.nodegraph.agent_readout()),
+        TabKind::BondGraph => Some(app.bondgraph.agent_readout()),
+        TabKind::Surrogate => Some(app.surrogate.agent_readout()),
+        TabKind::Optics => Some(app.optics.agent_readout()),
+        TabKind::Acoustics => Some(app.acoustics.agent_readout()),
+        TabKind::Waveform => Some(app.waveform.agent_readout()),
+        _ => None,
+    };
+
+    match readout {
+        // The workbench is wired AND has a computed result → post it.
+        Some(Some(text)) => {
+            let body = format!("{} readout: {text}", kind.label());
+            crate::assistant_workbench::append_feed_note(app, ch, "Claude", &body, "result");
+        }
+        // Wired but not run yet → fail-loud warn.
+        Some(None) => {
+            let body = format!(
+                "read_readout: {} ({kind:?}) not run yet / no readout",
+                kind.label()
+            );
+            crate::assistant_workbench::append_feed_note(app, ch, "Claude", &body, "warn");
+        }
+        // No readout wired for this workbench yet (the follow-up-sweep surface).
+        None => {
+            let body = format!(
+                "read_readout: workbench {} ({kind:?}) has no readout wired yet",
+                kind.label()
+            );
+            crate::assistant_workbench::append_feed_note(app, ch, "Claude", &body, "warn");
+        }
+    }
+}
+
+/// Draw the **active workbench's right-side panel** into a (probe) context, for
+/// the headless accessibility probe behind `invoke_named` / [`list_buttons`] /
+/// [`read_text`]. Dispatches the active [`TabKind`] to the SAME
+/// `draw_<wb>_workbench(app, ctx)` entry point the live `update()` loop calls, so
+/// the probe tree is byte-for-byte the panel the user sees (every `draw_*` fn
+/// self-gates on its own `show_*` flag, which the caller force-sets for the probe
+/// frame). A pure dispatch table — no per-workbench *logic* — mirroring the
+/// `set_control` / `read_readout` maps in this file; a `TabKind` not yet mapped
+/// (e.g. `Blank`) simply draws nothing, and the caller reports "no buttons".
+fn draw_active_workbench_probe(app: &mut ValenxApp, ctx: &egui::Context, kind: TabKind) {
+    match kind {
+        TabKind::Rocket => crate::rocket_workbench::draw_rocket_workbench(app, ctx),
+        TabKind::Engine => crate::engine_workbench::draw_engine_workbench(app, ctx),
+        TabKind::Astro => crate::astro_workbench::draw_astro_workbench(app, ctx),
+        TabKind::Aero => crate::aero_workbench::draw_aero_workbench(app, ctx),
+        TabKind::Gasdynamics => crate::gasdynamics_workbench::draw_gasdynamics_workbench(app, ctx),
+        TabKind::Rotor => crate::rotor_workbench::draw_rotor_workbench(app, ctx),
+        TabKind::BlackHole => crate::blackhole_workbench::draw_blackhole_workbench(app, ctx),
+        TabKind::Cfd => crate::cfd_workbench::draw_cfd_workbench(app, ctx),
+        TabKind::Fem => crate::fem_workbench::draw_fem_workbench(app, ctx),
+        TabKind::Reactdyn => crate::reactdyn_workbench::draw_reactdyn_workbench(app, ctx),
+        TabKind::Fields => crate::fields_workbench::draw_fields_workbench(app, ctx),
+        TabKind::Thermo => crate::thermo_workbench::draw_thermo_workbench(app, ctx),
+        TabKind::Quantum => crate::quantum_workbench::draw_quantum_workbench(app, ctx),
+        TabKind::Cad => crate::cad_workbench::draw_cad_workbench(app, ctx),
+        TabKind::BrepCad => crate::brep_workbench::draw_brep_workbench(app, ctx),
+        TabKind::MeshToolbox => crate::mesh_toolbox::draw_mesh_toolbox(app, ctx),
+        TabKind::Sheetmetal => crate::sheetmetal_workbench::draw_sheetmetal_workbench(app, ctx),
+        TabKind::Reverse => crate::reverse_workbench::draw_reverse_workbench(app, ctx),
+        TabKind::Draft2d => crate::draft2d_workbench::draw_draft2d_workbench(app, ctx),
+        TabKind::Render => crate::render_workbench::draw_render_workbench(app, ctx),
+        TabKind::Animate => crate::animate_workbench::draw_animate_workbench(app, ctx),
+        TabKind::Springs => crate::springs_workbench::draw_springs_workbench(app, ctx),
+        TabKind::Gears => crate::gears_workbench::draw_gears_workbench(app, ctx),
+        TabKind::Fasteners => crate::fasteners_workbench::draw_fasteners_workbench(app, ctx),
+        TabKind::Frames => crate::frames_workbench::draw_frames_workbench(app, ctx),
+        TabKind::Collision => crate::collision_workbench::draw_collision_workbench(app, ctx),
+        TabKind::Piping => crate::piping_workbench::draw_piping_workbench(app, ctx),
+        TabKind::Hvac => crate::hvac_workbench::draw_hvac_workbench(app, ctx),
+        TabKind::Reinforcement => {
+            crate::reinforcement_workbench::draw_reinforcement_workbench(app, ctx)
+        }
+        TabKind::Interior => crate::interior_workbench::draw_interior_workbench(app, ctx),
+        TabKind::Geomatics => crate::geomatics_workbench::draw_geomatics_workbench(app, ctx),
+        TabKind::Genetics => crate::genetics_workbench::draw_genetics_workbench(app, ctx),
+        TabKind::Neuro => crate::neuro_workbench::draw_neuro_workbench(app, ctx),
+        TabKind::VariantEffect => {
+            crate::variant_effect_workbench::draw_variant_effect_workbench(app, ctx)
+        }
+        TabKind::Ppi => crate::ppi_workbench::draw_ppi_workbench(app, ctx),
+        TabKind::Morphogenesis => {
+            crate::morphogenesis_workbench::draw_morphogenesis_workbench(app, ctx)
+        }
+        TabKind::Sensors => crate::sensors_workbench::draw_sensors_workbench(app, ctx),
+        TabKind::Autonomy => crate::autonomy_workbench::draw_autonomy_workbench(app, ctx),
+        TabKind::Fluids => crate::fluids_workbench::draw_fluids_workbench(app, ctx),
+        TabKind::Ocean => crate::ocean_workbench::draw_ocean_workbench(app, ctx),
+        TabKind::Rom => crate::rom_workbench::draw_rom_workbench(app, ctx),
+        TabKind::Uq => crate::uq_workbench::draw_uq_workbench(app, ctx),
+        TabKind::Uas => crate::uas_workbench::draw_uas_workbench(app, ctx),
+        TabKind::MissionSim => crate::missionsim_workbench::draw_missionsim_workbench(app, ctx),
+        TabKind::MissionPlanner => {
+            crate::mission_planner_workbench::draw_mission_planner_workbench(app, ctx)
+        }
+        TabKind::Survivability => {
+            crate::survivability_workbench::draw_survivability_workbench(app, ctx)
+        }
+        TabKind::Photogrammetry => {
+            crate::photogrammetry_workbench::draw_photogrammetry_workbench(app, ctx)
+        }
+        TabKind::Cosim => crate::cosim_workbench::draw_cosim_workbench(app, ctx),
+        TabKind::Mbd => crate::mbd_workbench::draw_mbd_workbench(app, ctx),
+        TabKind::TopOpt => crate::topopt_workbench::draw_topopt_workbench(app, ctx),
+        TabKind::NodeGraph => crate::nodegraph_workbench::draw_nodegraph_workbench(app, ctx),
+        TabKind::BondGraph => crate::bondgraph_workbench::draw_bondgraph_workbench(app, ctx),
+        TabKind::Surrogate => crate::surrogate_workbench::draw_surrogate_workbench(app, ctx),
+        TabKind::Optics => crate::optics_workbench::draw_optics_workbench(app, ctx),
+        TabKind::Acoustics => crate::acoustics_workbench::draw_acoustics_workbench(app, ctx),
+        TabKind::Waveform => crate::waveform_workbench::draw_waveform_workbench(app, ctx),
+        // No standalone right-panel to probe (an empty project tab).
+        TabKind::Blank => {}
+    }
+}
+
+/// Run a **headless accessibility probe of the active workbench** and return its
+/// emitted accesskit nodes — the SAME `(NodeId, Node)` tree a screen reader / a
+/// UI-Automation client reads. The shared engine behind the three generic,
+/// no-per-workbench-wiring commands (`invoke_named`, [`list_buttons`],
+/// [`read_text`]).
+///
+/// Renders the active workbench's panel into a throwaway accesskit-enabled
+/// [`egui::Context`] via [`draw_active_workbench_probe`] (force-setting the
+/// panel's `show_*` flag for the probe frame, then restoring it so the probe
+/// can't leave a panel toggled on). Returns `None` when there is no active
+/// workbench to probe.
+///
+/// **Why the node ids are usable on the live frame:** an egui widget's
+/// `accesskit::NodeId` is a deterministic hash of its egui `Id` (derived from
+/// the widget's source location / label), so the id a button gets in this probe
+/// context is identical to the id it gets in the real frame — the id resolved
+/// here can be queued for `crate::ValenxApp::raw_input_hook` to inject.
+fn probe_active_workbench(
+    app: &mut ValenxApp,
+) -> Option<Vec<(egui::accesskit::NodeId, egui::accesskit::Node)>> {
+    let kind = app.tab_bar.active_kind()?;
+
+    // Force the active workbench's `show_*` flag on for the probe (its `draw_*`
+    // fn early-returns when hidden), remembering the prior value so we can leave
+    // app state exactly as we found it — the probe must be side-effect-free.
+    let was_shown = workbench_show_flag(app, kind);
+    set_workbench_show_flag(app, kind, true);
+
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    let out = ctx.run(egui::RawInput::default(), |ctx| {
+        draw_active_workbench_probe(app, ctx, kind);
+    });
+
+    // Restore the prior visibility so the probe leaves no trace.
+    set_workbench_show_flag(app, kind, was_shown);
+
+    out.platform_output.accesskit_update.map(|u| u.nodes)
+}
+
+/// Probe the active workbench panel headlessly and return its **readable text**
+/// (static-label captions + the live value of any value-bearing control) as a
+/// list of trimmed, non-empty strings. The crate-internal engine the
+/// [`crate::self_test`] generic product check reads output from — the SAME
+/// `probe_active_workbench` tree [`read_text`] posts to the feed, returned as
+/// data instead of a feed note. `None` when there is no active workbench (or the
+/// panel emitted no accesskit tree); `Some(vec)` (possibly empty) otherwise.
+pub(crate) fn probe_active_workbench_text(app: &mut ValenxApp) -> Option<Vec<String>> {
+    use egui::accesskit::Role;
+    let nodes = probe_active_workbench(app)?;
+    let mut parts: Vec<String> = Vec::new();
+    for (_, n) in &nodes {
+        let text: Option<String> = match n.role() {
+            Role::StaticText => n.name().map(str::to_string),
+            Role::TextInput | Role::SpinButton => n
+                .value()
+                .map(str::to_string)
+                .or_else(|| n.name().map(str::to_string)),
+            _ => None,
+        };
+        if let Some(t) = text {
+            let t = t.trim();
+            if !t.is_empty() {
+                parts.push(t.to_string());
+            }
+        }
+    }
+    Some(parts)
+}
+
+/// Read the current value of the active workbench's `show_*` flag, so
+/// [`probe_active_workbench`] can restore it after the probe. Mirrors
+/// [`set_workbench_show_flag`].
+fn workbench_show_flag(app: &ValenxApp, kind: TabKind) -> bool {
+    match kind {
+        TabKind::Rocket => app.show_rocket_workbench,
+        TabKind::Engine => app.show_engine_workbench,
+        TabKind::Astro => app.show_astro_workbench,
+        TabKind::Aero => app.show_aero_workbench,
+        TabKind::Gasdynamics => app.show_gasdynamics_workbench,
+        TabKind::Rotor => app.show_rotor_workbench,
+        TabKind::BlackHole => app.show_blackhole_workbench,
+        TabKind::Cfd => app.show_cfd_workbench,
+        TabKind::Fem => app.show_fem_workbench,
+        TabKind::Reactdyn => app.show_reactdyn_workbench,
+        TabKind::Fields => app.show_fields_workbench,
+        TabKind::Thermo => app.show_thermo_workbench,
+        TabKind::Quantum => app.show_quantum_workbench,
+        TabKind::Cad => app.show_cad_workbench,
+        TabKind::BrepCad => app.show_brep_workbench,
+        TabKind::MeshToolbox => app.show_mesh_toolbox,
+        TabKind::Sheetmetal => app.show_sheetmetal_workbench,
+        TabKind::Reverse => app.show_reverse_workbench,
+        TabKind::Draft2d => app.show_draft2d_workbench,
+        TabKind::Render => app.show_render_workbench,
+        TabKind::Animate => app.show_animate_workbench,
+        TabKind::Springs => app.show_springs_workbench,
+        TabKind::Gears => app.show_gears_workbench,
+        TabKind::Fasteners => app.show_fasteners_workbench,
+        TabKind::Frames => app.show_frames_workbench,
+        TabKind::Collision => app.show_collision_workbench,
+        TabKind::Piping => app.show_piping_workbench,
+        TabKind::Hvac => app.show_hvac_workbench,
+        TabKind::Reinforcement => app.show_reinforcement_workbench,
+        TabKind::Interior => app.show_interior_workbench,
+        TabKind::Geomatics => app.show_geomatics_workbench,
+        TabKind::Genetics => app.show_genetics_workbench,
+        TabKind::Neuro => app.show_neuro_workbench,
+        TabKind::VariantEffect => app.show_variant_effect_workbench,
+        TabKind::Ppi => app.show_ppi_workbench,
+        TabKind::Morphogenesis => app.show_morphogenesis_workbench,
+        TabKind::Sensors => app.show_sensors_workbench,
+        TabKind::Autonomy => app.show_autonomy_workbench,
+        TabKind::Fluids => app.show_fluids_workbench,
+        TabKind::Ocean => app.show_ocean_workbench,
+        TabKind::Rom => app.show_rom_workbench,
+        TabKind::Uq => app.show_uq_workbench,
+        TabKind::Uas => app.show_uas_workbench,
+        TabKind::MissionSim => app.show_missionsim_workbench,
+        TabKind::MissionPlanner => app.show_mission_planner_workbench,
+        TabKind::Survivability => app.show_survivability_workbench,
+        TabKind::Photogrammetry => app.show_photogrammetry_workbench,
+        TabKind::Cosim => app.show_cosim_workbench,
+        TabKind::Mbd => app.show_mbd_workbench,
+        TabKind::TopOpt => app.show_topopt_workbench,
+        TabKind::NodeGraph => app.show_nodegraph_workbench,
+        TabKind::BondGraph => app.show_bondgraph_workbench,
+        TabKind::Surrogate => app.show_surrogate_workbench,
+        TabKind::Optics => app.show_optics_workbench,
+        TabKind::Acoustics => app.show_acoustics_workbench,
+        TabKind::Waveform => app.show_waveform_workbench,
+        TabKind::Blank => false,
+    }
+}
+
+/// Set the active workbench's `show_*` flag for the probe, then restore it.
+/// Mirrors [`crate::project_tabs`]'s `TabKind::show` (which only ever sets
+/// `true`); this variant takes the value so [`probe_active_workbench`] can both
+/// force the panel open and put the flag back exactly as it was.
+fn set_workbench_show_flag(app: &mut ValenxApp, kind: TabKind, v: bool) {
+    match kind {
+        TabKind::Rocket => app.show_rocket_workbench = v,
+        TabKind::Engine => app.show_engine_workbench = v,
+        TabKind::Astro => app.show_astro_workbench = v,
+        TabKind::Aero => app.show_aero_workbench = v,
+        TabKind::Gasdynamics => app.show_gasdynamics_workbench = v,
+        TabKind::Rotor => app.show_rotor_workbench = v,
+        TabKind::BlackHole => app.show_blackhole_workbench = v,
+        TabKind::Cfd => app.show_cfd_workbench = v,
+        TabKind::Fem => app.show_fem_workbench = v,
+        TabKind::Reactdyn => app.show_reactdyn_workbench = v,
+        TabKind::Fields => app.show_fields_workbench = v,
+        TabKind::Thermo => app.show_thermo_workbench = v,
+        TabKind::Quantum => app.show_quantum_workbench = v,
+        TabKind::Cad => app.show_cad_workbench = v,
+        TabKind::BrepCad => app.show_brep_workbench = v,
+        TabKind::MeshToolbox => app.show_mesh_toolbox = v,
+        TabKind::Sheetmetal => app.show_sheetmetal_workbench = v,
+        TabKind::Reverse => app.show_reverse_workbench = v,
+        TabKind::Draft2d => app.show_draft2d_workbench = v,
+        TabKind::Render => app.show_render_workbench = v,
+        TabKind::Animate => app.show_animate_workbench = v,
+        TabKind::Springs => app.show_springs_workbench = v,
+        TabKind::Gears => app.show_gears_workbench = v,
+        TabKind::Fasteners => app.show_fasteners_workbench = v,
+        TabKind::Frames => app.show_frames_workbench = v,
+        TabKind::Collision => app.show_collision_workbench = v,
+        TabKind::Piping => app.show_piping_workbench = v,
+        TabKind::Hvac => app.show_hvac_workbench = v,
+        TabKind::Reinforcement => app.show_reinforcement_workbench = v,
+        TabKind::Interior => app.show_interior_workbench = v,
+        TabKind::Geomatics => app.show_geomatics_workbench = v,
+        TabKind::Genetics => app.show_genetics_workbench = v,
+        TabKind::Neuro => app.show_neuro_workbench = v,
+        TabKind::VariantEffect => app.show_variant_effect_workbench = v,
+        TabKind::Ppi => app.show_ppi_workbench = v,
+        TabKind::Morphogenesis => app.show_morphogenesis_workbench = v,
+        TabKind::Sensors => app.show_sensors_workbench = v,
+        TabKind::Autonomy => app.show_autonomy_workbench = v,
+        TabKind::Fluids => app.show_fluids_workbench = v,
+        TabKind::Ocean => app.show_ocean_workbench = v,
+        TabKind::Rom => app.show_rom_workbench = v,
+        TabKind::Uq => app.show_uq_workbench = v,
+        TabKind::Uas => app.show_uas_workbench = v,
+        TabKind::MissionSim => app.show_missionsim_workbench = v,
+        TabKind::MissionPlanner => app.show_mission_planner_workbench = v,
+        TabKind::Survivability => app.show_survivability_workbench = v,
+        TabKind::Photogrammetry => app.show_photogrammetry_workbench = v,
+        TabKind::Cosim => app.show_cosim_workbench = v,
+        TabKind::Mbd => app.show_mbd_workbench = v,
+        TabKind::TopOpt => app.show_topopt_workbench = v,
+        TabKind::NodeGraph => app.show_nodegraph_workbench = v,
+        TabKind::BondGraph => app.show_bondgraph_workbench = v,
+        TabKind::Surrogate => app.show_surrogate_workbench = v,
+        TabKind::Optics => app.show_optics_workbench = v,
+        TabKind::Acoustics => app.show_acoustics_workbench = v,
+        TabKind::Waveform => app.show_waveform_workbench = v,
+        TabKind::Blank => {}
+    }
+}
+
+/// Is this accesskit node a **clickable button** (so `invoke_named` /
+/// [`list_buttons`] should consider it)? egui maps `ui.button(...)` to
+/// [`Role::Button`] and a selectable label / toggle to
+/// [`Role::ToggleButton`]; both are invokable via the `Default` action, so both
+/// count. Other roles (labels, spin buttons, the window root) are excluded.
+fn is_clickable(node: &egui::accesskit::Node) -> bool {
+    use egui::accesskit::Role;
+    matches!(node.role(), Role::Button | Role::ToggleButton)
+}
+
+/// Apply one [`InvokeNamed`](AgentCommand::InvokeNamed): probe the active
+/// workbench's accessibility tree, resolve `name` to a clickable node, and queue
+/// an `accesskit` `Default` action on it for `crate::ValenxApp::raw_input_hook`
+/// to inject next frame (so the matching button reports `.clicked()` — the same
+/// path a real click takes). Exact name match first, then case-insensitive. No
+/// active workbench, or no matching button, posts a fail-loud `warn` note and
+/// queues nothing (never a panic); a match posts an ack naming the queued button.
+fn invoke_named(app: &mut ValenxApp, ch: usize, name: &str) {
+    let warn = |app: &mut ValenxApp, msg: String| {
+        crate::assistant_workbench::append_feed_note(app, ch, "Claude", &msg, "warn");
+    };
+
+    let Some(nodes) = probe_active_workbench(app) else {
+        warn(
+            app,
+            "invoke_named: no active workbench to drive (open a workbench tab first)".to_string(),
+        );
+        return;
+    };
+
+    // Resolve the target node by accessible name: exact match preferred, then a
+    // case-insensitive fallback so an agent that lower-cased a caption still
+    // hits. Only clickable nodes (buttons / toggles) are eligible, so a matching
+    // *label* never shadows the real button.
+    let want = name.trim();
+    let resolved = nodes
+        .iter()
+        .find(|(_, n)| is_clickable(n) && n.name() == Some(want))
+        .or_else(|| {
+            nodes.iter().find(|(_, n)| {
+                is_clickable(n) && n.name().is_some_and(|s| s.eq_ignore_ascii_case(want))
+            })
+        })
+        .map(|(id, _)| *id);
+
+    match resolved {
+        Some(id) => {
+            // Queue the click for raw_input_hook to inject next frame. The bridge
+            // keeps frames alive (unfocused request_repaint), so it fires promptly.
+            app.pending_accesskit_actions
+                .push((id, egui::accesskit::Action::Default));
+            crate::assistant_workbench::append_feed_note(
+                app,
+                ch,
+                "Claude",
+                &format!("invoke_named: queued click on \u{201c}{want}\u{201d}"),
+                "result",
+            );
+        }
+        None => {
+            // List what *is* clickable so the agent can correct the name.
+            let avail: Vec<&str> = nodes
+                .iter()
+                .filter(|(_, n)| is_clickable(n))
+                .filter_map(|(_, n)| n.name())
+                .collect();
+            warn(
+                app,
+                format!(
+                    "invoke_named: no clickable button named \u{201c}{want}\u{201d} in the active workbench (available: {})",
+                    if avail.is_empty() {
+                        "none".to_string()
+                    } else {
+                        avail.join(", ")
+                    }
+                ),
+            );
+        }
+    }
+}
+
+/// Apply one [`ListButtons`](AgentCommand::ListButtons): probe the active
+/// workbench's accessibility tree and post a single feed note listing every
+/// clickable button caption, so an agent can discover the
+/// [`InvokeNamed`](AgentCommand::InvokeNamed) name space. No app state changes.
+fn list_buttons(app: &mut ValenxApp, ch: usize) {
+    let Some(nodes) = probe_active_workbench(app) else {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            "list_buttons: no active workbench (open a workbench tab first)",
+            "warn",
+        );
+        return;
+    };
+    // Dedup while preserving order (egui can emit a caption more than once, e.g.
+    // a label node duplicating a button's text).
+    let mut names: Vec<&str> = Vec::new();
+    for (_, n) in &nodes {
+        if is_clickable(n) {
+            if let Some(s) = n.name() {
+                if !names.contains(&s) {
+                    names.push(s);
+                }
+            }
+        }
+    }
+    let body = if names.is_empty() {
+        "buttons (0): (none — this workbench has no named buttons)".to_string()
+    } else {
+        format!("buttons ({}): {}", names.len(), names.join(", "))
+    };
+    crate::assistant_workbench::append_feed_note(app, ch, "Claude", &body, "result");
+}
+
+/// Apply one [`ReadText`](AgentCommand::ReadText): probe the active workbench's
+/// accessibility tree and post its readable text (label / value nodes), so an
+/// agent can self-verify a result generically without a per-workbench
+/// `agent_readout`. Bounded in length to keep the feed note manageable. No app
+/// state changes.
+fn read_text(app: &mut ValenxApp, ch: usize) {
+    /// Cap on the concatenated text so a huge panel can't post a giant note.
+    const MAX_TEXT: usize = 2000;
+
+    let Some(nodes) = probe_active_workbench(app) else {
+        crate::assistant_workbench::append_feed_note(
+            app,
+            ch,
+            "Claude",
+            "read_text: no active workbench (open a workbench tab first)",
+            "warn",
+        );
+        return;
+    };
+
+    use egui::accesskit::Role;
+    // Collect readable text: static labels and the value of any value-bearing
+    // node (spin buttons / text fields show their current value via `value()`).
+    // Skip the window root and structural nodes. Dedup consecutive repeats.
+    let mut parts: Vec<String> = Vec::new();
+    for (_, n) in &nodes {
+        let text: Option<String> = match n.role() {
+            // egui maps `ui.label(...)` to `Role::StaticText` (there is no
+            // `Role::Label` in accesskit 0.12).
+            Role::StaticText => n.name().map(str::to_string),
+            // Value-bearing controls expose their current value via `value()`;
+            // fall back to the caption when a value isn't set.
+            Role::TextInput | Role::SpinButton => n
+                .value()
+                .map(str::to_string)
+                .or_else(|| n.name().map(str::to_string)),
+            _ => None,
+        };
+        if let Some(t) = text {
+            let t = t.trim();
+            if !t.is_empty() && parts.last().map(String::as_str) != Some(t) {
+                parts.push(t.to_string());
+            }
+        }
+    }
+
+    let mut body = parts.join(" \u{2022} ");
+    if body.len() > MAX_TEXT {
+        body.truncate(MAX_TEXT);
+        body.push_str(" \u{2026}");
+    }
+    let body = if body.is_empty() {
+        "read_text: (no readable text in the active workbench panel)".to_string()
+    } else {
+        format!("text: {body}")
+    };
+    crate::assistant_workbench::append_feed_note(app, ch, "Claude", &body, "result");
 }
 
 /// **LAZY-BUILD materialiser.** Build unit `n`'s deferred product the first time
@@ -1371,6 +3421,131 @@ mod tests {
             },
         );
         assert_eq!(app.tab_close_confirm, Some(0)); // "keep" is index 0
+    }
+
+    #[test]
+    fn run_command_parses_and_invokes_a_camera_view() {
+        // The wire form round-trips.
+        let rc: AgentCommand =
+            serde_json::from_str(r#"{"cmd":"run_command","id":"view.front"}"#).unwrap();
+        assert_eq!(
+            rc,
+            AgentCommand::RunCommand {
+                id: "view.front".into()
+            }
+        );
+
+        // Applying it actually invokes the palette command through the SAME
+        // `(cmd.invoke)(app)` path a click uses: the default camera is
+        // (az 45, el 25); `view.front`'s ViewDirection snaps it to (0, 0). The
+        // changed azimuth/elevation prove the registry command really ran.
+        let mut app = ValenxApp::default();
+        assert_eq!(app.camera.azimuth_deg, 45.0);
+        assert_eq!(app.camera.elevation_deg, 25.0);
+        apply(
+            &mut app,
+            1,
+            AgentCommand::RunCommand {
+                id: "view.front".into(),
+            },
+        );
+        assert_eq!(app.camera.azimuth_deg, 0.0, "view.front sets azimuth 0");
+        assert_eq!(app.camera.elevation_deg, 0.0, "view.front sets elevation 0");
+    }
+
+    #[test]
+    fn run_command_routed_through_poll_changes_app_state() {
+        // End-to-end through the REAL poll/reducer path: an inbound
+        // `{"cmd":"run_command","id":"view.top"}` on channel 1 runs the palette
+        // command, snapping the camera to Top (az 0, el 90).
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "run_command_poll");
+        let path = cmd_path(&app, 1);
+        std::fs::write(&path, "{\"cmd\":\"run_command\",\"id\":\"view.top\"}\n").unwrap();
+
+        poll_and_apply_agent_commands(&mut app);
+
+        assert_eq!(app.camera.elevation_deg, 90.0, "view.top sets elevation 90");
+        assert_eq!(app.camera.azimuth_deg, 0.0, "view.top sets azimuth 0");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn run_command_unknown_id_posts_a_note_and_does_not_panic() {
+        // An unknown id must NOT panic; it posts an "unknown command id" feed
+        // note and leaves app state untouched. Point the per-unit feed at an
+        // isolated dir so we can read the note back.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "run_command_unknown");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+
+        let before_az = app.camera.azimuth_deg;
+        apply(
+            &mut app,
+            1,
+            AgentCommand::RunCommand {
+                id: "no.such.command".into(),
+            },
+        );
+        // No state change (nothing ran).
+        assert_eq!(app.camera.azimuth_deg, before_az);
+
+        // A `warn` note naming the bad id was posted to unit 1's feed.
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed file written");
+        let posted = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("kind").and_then(|k| k.as_str()) == Some("warn")
+                    && v.get("detail").and_then(|d| d.as_str()).is_some_and(|d| {
+                        d.contains("unknown command id") && d.contains("no.such.command")
+                    })
+            });
+        assert!(
+            posted,
+            "unknown id posts a warn note naming the id; feed = {body:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn list_commands_posts_a_non_empty_list_of_ids() {
+        // `ListCommands` posts one feed note enumerating every static command
+        // id (the same registry `RunCommand` resolves against), so an agent can
+        // discover what's runnable. Assert the note is present, non-empty, and
+        // mentions a known id.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "list_commands");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+
+        // Sanity: the wire form parses.
+        let lc: AgentCommand = serde_json::from_str(r#"{"cmd":"list_commands"}"#).unwrap();
+        assert_eq!(lc, AgentCommand::ListCommands);
+
+        apply(&mut app, 1, AgentCommand::ListCommands);
+
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed file written");
+        let n_ids = crate::commands::static_commands().len();
+        let posted = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("detail").and_then(|d| d.as_str()).is_some_and(|d| {
+                    d.contains(&format!("commands ({n_ids})"))
+                        && d.contains("view.front")
+                        && d.contains("run.selected-case")
+                })
+            });
+        assert!(
+            posted && n_ids > 0,
+            "list_commands posts a non-empty id list; feed = {body:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -2518,6 +4693,100 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[test]
+    fn global_channel_drives_open_workbench_and_set_control_against_active_tab() {
+        // FIX: the GLOBAL command file now honours the full drive command set
+        // (not just `new_unit`), so an agent can drive EVERYTHING from the one
+        // global channel with no unit bootstrap. END-TO-END through the REAL
+        // poll path: with NO Workbench+Agent unit (wb_agent_counter == 0) and a
+        // Blank active tab, the agent appends `open_workbench` (switch the
+        // active tab to UQ) then `set_control` (write a UQ param) to the GLOBAL
+        // file. The poll applies both against the active tab/app, and their ack
+        // notes land in the GLOBAL feed (channel-0 sentinel), not a per-unit one.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "global_full_cmds");
+        // Route the GLOBAL feed at a file we can read back.
+        let global_feed = dir.join("valenx_chat_feed.jsonl");
+        app.assistant.set_feed_path_for_test(global_feed.clone());
+        // A Blank active tab for `open_workbench` to switch.
+        app.tab_bar.open(TabKind::Blank);
+        project_tabs::sync_active(&mut app);
+        assert_ne!(
+            app.uq.params.n_samples, 256,
+            "precondition: UQ sample count not already 256"
+        );
+
+        let path = global_cmd_path(&app);
+        std::fs::write(
+            &path,
+            concat!(
+                "{\"cmd\":\"open_workbench\",\"id\":\"uq\"}\n",
+                "{\"cmd\":\"set_control\",\"name\":\"Monte-Carlo samples N\",\"value\":256,\"workbench\":\"uq\"}\n",
+            ),
+        )
+        .unwrap();
+
+        assert_eq!(
+            app.wb_agent_counter, 0,
+            "no unit exists — global drive only"
+        );
+        poll_and_apply_agent_commands(&mut app);
+
+        // `open_workbench` switched the active tab to UQ...
+        let idx = app.tab_bar.active.expect("a tab is active");
+        assert_eq!(
+            app.tab_bar.tabs[idx].kind,
+            TabKind::Uq,
+            "global open_workbench switched the active tab to UQ"
+        );
+        assert!(app.show_uq_workbench, "the UQ workbench panel is shown");
+        // ...and `set_control` wrote the UQ param through the same reducer.
+        assert_eq!(
+            app.uq.params.n_samples, 256,
+            "global set_control wrote the UQ sample count against the active tab"
+        );
+
+        // The ack notes were posted to the GLOBAL feed (channel 0), not a
+        // per-unit feed — that is what an agent reading the global channel sees.
+        let body = std::fs::read_to_string(&global_feed).expect("global feed written");
+        let ack_count = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .filter(|v| v.get("detail").and_then(|d| d.as_str()).is_some())
+            .count();
+        assert!(
+            ack_count >= 1,
+            "global-channel commands ack into the global feed; feed = {body:?}"
+        );
+        // No per-unit feed (u0 / u1) was created for these global acks.
+        assert!(
+            !crate::assistant_workbench::unit_feed_path(&app, 0).exists(),
+            "global acks do not leak into a u0 unit feed"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn bridge_active_true_when_global_cmd_file_exists() {
+        // `bridge_active` drives the faster ~6 fps heartbeat in update.rs. It is
+        // true the moment a global command file exists on disk, so a cold agent
+        // that just writes the global file is served promptly even with no env
+        // override set. (The env-var signals are covered by their own presence;
+        // here we exercise the on-disk-file signal in isolation.)
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "bridge_active");
+        let path = global_cmd_path(&app);
+        // Without the file (and absent env vars) the file-signal is off. We
+        // can't assert the whole function is false here because the test
+        // process may have the env vars set, so just assert the file flips it on.
+        std::fs::write(&path, "{\"cmd\":\"note\",\"text\":\"hi\"}\n").unwrap();
+        assert!(
+            bridge_active(&app),
+            "an existing global command file marks the bridge active"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Build a `WorkspaceProduct` carrying an animation that starts paused at
     /// `1.0×`, with a simple turntable motion — the fixture the `animate` tests
     /// drive Play/Pause + speed against.
@@ -2964,5 +5233,1205 @@ mod tests {
             );
             assert!(flag_on(&app, kind), "{kind}'s workbench panel is shown");
         }
+    }
+
+    // ---- SetControl / ListControls / AgentValue -----------------------------
+
+    #[test]
+    fn agent_value_parses_untagged_from_each_json_scalar() {
+        // The untagged `AgentValue` reads a bare JSON scalar; the arm order means
+        // a whole number is an Int (not a lossy Float) and `true` is a Bool.
+        fn v(s: &str) -> AgentValue {
+            serde_json::from_str(s).unwrap()
+        }
+        assert_eq!(v("true"), AgentValue::Bool(true));
+        assert_eq!(v("4000"), AgentValue::Int(4000));
+        assert_eq!(v("0.55"), AgentValue::Float(0.55));
+        assert_eq!(v("\"linear\""), AgentValue::Str("linear".into()));
+
+        // Coercions: Int widens to f64; an integral Float reads back as i64; a
+        // fractional Float / bool / string is a typed error, never a panic.
+        assert_eq!(AgentValue::Int(7).as_f64().unwrap(), 7.0);
+        assert_eq!(AgentValue::Float(4000.0).as_i64().unwrap(), 4000);
+        assert!(AgentValue::Float(1.5).as_i64().is_err());
+        assert!(AgentValue::Bool(true).as_f64().is_err());
+        assert!(AgentValue::Int(1).as_bool().is_err());
+        assert!(AgentValue::Int(1).as_str().is_err());
+    }
+
+    #[test]
+    fn set_control_command_round_trips_from_wire() {
+        // The wire form `{"cmd":"set_control",...}` parses, with `workbench`
+        // optional (defaulting to the active tab).
+        let sc: AgentCommand = serde_json::from_str(
+            r#"{"cmd":"set_control","name":"Monte-Carlo samples N","value":256,"workbench":"uq"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            sc,
+            AgentCommand::SetControl {
+                name: "Monte-Carlo samples N".into(),
+                value: AgentValue::Int(256),
+                workbench: Some("uq".into()),
+            }
+        );
+        let sc2: AgentCommand = serde_json::from_str(
+            r#"{"cmd":"set_control","name":"failure threshold t","value":1.5}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            sc2,
+            AgentCommand::SetControl {
+                name: "failure threshold t".into(),
+                value: AgentValue::Float(1.5),
+                workbench: None,
+            }
+        );
+        let lc: AgentCommand =
+            serde_json::from_str(r#"{"cmd":"list_controls","workbench":"uq"}"#).unwrap();
+        assert_eq!(
+            lc,
+            AgentCommand::ListControls {
+                workbench: Some("uq".into())
+            }
+        );
+    }
+
+    #[test]
+    fn set_control_sets_a_uq_param_and_a_run_uses_it() {
+        // End-to-end through the REAL poll/reducer path: an inbound `set_control`
+        // on channel 1 (workbench "uq") writes `Monte-Carlo samples N`; the new
+        // value is visible in app state AND a subsequent run produces exactly that
+        // many output samples (proving the set actually feeds the solver).
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "set_control_uq");
+        let path = cmd_path(&app, 1);
+        assert_ne!(
+            app.uq.params.n_samples, 256,
+            "precondition: not already 256"
+        );
+        std::fs::write(
+            &path,
+            "{\"cmd\":\"set_control\",\"name\":\"Monte-Carlo samples N\",\"value\":256,\"workbench\":\"uq\"}\n",
+        )
+        .unwrap();
+
+        poll_and_apply_agent_commands(&mut app);
+
+        assert_eq!(
+            app.uq.params.n_samples, 256,
+            "set_control wrote the UQ sample count"
+        );
+        // The set value drives the solver: a run yields 256 output samples.
+        let res = app.uq.run().expect("uq run after set_control");
+        assert_eq!(
+            res.output_samples.len(),
+            256,
+            "the run used the agent-set sample count"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn set_control_targets_the_active_tab_when_workbench_omitted() {
+        // With no `workbench` field, the active tab's kind selects the target.
+        // Open a UQ tab, then set a coefficient without naming the workbench.
+        let mut app = ValenxApp::default();
+        app.tab_bar.open(TabKind::Uq);
+        project_tabs::sync_active(&mut app);
+        apply(
+            &mut app,
+            1,
+            AgentCommand::SetControl {
+                name: "a1 (coeff on x1)".into(),
+                value: AgentValue::Float(2.5),
+                workbench: None,
+            },
+        );
+        assert_eq!(app.uq.params.a1, 2.5, "active-tab routing set the coeff");
+    }
+
+    #[test]
+    fn set_control_enum_by_name_selects_the_model() {
+        // The `response model g` combo is set by its menu word.
+        let mut app = ValenxApp::default();
+        apply(
+            &mut app,
+            1,
+            AgentCommand::SetControl {
+                name: "response model g".into(),
+                value: AgentValue::Str("product".into()),
+                workbench: Some("uq".into()),
+            },
+        );
+        assert_eq!(
+            app.uq.params.model,
+            crate::uq_workbench::ModelPreset::Product
+        );
+    }
+
+    #[test]
+    fn set_control_unknown_name_posts_warn_note_and_does_not_panic() {
+        // An unknown caption must NOT panic; it posts a `warn` feed note and
+        // leaves the params untouched.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "set_control_unknown");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        let before = app.uq.params.n_samples;
+
+        apply(
+            &mut app,
+            1,
+            AgentCommand::SetControl {
+                name: "no such control".into(),
+                value: AgentValue::Int(5),
+                workbench: Some("uq".into()),
+            },
+        );
+        assert_eq!(app.uq.params.n_samples, before, "nothing changed");
+
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let warned = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("kind").and_then(|k| k.as_str()) == Some("warn")
+                    && v.get("detail")
+                        .and_then(|d| d.as_str())
+                        .is_some_and(|d| d.contains("unknown UQ control"))
+            });
+        assert!(warned, "unknown name posts a warn note; feed = {body:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn set_control_type_mismatch_posts_warn_note_and_does_not_panic() {
+        // A value of the wrong type (a string into the numeric sample count)
+        // must NOT panic; it posts a `warn` note and leaves the field untouched.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "set_control_typemismatch");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        let before = app.uq.params.n_samples;
+
+        apply(
+            &mut app,
+            1,
+            AgentCommand::SetControl {
+                name: "Monte-Carlo samples N".into(),
+                value: AgentValue::Str("lots".into()),
+                workbench: Some("uq".into()),
+            },
+        );
+        assert_eq!(
+            app.uq.params.n_samples, before,
+            "bad-typed set changed nothing"
+        );
+
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let warned = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("kind").and_then(|k| k.as_str()) == Some("warn")
+                    && v.get("detail")
+                        .and_then(|d| d.as_str())
+                        .is_some_and(|d| d.contains("expected an integer"))
+            });
+        assert!(warned, "type mismatch posts a warn note; feed = {body:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn set_control_unknown_workbench_posts_warn_note() {
+        // An unknown workbench id is a fail-loud `warn`, not a panic.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "set_control_badwb");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        apply(
+            &mut app,
+            1,
+            AgentCommand::SetControl {
+                name: "whatever".into(),
+                value: AgentValue::Int(1),
+                workbench: Some("no-such-workbench".into()),
+            },
+        );
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        assert!(
+            body.contains("unknown workbench id"),
+            "bad workbench id posts a warn note; feed = {body:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn read_readout_parses_with_and_without_workbench() {
+        // The wire form round-trips; `workbench` is optional.
+        let r: AgentCommand =
+            serde_json::from_str(r#"{"cmd":"read_readout","workbench":"uq"}"#).unwrap();
+        assert_eq!(
+            r,
+            AgentCommand::ReadReadout {
+                workbench: Some("uq".into())
+            }
+        );
+        let r2: AgentCommand = serde_json::from_str(r#"{"cmd":"read_readout"}"#).unwrap();
+        assert_eq!(r2, AgentCommand::ReadReadout { workbench: None });
+    }
+
+    #[test]
+    fn read_readout_routed_through_poll_posts_the_uq_result() {
+        // The FULL live-driving loop end-to-end through the REAL poll path on
+        // channel 1: (1) `set_control` writes the UQ sample count, (2) the UQ
+        // pipeline is run (the same `run_and_store` the Run button calls, which
+        // folds the result into the workbench `status` summary), then (3)
+        // `read_readout` reads that computed result back into the unit's chat
+        // feed as a `result` note — so an agent can self-verify what it drove.
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        // Make UQ the active tab so the no-`workbench` `read_readout` resolves to
+        // it (exercises the active-tab routing too); the `set_control` line still
+        // names "uq" explicitly.
+        app.tab_bar.open(TabKind::Uq);
+        project_tabs::sync_active(&mut app);
+        let dir = isolate_cmd_dir(&mut app, "read_readout_uq");
+        // Point the per-unit FEED at the isolated dir so we can read it back.
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+
+        // Step 1: set the sample count via the poll path.
+        let path = cmd_path(&app, 1);
+        std::fs::write(
+            &path,
+            "{\"cmd\":\"set_control\",\"name\":\"Monte-Carlo samples N\",\"value\":256,\"workbench\":\"uq\"}\n",
+        )
+        .unwrap();
+        poll_and_apply_agent_commands(&mut app);
+        assert_eq!(app.uq.params.n_samples, 256, "set_control wrote the count");
+
+        // Step 2: run the UQ pipeline (folds the result into `status`).
+        crate::uq_workbench::run_and_store(&mut app);
+        let status = app.uq.status.clone();
+        assert!(
+            !status.is_empty() && app.uq.result.is_some(),
+            "uq produced a result + status summary"
+        );
+
+        // Step 3: read it back via the poll path (no `workbench` → active tab).
+        use std::io::Write as _;
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
+        writeln!(f, "{{\"cmd\":\"read_readout\"}}").unwrap();
+        app.last_agent_poll = None; // bypass the 1s throttle for the test
+        poll_and_apply_agent_commands(&mut app);
+
+        // The feed received a `result` note carrying the UQ readout text.
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let posted = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("kind").and_then(|k| k.as_str()) == Some("result")
+                    && v.get("detail")
+                        .and_then(|d| d.as_str())
+                        .is_some_and(|d| d.contains("readout") && d.contains(&status))
+            });
+        assert!(
+            posted,
+            "read_readout posts a `result` note with the UQ result text; feed = {body:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn read_readout_not_run_yet_posts_a_warn_note() {
+        // A workbench that has not been run yet (empty status / no result) posts a
+        // fail-loud `warn` "not run yet / no readout" note rather than a panic or
+        // a bogus empty result.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "read_readout_notrun");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        assert!(app.uq.status.is_empty() && app.uq.result.is_none());
+
+        apply(
+            &mut app,
+            1,
+            AgentCommand::ReadReadout {
+                workbench: Some("uq".into()),
+            },
+        );
+
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let warned = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("kind").and_then(|k| k.as_str()) == Some("warn")
+                    && v.get("detail")
+                        .and_then(|d| d.as_str())
+                        .is_some_and(|d| d.contains("not run yet"))
+            });
+        assert!(warned, "not-run posts a warn note; feed = {body:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn read_readout_unknown_workbench_posts_a_warn_note() {
+        // An unknown workbench id is a fail-loud `warn`, not a panic.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "read_readout_badwb");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        apply(
+            &mut app,
+            1,
+            AgentCommand::ReadReadout {
+                workbench: Some("no-such-workbench".into()),
+            },
+        );
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        assert!(
+            body.contains("unknown workbench id"),
+            "bad workbench id posts a warn note; feed = {body:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn set_control_routed_through_poll_sets_uas_and_survivability() {
+        // Two more representative workbenches set via the REAL poll path on their
+        // own channels, proving the active-tab-independent `workbench:` routing.
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "set_control_multi");
+        let path = cmd_path(&app, 1);
+        std::fs::write(
+            &path,
+            concat!(
+                "{\"cmd\":\"set_control\",\"name\":\"sensor range (m)\",\"value\":1234.0,\"workbench\":\"uas\"}\n",
+                "{\"cmd\":\"set_control\",\"name\":\"charge mass W (kg)\",\"value\":42,\"workbench\":\"survivability\"}\n",
+            ),
+        )
+        .unwrap();
+
+        poll_and_apply_agent_commands(&mut app);
+
+        assert_eq!(app.uas.params.counter.sensor_range_m, 1234.0);
+        assert_eq!(app.survivability.params.charge_kg, 42.0);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn set_control_routed_through_poll_sets_batch1_workbenches() {
+        // A representative slice of the batch-1 workbenches set via the REAL
+        // poll path on one channel, proving each new `TabKind` arm routes to the
+        // right state's `agent_set` (active-tab-independent `workbench:` routing).
+        // These five expose their parameters publicly (`pub params` with `pub`
+        // fields), so the landed value is asserted directly; the remaining
+        // batch-1 workbenches with private fields have their own in-module
+        // `agent_set` round-trip tests.
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "set_control_batch1");
+        let path = cmd_path(&app, 1);
+        std::fs::write(
+            &path,
+            concat!(
+                "{\"cmd\":\"set_control\",\"name\":\"truncation rank k\",\"value\":5,\"workbench\":\"rom\"}\n",
+                "{\"cmd\":\"set_control\",\"name\":\"number of steps\",\"value\":42,\"workbench\":\"fluids\"}\n",
+                "{\"cmd\":\"set_control\",\"name\":\"number of waves N\",\"value\":8,\"workbench\":\"ocean\"}\n",
+                "{\"cmd\":\"set_control\",\"name\":\"gravity g (m/s^2)\",\"value\":3.71,\"workbench\":\"mbd\"}\n",
+                "{\"cmd\":\"set_control\",\"name\":\"blade count n\",\"value\":3,\"workbench\":\"rotor\"}\n",
+            ),
+        )
+        .unwrap();
+
+        poll_and_apply_agent_commands(&mut app);
+
+        assert_eq!(app.rom.params.rank, 5);
+        assert_eq!(app.fluids.params.num_steps, 42);
+        assert_eq!(app.ocean.params.num_waves, 8);
+        assert_eq!(app.mbd.params.gravity, 3.71);
+        assert_eq!(app.rotor.blade_count, 3);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn set_control_routed_through_poll_sets_batch2_workbenches() {
+        // A representative slice of the batch-2 workbenches (this sweep) set via
+        // the REAL `poll_and_apply_agent_commands` path on one channel, proving
+        // each new `TabKind` arm routes to the right state's `agent_set`
+        // (active-tab-independent `workbench:` routing). These three keep their
+        // parameters private, so success is asserted through the publicly visible
+        // ack note `set_control` posts on a routed-and-validated set: a MISSING
+        // arm would instead post the "no settable controls yet" warn, so seeing
+        // the `set <name> = <value>` ack proves the dispatch arm exists and ran.
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "set_control_batch2");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        let path = cmd_path(&app, 1);
+        std::fs::write(
+            &path,
+            concat!(
+                "{\"cmd\":\"set_control\",\"name\":\"Furniture\",\"value\":\"sofa\",\"workbench\":\"interior\"}\n",
+                "{\"cmd\":\"set_control\",\"name\":\"max bounces\",\"value\":4,\"workbench\":\"render\"}\n",
+                "{\"cmd\":\"set_control\",\"name\":\"Variants (one per line)\",\"value\":\"p.R273H\",\"workbench\":\"varianteffect\"}\n",
+            ),
+        )
+        .unwrap();
+
+        poll_and_apply_agent_commands(&mut app);
+
+        // Read channel-1's feed and confirm an ack note landed for each set (and
+        // that none routed to the "no settable controls yet" fallthrough).
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let details: Vec<String> = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .filter_map(|v| v.get("detail").and_then(|d| d.as_str()).map(str::to_string))
+            .collect();
+        let has = |needle: &str| details.iter().any(|d| d.contains(needle));
+        assert!(
+            has("set Furniture = Str(\"sofa\")"),
+            "interior arm routed + set; feed = {details:?}"
+        );
+        assert!(
+            has("set max bounces = Int(4)"),
+            "render arm routed + set; feed = {details:?}"
+        );
+        assert!(
+            has("set Variants (one per line) = Str(\"p.R273H\")"),
+            "variant-effect arm routed + set; feed = {details:?}"
+        );
+        assert!(
+            !details.iter().any(|d| d.contains("no settable controls")),
+            "no batch-2 set fell through to the unwired fallthrough; feed = {details:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn set_control_routed_through_poll_sets_batch3_rocket_engine_cad() {
+        // The final batch-3 workbenches (rocket / engine / cad) set via the REAL
+        // `poll_and_apply_agent_commands` path on one channel, proving each new
+        // `TabKind` arm routes to the right state's `agent_set`
+        // (active-tab-independent `workbench:` routing). All three keep their
+        // parameters private to their own module, so — exactly as batch-2 does —
+        // success is asserted through the publicly visible ack note `set_control`
+        // posts on a routed-and-validated set: a MISSING arm would instead post
+        // the "no settable controls yet" warn, so seeing the `set <name> =
+        // <value>` ack proves the dispatch arm exists and ran. Each chosen value
+        // is a type the target's `agent_set` accepts without a validation error,
+        // so it produces the ack (not a warn).
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "set_control_batch3");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        let path = cmd_path(&app, 1);
+        std::fs::write(
+            &path,
+            concat!(
+                "{\"cmd\":\"set_control\",\"name\":\"strut count N\",\"value\":4,\"workbench\":\"rocket\"}\n",
+                "{\"cmd\":\"set_control\",\"name\":\"chamber temp\",\"value\":3500.0,\"workbench\":\"engine\"}\n",
+                "{\"cmd\":\"set_control\",\"name\":\"Material density\",\"value\":7850.0,\"workbench\":\"cad\"}\n",
+            ),
+        )
+        .unwrap();
+
+        poll_and_apply_agent_commands(&mut app);
+
+        // Read channel-1's feed and confirm an ack note landed for each set (and
+        // that none routed to the "no settable controls yet" fallthrough).
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let details: Vec<String> = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .filter_map(|v| v.get("detail").and_then(|d| d.as_str()).map(str::to_string))
+            .collect();
+        let has = |needle: &str| details.iter().any(|d| d.contains(needle));
+        assert!(
+            has("set strut count N = Int(4)"),
+            "rocket arm routed + set; feed = {details:?}"
+        );
+        assert!(
+            has("set chamber temp = Float(3500.0)"),
+            "engine arm routed + set; feed = {details:?}"
+        );
+        assert!(
+            has("set Material density = Float(7850.0)"),
+            "cad arm routed + set; feed = {details:?}"
+        );
+        assert!(
+            !details.iter().any(|d| d.contains("no settable controls")),
+            "no batch-3 set fell through to the unwired fallthrough; feed = {details:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn list_controls_posts_the_uq_caption_list() {
+        // `list_controls` posts one feed note enumerating the workbench's settable
+        // captions, so an agent can discover the SetControl name space.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "list_controls_uq");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        apply(
+            &mut app,
+            1,
+            AgentCommand::ListControls {
+                workbench: Some("uq".into()),
+            },
+        );
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let n = crate::uq_workbench::UqWorkbenchState::agent_control_names().len();
+        let posted = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("detail").and_then(|d| d.as_str()).is_some_and(|d| {
+                    d.contains(&format!("controls ({n})"))
+                        && d.contains("Monte-Carlo samples N")
+                        && d.contains("response model g")
+                })
+            });
+        assert!(
+            posted && n > 0,
+            "list_controls posts the caption list; feed = {body:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ---- Viewport bridge: camera control + 2-D sketch placement (gap 4) ----
+
+    #[test]
+    fn viewport_commands_parse_from_wire_form() {
+        // Each new command round-trips from its `{"cmd":...}` wire form.
+        let sv: AgentCommand = serde_json::from_str(r#"{"cmd":"set_view","dir":"front"}"#).unwrap();
+        assert_eq!(
+            sv,
+            AgentCommand::SetView {
+                dir: "front".into()
+            }
+        );
+        let orb: AgentCommand =
+            serde_json::from_str(r#"{"cmd":"orbit","dx_deg":30.0,"dy_deg":-10.0}"#).unwrap();
+        assert_eq!(
+            orb,
+            AgentCommand::Orbit {
+                dx_deg: 30.0,
+                dy_deg: -10.0
+            }
+        );
+        let z: AgentCommand = serde_json::from_str(r#"{"cmd":"zoom","factor":0.25}"#).unwrap();
+        assert_eq!(z, AgentCommand::Zoom { factor: 0.25 });
+        let fa: AgentCommand = serde_json::from_str(r#"{"cmd":"frame_all"}"#).unwrap();
+        assert_eq!(fa, AgentCommand::FrameAll);
+        let sp: AgentCommand =
+            serde_json::from_str(r#"{"cmd":"add_sketch_point","x":1.5,"y":2.5}"#).unwrap();
+        assert_eq!(sp, AgentCommand::AddSketchPoint { x: 1.5, y: 2.5 });
+        let sa: AgentCommand = serde_json::from_str(
+            r#"{"cmd":"add_sketch_arc","start":[0.0,0.0],"via":[1.0,1.0],"end":[2.0,0.0]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            sa,
+            AgentCommand::AddSketchArc {
+                start: [0.0, 0.0],
+                via: [1.0, 1.0],
+                end: [2.0, 0.0]
+            }
+        );
+        let ex: AgentCommand =
+            serde_json::from_str(r#"{"cmd":"extrude_sketch","height":3.0}"#).unwrap();
+        assert_eq!(ex, AgentCommand::ExtrudeSketch { height: 3.0 });
+        let l2: AgentCommand =
+            serde_json::from_str(r#"{"cmd":"add_2d_line","x1":0.0,"y1":0.0,"x2":5.0,"y2":5.0}"#)
+                .unwrap();
+        assert_eq!(
+            l2,
+            AgentCommand::Add2dLine {
+                x1: 0.0,
+                y1: 0.0,
+                x2: 5.0,
+                y2: 5.0
+            }
+        );
+        let c2: AgentCommand =
+            serde_json::from_str(r#"{"cmd":"add_2d_circle","cx":1.0,"cy":2.0,"r":4.0}"#).unwrap();
+        assert_eq!(
+            c2,
+            AgentCommand::Add2dCircle {
+                cx: 1.0,
+                cy: 2.0,
+                r: 4.0
+            }
+        );
+    }
+
+    #[test]
+    fn set_view_changes_camera_angles_through_real_poll_path() {
+        // End-to-end through `poll_and_apply_agent_commands`: a `set_view`
+        // command snaps the central camera to the named canonical view. Start
+        // from the default (az 45, el 25), set "front" (0, 0), then "top"
+        // (el 90) and assert the azimuth/elevation actually changed.
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "setview");
+        let path = cmd_path(&app, 1);
+        std::fs::write(&path, "{\"cmd\":\"set_view\",\"dir\":\"front\"}\n").unwrap();
+
+        // Sanity: default camera is NOT already on the Front view.
+        assert!(app.camera_mut().azimuth_deg != 0.0 || app.camera_mut().elevation_deg != 0.0);
+        poll_and_apply_agent_commands(&mut app);
+        assert_eq!(app.camera_mut().azimuth_deg, 0.0, "front azimuth");
+        assert_eq!(app.camera_mut().elevation_deg, 0.0, "front elevation");
+
+        // A second view ("top") moves elevation to 90.
+        use std::io::Write as _;
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
+        writeln!(f, "{{\"cmd\":\"set_view\",\"dir\":\"top\"}}").unwrap();
+        app.last_agent_poll = None; // bypass throttle
+        poll_and_apply_agent_commands(&mut app);
+        assert_eq!(app.camera_mut().elevation_deg, 90.0, "top elevation");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn set_view_unknown_direction_posts_warn_and_leaves_camera() {
+        // A bogus view name is a fail-loud `warn` note and changes nothing.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "setview_bad");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        let (az0, el0) = {
+            let c = app.camera_mut();
+            (c.azimuth_deg, c.elevation_deg)
+        };
+        apply(
+            &mut app,
+            1,
+            AgentCommand::SetView {
+                dir: "sideways".into(),
+            },
+        );
+        // Camera untouched.
+        assert_eq!(app.camera_mut().azimuth_deg, az0);
+        assert_eq!(app.camera_mut().elevation_deg, el0);
+        // A `warn` note was posted.
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let warned = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("kind").and_then(|k| k.as_str()) == Some("warn")
+                    && v.get("detail")
+                        .and_then(|d| d.as_str())
+                        .is_some_and(|d| d.contains("unknown view direction"))
+            });
+        assert!(warned, "unknown view posts a warn note; feed = {body:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn orbit_and_zoom_drive_the_camera() {
+        // Orbit changes azimuth/elevation; zoom changes distance — both through
+        // the vetted `OrbitCamera` methods. A non-finite delta/factor is ignored.
+        let mut app = ValenxApp::default();
+        let az0 = app.camera_mut().azimuth_deg;
+        let dist0 = app.camera_mut().distance;
+        apply(
+            &mut app,
+            1,
+            AgentCommand::Orbit {
+                dx_deg: 20.0,
+                dy_deg: 5.0,
+            },
+        );
+        assert!(
+            (app.camera_mut().azimuth_deg - (az0 + 20.0)).abs() < 1e-3,
+            "orbit advanced azimuth"
+        );
+        apply(&mut app, 1, AgentCommand::Zoom { factor: 0.5 });
+        assert!(
+            app.camera_mut().distance < dist0,
+            "zoom-in reduced distance"
+        );
+
+        // Non-finite inputs are no-ops (guarded), not panics.
+        let az_now = app.camera_mut().azimuth_deg;
+        apply(
+            &mut app,
+            1,
+            AgentCommand::Orbit {
+                dx_deg: f32::NAN,
+                dy_deg: 0.0,
+            },
+        );
+        assert_eq!(
+            app.camera_mut().azimuth_deg,
+            az_now,
+            "NaN orbit delta ignored"
+        );
+    }
+
+    #[test]
+    fn frame_all_with_nothing_loaded_posts_warn() {
+        // With no mesh/STL loaded, `frame_all` leaves the camera and posts a
+        // warn note (never a panic).
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "frameall_empty");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        assert!(app.mesh.is_none() && app.stl.is_none());
+        apply(&mut app, 1, AgentCommand::FrameAll);
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let warned = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("kind").and_then(|k| k.as_str()) == Some("warn")
+                    && v.get("detail")
+                        .and_then(|d| d.as_str())
+                        .is_some_and(|d| d.contains("no mesh or STL loaded"))
+            });
+        assert!(
+            warned,
+            "frame_all with nothing loaded warns; feed = {body:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn add_sketch_point_appends_a_vertex_through_real_poll_path() {
+        // End-to-end through the poll path: two `add_sketch_point` commands grow
+        // the in-house CAD sketch anchor count from 0 → 2 (verified via
+        // `sketch_points().len()` before/after).
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "sketchpoint");
+        let path = cmd_path(&app, 1);
+        assert_eq!(app.cad.sketch_points().len(), 0, "sketch starts empty");
+        std::fs::write(
+            &path,
+            "{\"cmd\":\"add_sketch_point\",\"x\":0.0,\"y\":0.0}\n{\"cmd\":\"add_sketch_point\",\"x\":1.0,\"y\":0.0}\n",
+        )
+        .unwrap();
+        poll_and_apply_agent_commands(&mut app);
+        assert_eq!(
+            app.cad.sketch_points().len(),
+            2,
+            "two bridge points appended two anchors"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn extrude_sketch_nonpositive_height_warns_no_panic() {
+        // ExtrudeSketch with height <= 0 must post a `warn` note and not panic.
+        // Seed a valid 3-anchor profile first so the height check is what fails.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "extrude_badheight");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        app.cad.sketch_add_point(0.0, 0.0);
+        app.cad.sketch_add_point(1.0, 0.0);
+        app.cad.sketch_add_point(1.0, 1.0);
+        assert_eq!(app.cad.sketch_points().len(), 3);
+
+        apply(&mut app, 1, AgentCommand::ExtrudeSketch { height: 0.0 });
+        apply(&mut app, 1, AgentCommand::ExtrudeSketch { height: -2.0 });
+
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let warned = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .filter(|v| {
+                v.get("kind").and_then(|k| k.as_str()) == Some("warn")
+                    && v.get("detail")
+                        .and_then(|d| d.as_str())
+                        .is_some_and(|d| d.contains("height must be > 0"))
+            })
+            .count();
+        assert!(
+            warned >= 2,
+            "both non-positive heights warned; feed = {body:?}"
+        );
+    }
+
+    #[test]
+    fn extrude_sketch_valid_height_flags_rebuild() {
+        // A valid extrude (>0 height, ≥3 anchors) requests a viewport rebuild —
+        // the same effect the panel button has. We can't read the private
+        // `rebuild_request`, so assert success indirectly via the ack note.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "extrude_ok");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        app.cad.sketch_add_point(0.0, 0.0);
+        app.cad.sketch_add_point(2.0, 0.0);
+        app.cad.sketch_add_point(2.0, 2.0);
+        app.cad.sketch_add_point(0.0, 2.0);
+
+        apply(&mut app, 1, AgentCommand::ExtrudeSketch { height: 1.5 });
+
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let acked = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("kind").and_then(|k| k.as_str()) == Some("result")
+                    && v.get("detail")
+                        .and_then(|d| d.as_str())
+                        .is_some_and(|d| d.contains("extruded sketch"))
+            });
+        assert!(acked, "valid extrude posts an ack note; feed = {body:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn add_2d_line_increments_drawing_entity_count_through_real_poll_path() {
+        // End-to-end: an `add_2d_line` command grows the 2-D drawing's entity
+        // count by one (verified via `entity_count()` before/after).
+        let mut app = ValenxApp::default();
+        app.wb_agent_counter = 1;
+        let dir = isolate_cmd_dir(&mut app, "add2dline");
+        let path = cmd_path(&app, 1);
+        let before = app.draft2d.entity_count();
+        std::fs::write(
+            &path,
+            "{\"cmd\":\"add_2d_line\",\"x1\":0.0,\"y1\":0.0,\"x2\":10.0,\"y2\":10.0}\n",
+        )
+        .unwrap();
+        poll_and_apply_agent_commands(&mut app);
+        assert_eq!(
+            app.draft2d.entity_count(),
+            before + 1,
+            "bridge line added exactly one entity"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn add_2d_circle_nonpositive_radius_warns_no_change() {
+        // Add2dCircle with r <= 0 posts a `warn` and adds nothing.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "add2dcircle_badr");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        let before = app.draft2d.entity_count();
+        apply(
+            &mut app,
+            1,
+            AgentCommand::Add2dCircle {
+                cx: 0.0,
+                cy: 0.0,
+                r: 0.0,
+            },
+        );
+        assert_eq!(
+            app.draft2d.entity_count(),
+            before,
+            "non-positive radius added nothing"
+        );
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let warned = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("kind").and_then(|k| k.as_str()) == Some("warn")
+                    && v.get("detail")
+                        .and_then(|d| d.as_str())
+                        .is_some_and(|d| d.contains("radius must be > 0"))
+            });
+        assert!(warned, "bad-radius circle warns; feed = {body:?}");
+        // A valid radius DOES add one.
+        apply(
+            &mut app,
+            1,
+            AgentCommand::Add2dCircle {
+                cx: 0.0,
+                cy: 0.0,
+                r: 3.0,
+            },
+        );
+        assert_eq!(
+            app.draft2d.entity_count(),
+            before + 1,
+            "valid circle added one entity"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ---- Generic accessibility-name bridge (invoke_named / list_buttons / read_text) ----
+
+    #[test]
+    fn parses_invoke_named_list_buttons_read_text() {
+        // The three new generic commands round-trip from their wire form.
+        let inv: AgentCommand =
+            serde_json::from_str(r#"{"cmd":"invoke_named","name":"▶ Compute"}"#).unwrap();
+        assert_eq!(
+            inv,
+            AgentCommand::InvokeNamed {
+                name: "▶ Compute".into()
+            }
+        );
+        let lb: AgentCommand = serde_json::from_str(r#"{"cmd":"list_buttons"}"#).unwrap();
+        assert_eq!(lb, AgentCommand::ListButtons);
+        let rt: AgentCommand = serde_json::from_str(r#"{"cmd":"read_text"}"#).unwrap();
+        assert_eq!(rt, AgentCommand::ReadText);
+    }
+
+    #[test]
+    fn probe_resolves_a_named_button_to_an_accesskit_node() {
+        // The load-bearing claim: the headless probe of the ACTIVE workbench
+        // emits an accesskit tree whose nodes carry the button captions, so a
+        // name → NodeId resolution is possible with no per-workbench wiring.
+        // Open the Springs workbench (its "▶ Analyze" button is a stable caption).
+        let mut app = ValenxApp::default();
+        app.tab_bar.open(TabKind::Springs);
+        project_tabs::sync_active(&mut app);
+
+        let nodes = probe_active_workbench(&mut app).expect("active workbench yields a tree");
+        let analyze = nodes
+            .iter()
+            .find(|(_, n)| is_clickable(n) && n.name() == Some("▶ Analyze"));
+        assert!(
+            analyze.is_some(),
+            "the Springs '▶ Analyze' button is a clickable, named node in the probe tree; \
+             captions seen = {:?}",
+            nodes
+                .iter()
+                .filter(|(_, n)| is_clickable(n))
+                .filter_map(|(_, n)| n.name())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn invoke_named_queues_an_action_and_acks() {
+        // `invoke_named` on a real workbench button resolves the name and queues
+        // exactly one accesskit Default action for raw_input_hook to inject, and
+        // posts a `result` ack — no panic, no app-state mutation beyond the queue.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "invoke_named_ok");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        app.tab_bar.open(TabKind::Springs);
+        project_tabs::sync_active(&mut app);
+        assert!(app.pending_accesskit_actions.is_empty());
+
+        apply(
+            &mut app,
+            1,
+            AgentCommand::InvokeNamed {
+                name: "▶ Analyze".into(),
+            },
+        );
+
+        assert_eq!(
+            app.pending_accesskit_actions.len(),
+            1,
+            "exactly one Default action was queued for next-frame injection"
+        );
+        assert_eq!(
+            app.pending_accesskit_actions[0].1,
+            egui::accesskit::Action::Default
+        );
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        assert!(
+            body.contains("queued click"),
+            "a successful invoke acks with a result note; feed = {body:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn invoke_named_is_case_insensitive_fallback() {
+        // An agent that lower-cased the caption still hits via the
+        // case-insensitive fallback (the '▶' is preserved; only ASCII case is
+        // folded, which is enough for the "analyze" word).
+        let mut app = ValenxApp::default();
+        app.tab_bar.open(TabKind::Springs);
+        project_tabs::sync_active(&mut app);
+        apply(
+            &mut app,
+            0,
+            AgentCommand::InvokeNamed {
+                name: "▶ analyze".into(),
+            },
+        );
+        assert_eq!(
+            app.pending_accesskit_actions.len(),
+            1,
+            "case-insensitive fallback resolved '▶ analyze' to '▶ Analyze'"
+        );
+    }
+
+    #[test]
+    fn invoke_named_unknown_button_warns_and_queues_nothing() {
+        // A caption with no matching clickable node is a fail-loud `warn` that
+        // also lists what IS available — and queues nothing (never a panic).
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "invoke_named_bad");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        app.tab_bar.open(TabKind::Springs);
+        project_tabs::sync_active(&mut app);
+
+        apply(
+            &mut app,
+            1,
+            AgentCommand::InvokeNamed {
+                name: "No Such Button".into(),
+            },
+        );
+
+        assert!(
+            app.pending_accesskit_actions.is_empty(),
+            "no action queued for an unknown caption"
+        );
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        let warned = body
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|v| {
+                v.get("kind").and_then(|k| k.as_str()) == Some("warn")
+                    && v.get("detail")
+                        .and_then(|d| d.as_str())
+                        .is_some_and(|d| d.contains("no clickable button named"))
+            });
+        assert!(warned, "unknown button warns; feed = {body:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn invoke_named_no_active_workbench_warns() {
+        // With no active workbench tab there is nothing to probe → a `warn`, not
+        // a panic, and nothing queued.
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "invoke_named_noactive");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        // No tab opened → active_kind() is None.
+        apply(
+            &mut app,
+            1,
+            AgentCommand::InvokeNamed {
+                name: "▶ Analyze".into(),
+            },
+        );
+        assert!(app.pending_accesskit_actions.is_empty());
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        assert!(
+            body.contains("no active workbench"),
+            "no-active-workbench warns; feed = {body:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn probe_is_side_effect_free_on_visibility() {
+        // The probe force-sets the active workbench's `show_*` flag to render its
+        // panel, then MUST restore it — a hidden workbench stays hidden after a
+        // probe (so list_buttons / read_text don't pop panels open as a side
+        // effect). Springs is active but its `show_*` flag is left FALSE here
+        // (we don't call sync_active), so the probe must leave it false.
+        let mut app = ValenxApp::default();
+        app.tab_bar.open(TabKind::Springs);
+        // Deliberately do NOT sync_active → show_springs_workbench stays false.
+        assert!(!app.show_springs_workbench);
+        let _ = probe_active_workbench(&mut app);
+        assert!(
+            !app.show_springs_workbench,
+            "probe restored the prior (hidden) visibility — no side effect"
+        );
+    }
+
+    #[test]
+    fn list_buttons_lists_the_active_workbench_captions() {
+        // `list_buttons` posts a `result` note enumerating the active workbench's
+        // clickable captions (so an agent can discover the invoke_named names).
+        let mut app = ValenxApp::default();
+        let dir = isolate_cmd_dir(&mut app, "list_buttons");
+        app.assistant
+            .set_feed_path_for_test(dir.join("assistant_feed.jsonl"));
+        app.tab_bar.open(TabKind::Springs);
+        project_tabs::sync_active(&mut app);
+
+        apply(&mut app, 1, AgentCommand::ListButtons);
+
+        let feed_path = crate::assistant_workbench::unit_feed_path(&app, 1);
+        let body = std::fs::read_to_string(&feed_path).expect("unit-1 feed written");
+        assert!(
+            body.contains("buttons (") && body.contains("Analyze"),
+            "list_buttons enumerates the Springs captions incl. Analyze; feed = {body:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn raw_input_hook_injects_and_drains_queued_actions() {
+        // The injection half: a queued action is pushed into the frame's
+        // RawInput as an AccessKitActionRequest and the queue is drained (each
+        // action fires on exactly one frame).
+        use eframe::App as _;
+        let mut app = ValenxApp::default();
+        // Any NodeId works here — raw_input_hook only forwards it verbatim into
+        // the frame's RawInput (resolution from a name happens earlier, in
+        // invoke_named). `NodeId` is a public newtype over a u64.
+        let target = egui::accesskit::NodeId(0xC0FFEE);
+        app.pending_accesskit_actions
+            .push((target, egui::accesskit::Action::Default));
+
+        let ctx = egui::Context::default();
+        let mut raw = egui::RawInput::default();
+        app.raw_input_hook(&ctx, &mut raw);
+
+        assert!(
+            app.pending_accesskit_actions.is_empty(),
+            "the queue is drained after injection"
+        );
+        let injected = raw.events.iter().any(|e| {
+            matches!(
+                e,
+                egui::Event::AccessKitActionRequest(req)
+                    if req.action == egui::accesskit::Action::Default && req.target == target
+            )
+        });
+        assert!(
+            injected,
+            "the queued action was injected as an AccessKitActionRequest"
+        );
     }
 }

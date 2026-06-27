@@ -23,6 +23,7 @@ use valenx_solvespace_3d::{
     Sketch3D, Step,
 };
 
+use crate::agent_commands::AgentValue;
 use crate::types::LoadedMesh;
 use crate::ValenxApp;
 
@@ -727,6 +728,177 @@ impl CadWorkbenchState {
     /// "Rebuild → viewport" button. `draw_cad_workbench` performs the rebuild.
     pub fn request_rebuild(&mut self) {
         self.rebuild_request = true;
+    }
+
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`
+    /// so an agent can discover the name space. Matches the workspace-wide
+    /// `fn() -> &'static [&'static str]` contract (a fixed, discoverable list).
+    ///
+    /// Two groups:
+    /// * **Singletons** — the always-present model / sketch controls
+    ///   (`Material density`, `Extrude height`, `circle radius =`,
+    ///   `Snap to grid`, `Sketch tool`).
+    /// * **Per feature-tree step** — the feature tree is a `Vec<UiStep>`, so its
+    ///   step fields are addressed by a **1-based index**: `step {N} <field>`.
+    ///   Because the list must be `&'static`, the canonical entries below cover
+    ///   the representative **first** step (`step 1 …`) across *all* per-kind
+    ///   dimension captions (`dx`/`dy`/`dz`, `r`/`h`, `base r`/`top r`,
+    ///   `major`/`minor`, `height`, `angle°`) plus `op` / `shape` and the
+    ///   always-present placement (`x`/`y`/`z`) and rotation (`rx°`/`ry°`/`rz°`).
+    ///   [`agent_set`](Self::agent_set) generalises the **same** field names to
+    ///   any existing step — `step 2 dx`, `step 3 angle°`, … — and validates the
+    ///   index against the live tree.
+    ///
+    /// NOTE — live-canvas sketch point placement (`sketch_start` /
+    /// `sketch_segs` / `sketch_pending`) is intentionally **not** here: it is
+    /// already bridge-driven via the dedicated `add_sketch_point` path, so a
+    /// settable caption would duplicate that channel. Pure actions (Rebuild,
+    /// Undo, + Box, …) and read-only outputs (resolved values, mass, the
+    /// per-Extrude/Revolve `P{j}` profile points) are out of scope for
+    /// `SetControl`.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            // -- Singletons --
+            "Material density",
+            "Extrude height",
+            "circle radius =",
+            "Snap to grid",
+            "Sketch tool",
+            // -- Representative first step (the same field names work for any
+            //    `step {N}`; see agent_set) --
+            "step 1 op",
+            "step 1 shape",
+            "step 1 dx",
+            "step 1 dy",
+            "step 1 dz",
+            "step 1 r",
+            "step 1 h",
+            "step 1 base r",
+            "step 1 top r",
+            "step 1 major",
+            "step 1 minor",
+            "step 1 height",
+            "step 1 angle\u{00B0}",
+            "step 1 x",
+            "step 1 y",
+            "step 1 z",
+            "step 1 rx\u{00B0}",
+            "step 1 ry\u{00B0}",
+            "step 1 rz\u{00B0}",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Caption strings match exactly what the workbench
+    /// draws (and what each control is `labelled_by`), so an agent can set a
+    /// parameter by the same name a user reads.
+    ///
+    /// Fail-loud: an unknown caption or a value of the wrong type returns
+    /// `Err(String)` (the bridge turns it into a `warn` feed note) — never a
+    /// panic, and no field is written on error. Numeric singletons read
+    /// [`AgentValue::as_f64`]; the `Snap to grid` checkbox reads
+    /// [`AgentValue::as_bool`]; the enum / expression-string controls (the
+    /// `Sketch tool`, the parameter name in `circle radius =`, and every per-step
+    /// `op` / `shape` / dimension field) read [`AgentValue::as_str`]. Per-step
+    /// dimension fields are CAD **expressions** (e.g. `"size / 2"`, `"hole_r"`),
+    /// so they are stored verbatim as strings — a bare number is accepted as the
+    /// string form of that number.
+    pub fn agent_set(&mut self, name: &str, value: &AgentValue) -> Result<(), String> {
+        // A per-step dimension / placement / rotation field is a CAD
+        // **expression** stored verbatim as a string (e.g. `"size / 2"`,
+        // `"hole_r"`). Per the documented contract, a bare number is accepted as
+        // the string form of that number (`4` → `"4"`, `2.5` → `"2.5"`), so an
+        // agent may set a constant dimension without quoting it; a string is
+        // taken verbatim. A `bool` is the wrong shape and fails loudly.
+        let expr = |v: &AgentValue| -> Result<String, String> {
+            match v {
+                AgentValue::Str(s) => Ok(s.clone()),
+                AgentValue::Int(i) => Ok(i.to_string()),
+                AgentValue::Float(f) => Ok(f.to_string()),
+                other => Err(format!(
+                    "expected an expression string or number, got {other:?}"
+                )),
+            }
+        };
+
+        // -- Singletons --------------------------------------------------------
+        match name {
+            "Material density" => {
+                self.density = value.as_f64()?;
+                return Ok(());
+            }
+            "Extrude height" => {
+                self.sketch_extrude_height = value.as_f64()?;
+                return Ok(());
+            }
+            "circle radius =" => {
+                // The parameter *name* that drives the sketch circle's radius.
+                self.radius_param = value.as_str()?.to_string();
+                return Ok(());
+            }
+            "Snap to grid" => {
+                self.sketch_grid_snap = value.as_bool()?;
+                return Ok(());
+            }
+            "Sketch tool" => {
+                self.sketch_tool = parse_sketch_tool(value.as_str()?)?;
+                return Ok(());
+            }
+            _ => {}
+        }
+
+        // -- Per feature-tree step (`step {N} <field>`, 1-based) ---------------
+        if let Some(rest) = name.strip_prefix("step ") {
+            // Split "<N> <field>" on the first space.
+            let (num, field) = rest
+                .split_once(' ')
+                .ok_or_else(|| format!("malformed step control caption: {name:?}"))?;
+            let idx1: usize = num
+                .parse()
+                .map_err(|_| format!("step control caption has a non-numeric index: {name:?}"))?;
+            if idx1 == 0 {
+                return Err(format!("step index is 1-based, got 0 in {name:?}"));
+            }
+            // Compute the length up front so the out-of-range message can borrow
+            // it (the `get_mut` below holds a mutable borrow of `self.steps`).
+            let n_steps = self.steps.len();
+            let st = self.steps.get_mut(idx1 - 1).ok_or_else(|| {
+                format!("step {idx1} is out of range (the feature tree has {n_steps} step(s))")
+            })?;
+            match field {
+                // Enums (combos) — read by option name (string only).
+                "op" => st.op = parse_op(value.as_str()?)?,
+                "shape" => st.kind = parse_feature_kind(value.as_str()?)?,
+                // Dimension / placement / rotation expressions (stored verbatim;
+                // a bare number is taken as its string form, see `expr`).
+                "dx" => st.dx = expr(value)?,
+                "dy" => st.dy = expr(value)?,
+                "dz" => st.dz = expr(value)?,
+                "r" => st.radius = expr(value)?,
+                "h" => st.height = expr(value)?,
+                "base r" => st.radius = expr(value)?,
+                "top r" => st.top_radius = expr(value)?,
+                "major" => st.major = expr(value)?,
+                "minor" => st.minor = expr(value)?,
+                "height" => st.height = expr(value)?,
+                "angle\u{00B0}" => st.angle = expr(value)?,
+                "x" => st.x = expr(value)?,
+                "y" => st.y = expr(value)?,
+                "z" => st.z = expr(value)?,
+                "rx\u{00B0}" => st.rx = expr(value)?,
+                "ry\u{00B0}" => st.ry = expr(value)?,
+                "rz\u{00B0}" => st.rz = expr(value)?,
+                other => {
+                    return Err(format!(
+                        "unknown step field {other:?} in CAD control {name:?}"
+                    ))
+                }
+            }
+            return Ok(());
+        }
+
+        Err(format!("unknown CAD control: {name:?}"))
     }
 }
 
@@ -2161,9 +2333,61 @@ fn kind_label(kind: FeatureKind) -> &'static str {
     }
 }
 
-/// A narrow single-line editor for a dimension / placement expression.
-fn dim_edit(ui: &mut egui::Ui, v: &mut String) {
-    ui.add(egui::TextEdit::singleline(v).desired_width(52.0));
+/// Parse a boolean-op name (for the agent `SetControl` bridge) into an [`Op`].
+/// Case-insensitive; accepts the combo's menu words. Fail-loud on an
+/// unrecognised name so a typo is a `warn` note, not a silent no-op.
+fn parse_op(s: &str) -> Result<Op, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "new" => Ok(Op::New),
+        "join" | "union" | "add" => Ok(Op::Join),
+        "cut" | "subtract" | "difference" => Ok(Op::Cut),
+        "intersect" | "intersection" => Ok(Op::Intersect),
+        other => Err(format!(
+            "unknown op '{other}' (expected 'New', 'Join', 'Cut', or 'Intersect')"
+        )),
+    }
+}
+
+/// Parse a primitive-shape name (for the agent `SetControl` bridge) into a
+/// [`FeatureKind`]. Case-insensitive; accepts the combo's menu words. Fail-loud.
+fn parse_feature_kind(s: &str) -> Result<FeatureKind, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "box" | "cube" => Ok(FeatureKind::Box),
+        "cylinder" | "cyl" => Ok(FeatureKind::Cylinder),
+        "sphere" => Ok(FeatureKind::Sphere),
+        "cone" => Ok(FeatureKind::Cone),
+        "torus" => Ok(FeatureKind::Torus),
+        "extrude" => Ok(FeatureKind::Extrude),
+        "revolve" => Ok(FeatureKind::Revolve),
+        other => Err(format!(
+            "unknown shape '{other}' (expected 'Box', 'Cylinder', 'Sphere', \
+             'Cone', 'Torus', 'Extrude', or 'Revolve')"
+        )),
+    }
+}
+
+/// Parse a sketch-tool name (for the agent `SetControl` bridge) into a
+/// [`SketchTool`]. Case-insensitive; accepts the tool-row words. Fail-loud.
+fn parse_sketch_tool(s: &str) -> Result<SketchTool, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "line" => Ok(SketchTool::Line),
+        "arc" => Ok(SketchTool::Arc),
+        "spline" => Ok(SketchTool::Spline),
+        other => Err(format!(
+            "unknown sketch tool '{other}' (expected 'Line', 'Arc', or 'Spline')"
+        )),
+    }
+}
+
+/// A narrow single-line editor for a dimension / placement expression, with a
+/// compact leading `caption` rendered as its label and associated via
+/// `labelled_by` so each field carries a unique accessible name (a bare
+/// `TextEdit` has no own-name, leaving it unaddressable by a screen reader / AI
+/// driver — closing AI-drivability gap 2).
+fn dim_edit(ui: &mut egui::Ui, caption: &str, v: &mut String) {
+    let cap = ui.label(egui::RichText::new(caption).weak().small());
+    ui.add(egui::TextEdit::singleline(v).desired_width(52.0))
+        .labelled_by(cap.id);
 }
 
 /// Format a float as a compact expression string for a feature field — up to 4
@@ -2518,13 +2742,17 @@ fn draw_sketch_canvas(s: &mut CadWorkbenchState, ui: &mut egui::Ui) {
         .monospace(),
     );
     ui.horizontal(|ui| {
-        ui.label("Extrude height");
+        // Associate the DragValue with its caption via `labelled_by`, so the
+        // spin button is named for a screen reader / AI driver (egui clears a
+        // DragValue's own Name).
+        let cap = ui.label("Extrude height");
         ui.add(
             egui::DragValue::new(&mut s.sketch_extrude_height)
                 .speed(0.1)
                 .range(0.01..=1.0e6)
                 .suffix(" u"),
-        );
+        )
+        .labelled_by(cap.id);
     });
     // A profile encloses area once its tessellated polyline has ≥3 points; arcs
     // and splines reach that with as few as 2 anchors.
@@ -2611,17 +2839,27 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     let mut remove: Option<usize> = None;
                     for (i, (name, expr)) in s.params.iter_mut().enumerate() {
                         ui.horizontal(|ui| {
+                            // Per-row captions so the name / expr editors carry
+                            // unique accessible names (a bare TextEdit has no
+                            // own-name) — AI-drivable / screen-reader addressable.
+                            let name_cap = ui.label(
+                                egui::RichText::new(format!("param {} name", i + 1))
+                                    .weak()
+                                    .small(),
+                            );
                             ui.add(
                                 egui::TextEdit::singleline(name)
                                     .desired_width(80.0)
                                     .hint_text("name"),
-                            );
-                            ui.label("=");
+                            )
+                            .labelled_by(name_cap.id);
+                            let expr_cap = ui.label("=");
                             ui.add(
                                 egui::TextEdit::singleline(expr)
                                     .desired_width(130.0)
                                     .hint_text("expr"),
-                            );
+                            )
+                            .labelled_by(expr_cap.id);
                             if ui.small_button("✕").clicked() {
                                 remove = Some(i);
                             }
@@ -2637,7 +2875,10 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     // ---- Material: density → mass readout ----
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
-                        ui.label("Material density").on_hover_text(
+                        // Associate the DragValue with its caption via
+                        // `labelled_by` so it is named for a screen reader / AI
+                        // driver (egui clears a DragValue's own Name).
+                        let cap = ui.label("Material density").on_hover_text(
                             "Mass per unit volume; the rebuild status shows \
                              mass = density × solid volume.",
                         );
@@ -2646,19 +2887,21 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                 .speed(0.1)
                                 .range(0.0..=1.0e9)
                                 .suffix(" /u³"),
-                        );
+                        )
+                        .labelled_by(cap.id);
                     });
 
                     // ---- Sketch: parameter-driven circle radius ----
                     ui.add_space(6.0);
                     ui.label(egui::RichText::new("Sketch").strong());
                     ui.horizontal(|ui| {
-                        ui.label("circle radius =");
+                        let radius_cap = ui.label("circle radius =");
                         ui.add(
                             egui::TextEdit::singleline(&mut s.radius_param)
                                 .desired_width(100.0)
                                 .hint_text("parameter"),
-                        );
+                        )
+                        .labelled_by(radius_cap.id);
                     });
                     if ui.button("▶ Solve").clicked() {
                         let res = run_cad(s);
@@ -2713,7 +2956,10 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                     for (i, st) in s.steps.iter_mut().enumerate() {
                         ui.group(|ui| {
                             ui.horizontal(|ui| {
-                                ui.label(format!("{}.", i + 1));
+                                // Step-number label doubles as the boolean-op
+                                // combo's accessible caption; the kind combo gets
+                                // its own so both are addressable by name.
+                                let step_cap = ui.label(format!("step {} op", i + 1));
                                 egui::ComboBox::from_id_source(("cad_op", i))
                                     .selected_text(op_label(st.op))
                                     .width(92.0)
@@ -2721,7 +2967,11 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                         for op in [Op::New, Op::Join, Op::Cut, Op::Intersect] {
                                             ui.selectable_value(&mut st.op, op, op_label(op));
                                         }
-                                    });
+                                    })
+                                    .response
+                                    .labelled_by(step_cap.id);
+                                let kind_cap =
+                                    ui.label(egui::RichText::new("shape").weak().small());
                                 egui::ComboBox::from_id_source(("cad_kind", i))
                                     .selected_text(kind_label(st.kind))
                                     .width(92.0)
@@ -2757,7 +3007,9 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                             FeatureKind::Revolve,
                                             "Revolve",
                                         );
-                                    });
+                                    })
+                                    .response
+                                    .labelled_by(kind_cap.id);
                                 if ui.small_button("✕").clicked() {
                                     remove_step = Some(i);
                                 }
@@ -2765,44 +3017,38 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                             match st.kind {
                                 FeatureKind::Box => {
                                     ui.horizontal(|ui| {
-                                        ui.label("dx,dy,dz");
-                                        dim_edit(ui, &mut st.dx);
-                                        dim_edit(ui, &mut st.dy);
-                                        dim_edit(ui, &mut st.dz);
+                                        dim_edit(ui, "dx", &mut st.dx);
+                                        dim_edit(ui, "dy", &mut st.dy);
+                                        dim_edit(ui, "dz", &mut st.dz);
                                     });
                                 }
                                 FeatureKind::Cylinder => {
                                     ui.horizontal(|ui| {
-                                        ui.label("r, h");
-                                        dim_edit(ui, &mut st.radius);
-                                        dim_edit(ui, &mut st.height);
+                                        dim_edit(ui, "r", &mut st.radius);
+                                        dim_edit(ui, "h", &mut st.height);
                                     });
                                 }
                                 FeatureKind::Sphere => {
                                     ui.horizontal(|ui| {
-                                        ui.label("r");
-                                        dim_edit(ui, &mut st.radius);
+                                        dim_edit(ui, "r", &mut st.radius);
                                     });
                                 }
                                 FeatureKind::Cone => {
                                     ui.horizontal(|ui| {
-                                        ui.label("base r, top r, h");
-                                        dim_edit(ui, &mut st.radius);
-                                        dim_edit(ui, &mut st.top_radius);
-                                        dim_edit(ui, &mut st.height);
+                                        dim_edit(ui, "base r", &mut st.radius);
+                                        dim_edit(ui, "top r", &mut st.top_radius);
+                                        dim_edit(ui, "h", &mut st.height);
                                     });
                                 }
                                 FeatureKind::Torus => {
                                     ui.horizontal(|ui| {
-                                        ui.label("major, minor");
-                                        dim_edit(ui, &mut st.major);
-                                        dim_edit(ui, &mut st.minor);
+                                        dim_edit(ui, "major", &mut st.major);
+                                        dim_edit(ui, "minor", &mut st.minor);
                                     });
                                 }
                                 FeatureKind::Extrude => {
                                     ui.horizontal(|ui| {
-                                        ui.label("height");
-                                        dim_edit(ui, &mut st.height);
+                                        dim_edit(ui, "height", &mut st.height);
                                     });
                                     ui.label(
                                         egui::RichText::new("profile (x, y) — ≥3 points")
@@ -2812,16 +3058,25 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                     let mut rm_pt: Option<usize> = None;
                                     for (j, pt) in st.profile.iter_mut().enumerate() {
                                         ui.horizontal(|ui| {
+                                            // Per-point captions associated via
+                                            // `labelled_by` so each profile
+                                            // spin button is uniquely named for
+                                            // a screen reader / AI driver (egui
+                                            // clears a DragValue's own Name).
+                                            let xcap = ui.label(format!("P{j} x"));
                                             ui.add(
                                                 egui::DragValue::new(&mut pt.0)
                                                     .speed(0.1)
                                                     .prefix("x "),
-                                            );
+                                            )
+                                            .labelled_by(xcap.id);
+                                            let ycap = ui.label(format!("P{j} y"));
                                             ui.add(
                                                 egui::DragValue::new(&mut pt.1)
                                                     .speed(0.1)
                                                     .prefix("y "),
-                                            );
+                                            )
+                                            .labelled_by(ycap.id);
                                             if ui.small_button("✕").clicked() {
                                                 rm_pt = Some(j);
                                             }
@@ -2838,8 +3093,7 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                 }
                                 FeatureKind::Revolve => {
                                     ui.horizontal(|ui| {
-                                        ui.label("angle°");
-                                        dim_edit(ui, &mut st.angle);
+                                        dim_edit(ui, "angle°", &mut st.angle);
                                     });
                                     ui.label(
                                         egui::RichText::new(
@@ -2851,17 +3105,26 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                     let mut rm_pt: Option<usize> = None;
                                     for (j, pt) in st.profile.iter_mut().enumerate() {
                                         ui.horizontal(|ui| {
+                                            // Per-point captions associated via
+                                            // `labelled_by` so each half-section
+                                            // spin button is uniquely named for
+                                            // a screen reader / AI driver (egui
+                                            // clears a DragValue's own Name).
+                                            let rcap = ui.label(format!("P{j} r"));
                                             ui.add(
                                                 egui::DragValue::new(&mut pt.0)
                                                     .speed(0.1)
                                                     .prefix("r ")
                                                     .range(0.0..=f64::INFINITY),
-                                            );
+                                            )
+                                            .labelled_by(rcap.id);
+                                            let zcap = ui.label(format!("P{j} z"));
                                             ui.add(
                                                 egui::DragValue::new(&mut pt.1)
                                                     .speed(0.1)
                                                     .prefix("z "),
-                                            );
+                                            )
+                                            .labelled_by(zcap.id);
                                             if ui.small_button("✕").clicked() {
                                                 rm_pt = Some(j);
                                             }
@@ -2878,16 +3141,16 @@ pub fn draw_cad_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                 }
                             }
                             ui.horizontal(|ui| {
-                                ui.label("at x,y,z");
-                                dim_edit(ui, &mut st.x);
-                                dim_edit(ui, &mut st.y);
-                                dim_edit(ui, &mut st.z);
+                                ui.label("at");
+                                dim_edit(ui, "x", &mut st.x);
+                                dim_edit(ui, "y", &mut st.y);
+                                dim_edit(ui, "z", &mut st.z);
                             });
                             ui.horizontal(|ui| {
-                                ui.label("rot x,y,z°");
-                                dim_edit(ui, &mut st.rx);
-                                dim_edit(ui, &mut st.ry);
-                                dim_edit(ui, &mut st.rz);
+                                ui.label("rot");
+                                dim_edit(ui, "rx°", &mut st.rx);
+                                dim_edit(ui, "ry°", &mut st.ry);
+                                dim_edit(ui, "rz°", &mut st.rz);
                             });
                         });
                     }
@@ -5480,5 +5743,190 @@ mod tests {
             "binary STL = 80B header + 4B count + triangles ({len} B)"
         );
         let _ = std::fs::remove_file(&path);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
+mod headless_ui_tests {
+    use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
+
+    /// Draw the whole CAD panel once with accesskit enabled and return the
+    /// emitted accessibility tree — the same tree a screen reader / AI
+    /// UI-Automation driver consumes. `accesskit` is re-exported by egui, so no
+    /// extra dependency is needed.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_cad_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
+    }
+
+    fn has_named_node(nodes: &[(NodeId, Node)], name: &str) -> bool {
+        nodes.iter().any(|(_, n)| n.name() == Some(name))
+    }
+
+    #[test]
+    fn workbench_is_a_noop_when_hidden() {
+        let mut app = ValenxApp::default();
+        assert!(!app.show_cad_workbench);
+        let _ = draw_and_collect_nodes(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // (1) Default panel: the always-visible standalone DragValues (sketch
+        // extrude height + material density) must be associated with their
+        // captions — egui clears a DragValue's own Name, so without
+        // `labelled_by` they are anonymous to a screen reader / AI driver.
+        let mut app = ValenxApp::default();
+        app.show_cad_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        assert!(
+            spin_buttons.len() >= 2,
+            "expected the standalone CAD numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every CAD DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+        for caption in ["Extrude height", "Material density"] {
+            assert!(
+                has_named_node(&nodes, caption),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+
+        // (2) A feature tree containing an Extrude step renders the per-point
+        // profile-edit loop, whose x/y spin buttons live inside a `for` and are
+        // captioned per point (`P{j} x` / `P{j} y`). Verify those, too, are all
+        // named — the loop-gated case the prompt called out.
+        let mut app = ValenxApp::default();
+        app.show_cad_workbench = true;
+        app.cad.steps = vec![UiStep::new_extrude()];
+        let nodes = draw_and_collect_nodes(&mut app);
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // standalone (2) + a 4-point Extrude profile (4 × x,y = 8) = 10.
+        assert!(
+            spin_buttons.len() >= 10,
+            "expected the Extrude profile-loop spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every CAD profile-loop DragValue must be labelled_by its per-point caption"
+        );
+        for caption in ["P0 x", "P0 y"] {
+            assert!(
+                has_named_node(&nodes, caption),
+                "per-point caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+    }
+
+    /// The agent `SetControl` bridge: each representative control sets the
+    /// matching state field by its user-visible caption; an unknown caption, a
+    /// wrong-type value, and an out-of-range step index all fail loud (Err, no
+    /// panic) and leave state untouched.
+    #[test]
+    fn agent_set_sets_controls_and_rejects_bad_input() {
+        let mut s = CadWorkbenchState::default();
+
+        // -- Singletons: numeric, enum (by option name), bool ----------------
+        s.agent_set("Material density", &AgentValue::Float(7.85))
+            .expect("set material density");
+        assert_eq!(s.density, 7.85);
+
+        s.agent_set("Extrude height", &AgentValue::Float(3.5))
+            .expect("set extrude height");
+        assert_eq!(s.sketch_extrude_height, 3.5);
+
+        s.agent_set("Sketch tool", &AgentValue::Str("Arc".into()))
+            .expect("set sketch tool by name");
+        assert_eq!(s.sketch_tool, SketchTool::Arc);
+
+        s.agent_set("Snap to grid", &AgentValue::Bool(false))
+            .expect("set snap-to-grid");
+        assert!(!s.sketch_grid_snap);
+
+        // `circle radius =` is the parameter *name* (a string), not a number.
+        s.agent_set("circle radius =", &AgentValue::Str("base".into()))
+            .expect("set radius-driving parameter name");
+        assert_eq!(s.radius_param, "base");
+
+        // -- Per-step fields (1-based index) ---------------------------------
+        // The default tree is [Box(New), Cylinder(Cut)]; step 1 is the Box.
+        s.agent_set("step 1 dx", &AgentValue::Str("size / 2".into()))
+            .expect("set step 1 dx expression");
+        assert_eq!(s.steps[0].dx, "size / 2");
+
+        s.agent_set("step 1 op", &AgentValue::Str("Join".into()))
+            .expect("set step 1 op by name");
+        assert_eq!(s.steps[0].op, Op::Join);
+
+        s.agent_set("step 2 shape", &AgentValue::Str("Sphere".into()))
+            .expect("set step 2 shape by name");
+        assert_eq!(s.steps[1].kind, FeatureKind::Sphere);
+
+        // A bare number is accepted as the string form for an expression field.
+        s.agent_set("step 1 dz", &AgentValue::Int(4))
+            .expect("integer coerces to expression string");
+        assert_eq!(s.steps[0].dz, "4");
+
+        // -- Fail-loud cases (each returns Err; none panics) -----------------
+        // Unknown caption.
+        assert!(s
+            .agent_set("does not exist", &AgentValue::Float(1.0))
+            .is_err());
+        // Unknown per-step field.
+        assert!(s
+            .agent_set("step 1 wat", &AgentValue::Str("x".into()))
+            .is_err());
+        // Type mismatch: a string into a numeric singleton.
+        let before = s.density;
+        assert!(s
+            .agent_set("Material density", &AgentValue::Str("heavy".into()))
+            .is_err());
+        assert_eq!(s.density, before, "rejected set left density unchanged");
+        // Type mismatch: a non-string into an enum control.
+        assert!(s.agent_set("Sketch tool", &AgentValue::Float(2.0)).is_err());
+        // Unknown enum option name.
+        assert!(s
+            .agent_set("step 1 shape", &AgentValue::Str("Dodecahedron".into()))
+            .is_err());
+        // Out-of-range step index (tree has 2 steps).
+        assert!(s
+            .agent_set("step 9 dx", &AgentValue::Str("1".into()))
+            .is_err());
+        // 0 is rejected (the index is 1-based).
+        assert!(s
+            .agent_set("step 0 dx", &AgentValue::Str("1".into()))
+            .is_err());
+
+        // -- Discovery list advertises the representative name space ----------
+        let names = CadWorkbenchState::agent_control_names();
+        for expect in ["Material density", "Sketch tool", "step 1 op", "step 1 dx"] {
+            assert!(
+                names.contains(&expect),
+                "agent_control_names should advertise {expect:?}"
+            );
+        }
     }
 }

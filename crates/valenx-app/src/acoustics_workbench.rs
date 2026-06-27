@@ -18,6 +18,7 @@ use std::path::PathBuf;
 use eframe::egui;
 use nalgebra::Vector3;
 
+use valenx_acoustics::radiation::{monopole_pressure, RHO_AIR};
 use valenx_acoustics::room::RoomDimensions;
 use valenx_acoustics::{
     eyring_reverberation_time, pressure_from_spl, sabine_reverberation_time, speed_of_sound, spl,
@@ -47,6 +48,20 @@ pub struct AcousticsWorkbenchState {
     ref_distance_m: f64,
     /// Listener distance from the source (m).
     listener_distance_m: f64,
+
+    // -- Monopole radiation inputs (the pulsating-sphere source model) ----
+    /// Source sphere radius `a` (m).
+    source_radius_m: f64,
+    /// Sphere surface (radial) velocity amplitude `U` (m/s).
+    surface_velocity: f64,
+    /// Radiation frequency `f` (Hz).
+    frequency_hz: f64,
+    /// Observer (field-point) distance `r` from the source centre (m).
+    observer_distance_m: f64,
+    /// Latest monopole radiation readout `(pressure_pa, spl_db)`, or `None`
+    /// before the first radiation compute.
+    radiation: Option<(f64, f64)>,
+
     /// Formatted performance readout (empty until the first analyze).
     result: String,
     /// Validation / compute error, if any.
@@ -72,6 +87,15 @@ impl Default for AcousticsWorkbenchState {
             source_db: 85.0,
             ref_distance_m: 1.0,
             listener_distance_m: 4.0,
+            // Monopole radiation seed: a 0.1 m sphere pulsating at 0.01 m/s,
+            // 1000 Hz, observed at 1 m in air (rho = 1.204, c = 343) — the
+            // crate's validated doc example (pressure at 2 m is half that at
+            // 1 m, the 1/r free-field monopole law).
+            source_radius_m: 0.1,
+            surface_velocity: 0.01,
+            frequency_hz: 1000.0,
+            observer_distance_m: 1.0,
+            radiation: None,
             result: String::new(),
             error: None,
             show_3d_request: false,
@@ -104,43 +128,98 @@ pub fn draw_acoustics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Room").strong());
+                    // Associate each numeric `DragValue` with its caption via
+                    // `labelled_by`, so the spin button carries the caption as
+                    // its accessibility / UI-Automation Name (egui clears a
+                    // DragValue's own Name, leaving it anonymous to a screen
+                    // reader / AI driver otherwise).
                     ui.horizontal(|ui| {
-                        ui.label("Lx (m)");
-                        ui.add(egui::DragValue::new(&mut s.length_x_m).speed(0.1));
+                        let lx = ui.label("Lx (m)");
+                        ui.add(egui::DragValue::new(&mut s.length_x_m).speed(0.1))
+                            .labelled_by(lx.id)
+                            .on_hover_text("Room length Lx (m)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Ly (m)");
-                        ui.add(egui::DragValue::new(&mut s.length_y_m).speed(0.1));
+                        let ly = ui.label("Ly (m)");
+                        ui.add(egui::DragValue::new(&mut s.length_y_m).speed(0.1))
+                            .labelled_by(ly.id)
+                            .on_hover_text("Room width Ly (m)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Lz height (m)");
-                        ui.add(egui::DragValue::new(&mut s.length_z_m).speed(0.1));
+                        let lz = ui.label("Lz height (m)");
+                        ui.add(egui::DragValue::new(&mut s.length_z_m).speed(0.1))
+                            .labelled_by(lz.id)
+                            .on_hover_text("Room height Lz (m)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("absorption ᾱ");
-                        ui.add(egui::DragValue::new(&mut s.absorption).speed(0.005));
+                        let ab = ui.label("absorption ᾱ");
+                        ui.add(egui::DragValue::new(&mut s.absorption).speed(0.005))
+                            .labelled_by(ab.id)
+                            .on_hover_text("Average surface absorption coefficient ᾱ");
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Air").strong());
                     ui.horizontal(|ui| {
-                        ui.label("temperature (°C)");
-                        ui.add(egui::DragValue::new(&mut s.temperature_c).speed(0.5));
+                        let tc = ui.label("temperature (°C)");
+                        ui.add(egui::DragValue::new(&mut s.temperature_c).speed(0.5))
+                            .labelled_by(tc.id)
+                            .on_hover_text("Air temperature (°C) — sets the speed of sound");
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Source / listener").strong());
                     ui.horizontal(|ui| {
-                        ui.label("source level (dB)");
-                        ui.add(egui::DragValue::new(&mut s.source_db).speed(0.5));
+                        let sd = ui.label("source level (dB)");
+                        ui.add(egui::DragValue::new(&mut s.source_db).speed(0.5))
+                            .labelled_by(sd.id)
+                            .on_hover_text("Source sound level (dB) at the reference distance");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("at distance (m)");
-                        ui.add(egui::DragValue::new(&mut s.ref_distance_m).speed(0.1));
+                        let rd = ui.label("at distance (m)");
+                        ui.add(egui::DragValue::new(&mut s.ref_distance_m).speed(0.1))
+                            .labelled_by(rd.id)
+                            .on_hover_text("Reference distance at which the source level is given (m)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("listener distance (m)");
-                        ui.add(egui::DragValue::new(&mut s.listener_distance_m).speed(0.1));
+                        let li = ui.label("listener distance (m)");
+                        ui.add(egui::DragValue::new(&mut s.listener_distance_m).speed(0.1))
+                            .labelled_by(li.id)
+                            .on_hover_text("Listener distance from the source (m)");
+                    });
+
+                    ui.add_space(4.0);
+                    ui.label(egui::RichText::new("Monopole radiation").strong());
+                    ui.label(
+                        egui::RichText::new(
+                            "pulsating-sphere source: peak radiated pressure + SPL at the observer",
+                        )
+                        .weak()
+                        .small(),
+                    );
+                    ui.horizontal(|ui| {
+                        let ra = ui.label("source radius (m)");
+                        ui.add(egui::DragValue::new(&mut s.source_radius_m).speed(0.005))
+                            .labelled_by(ra.id)
+                            .on_hover_text("Pulsating-sphere source radius a (m)");
+                    });
+                    ui.horizontal(|ui| {
+                        let uv = ui.label("surface velocity (m/s)");
+                        ui.add(egui::DragValue::new(&mut s.surface_velocity).speed(0.001))
+                            .labelled_by(uv.id)
+                            .on_hover_text("Sphere surface (radial) velocity amplitude U (m/s)");
+                    });
+                    ui.horizontal(|ui| {
+                        let fr = ui.label("frequency (Hz)");
+                        ui.add(egui::DragValue::new(&mut s.frequency_hz).speed(10.0))
+                            .labelled_by(fr.id)
+                            .on_hover_text("Radiation frequency f (Hz)");
+                    });
+                    ui.horizontal(|ui| {
+                        let ob = ui.label("observer distance (m)");
+                        ui.add(egui::DragValue::new(&mut s.observer_distance_m).speed(0.1))
+                            .labelled_by(ob.id)
+                            .on_hover_text("Observer (field-point) distance r from the source (m)");
                     });
 
                     ui.add_space(6.0);
@@ -149,6 +228,28 @@ pub fn draw_acoustics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         .clicked()
                     {
                         run_acoustics(s);
+                    }
+                    if ui
+                        .button(egui::RichText::new("▶ Radiate").strong())
+                        .on_hover_text(
+                            "Compute the peak radiated pressure and SPL of the pulsating-sphere (monopole) source at the observer distance",
+                        )
+                        .clicked()
+                    {
+                        compute_radiation_now(s);
+                    }
+
+                    if let Some((pressure, level)) = s.radiation {
+                        ui.separator();
+                        ui.label(egui::RichText::new("Monopole radiation").strong());
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "radiated pressure : {pressure:.5e} Pa\nSPL                : {level:.2} dB"
+                            ))
+                            .monospace()
+                            .small()
+                            .color(egui::Color32::from_rgb(150, 200, 230)),
+                        );
                     }
                     if ui
                         .button(egui::RichText::new("▶ Show 3-D room").strong())
@@ -194,6 +295,113 @@ fn run_acoustics(s: &mut AcousticsWorkbenchState) {
         }
         Err(e) => s.error = Some(e),
     }
+}
+
+/// Compute the **monopole radiation** answer (peak radiated pressure +
+/// SPL) for the current source-sphere inputs, via
+/// [`valenx_acoustics::radiation::monopole_pressure`] and
+/// [`valenx_acoustics::spl`], and store it (or surface an error). Factored
+/// out so the in-panel **Radiate** button and the `acoustics.compute`
+/// bridge id share one path. The speed of sound follows the form's air
+/// temperature; air density is the crate's [`RHO_AIR`].
+fn compute_radiation_now(s: &mut AcousticsWorkbenchState) {
+    match compute_radiation(s) {
+        Ok(pair) => {
+            s.radiation = Some(pair);
+            s.error = None;
+        }
+        Err(e) => s.error = Some(e),
+    }
+}
+
+/// The fallible monopole-radiation pipeline: peak radiated pressure `|p(r)|`
+/// (Pa) and its SPL (dB re 20 µPa). Separated so it is unit-testable.
+fn compute_radiation(s: &AcousticsWorkbenchState) -> Result<(f64, f64), String> {
+    let c = speed_of_sound(s.temperature_c).map_err(|e| e.to_string())?;
+    let pressure = monopole_pressure(
+        s.source_radius_m,
+        s.surface_velocity,
+        s.frequency_hz,
+        c,
+        RHO_AIR,
+        s.observer_distance_m,
+    )
+    .map_err(|e| e.to_string())?;
+    let level = spl(pressure).map_err(|e| e.to_string())?;
+    Ok((pressure, level))
+}
+
+impl AcousticsWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set
+    /// via `SetControl` (returned by `ListControls`). These are the four
+    /// monopole-radiation inputs the `acoustics.compute` bridge id drives —
+    /// source radius + surface velocity + frequency + observer distance — so
+    /// an agent can set them by caption and read back the radiated pressure
+    /// + SPL.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "source radius (m)",
+            "surface velocity (m/s)",
+            "frequency (Hz)",
+            "observer distance (m)",
+        ]
+    }
+
+    /// Set one labelled control by its caption, for the agent `SetControl`
+    /// bridge. Fail-loud on an unknown caption / wrong type / out-of-range;
+    /// no state is written on error and nothing panics. All four radiation
+    /// inputs read a positive finite `f64`.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        fn positive(v: f64, what: &str) -> Result<f64, String> {
+            if !v.is_finite() || v <= 0.0 {
+                return Err(format!("{what} must be finite and > 0, got {v}"));
+            }
+            Ok(v)
+        }
+        match name {
+            "source radius (m)" => {
+                self.source_radius_m = positive(value.as_f64()?, "source radius (m)")?
+            }
+            "surface velocity (m/s)" => {
+                self.surface_velocity = positive(value.as_f64()?, "surface velocity (m/s)")?
+            }
+            "frequency (Hz)" => self.frequency_hz = positive(value.as_f64()?, "frequency (Hz)")?,
+            "observer distance (m)" => {
+                self.observer_distance_m = positive(value.as_f64()?, "observer distance (m)")?
+            }
+            other => return Err(format!("unknown acoustics control: {other:?}")),
+        }
+        Ok(())
+    }
+
+    /// The current readout text for the agent `ReadReadout` bridge: the
+    /// monopole-radiation answer (radiated pressure + SPL) once a radiation
+    /// compute exists. `Some` once computed, `None` before the first
+    /// `acoustics.compute` (or after a compute error with no prior result).
+    pub fn agent_readout(&self) -> Option<String> {
+        let (pressure, level) = self.radiation?;
+        Some(format!(
+            "Acoustics \u{00B7} a={:.4} m U={:.4} m/s f={:.1} Hz r={:.3} m \u{00B7} \
+             p={:.5e} Pa \u{00B7} SPL={:.2} dB",
+            self.source_radius_m,
+            self.surface_velocity,
+            self.frequency_hz,
+            self.observer_distance_m,
+            pressure,
+            level,
+        ))
+    }
+}
+
+/// Run the monopole-radiation compute (the in-panel **Radiate** action).
+/// Factored out so the button and the `acoustics.compute` bridge id share
+/// one path.
+pub(crate) fn run(app: &mut ValenxApp) {
+    compute_radiation_now(&mut app.acoustics);
 }
 
 /// The room geometry `(volume V, surface area S)` in `(m³, m²)`, validated
@@ -483,6 +691,106 @@ mod tests {
         assert!((drop - 6.0206).abs() < 1e-3, "drop = {drop} dB");
     }
 
+    /// Ground truth: the monopole (1/r) free-field law — the radiated
+    /// pressure HALVES when the observer distance DOUBLES.
+    #[test]
+    fn monopole_pressure_halves_per_distance_doubling_ground_truth() {
+        let near = AcousticsWorkbenchState {
+            observer_distance_m: 1.0,
+            ..Default::default()
+        };
+        let far = AcousticsWorkbenchState {
+            observer_distance_m: 2.0,
+            ..Default::default()
+        };
+        let (p1, _) = compute_radiation(&near).expect("near pressure");
+        let (p2, _) = compute_radiation(&far).expect("far pressure");
+        assert!((p2 - 0.5 * p1).abs() < 1e-9 * p1, "p1={p1} p2={p2}");
+    }
+
+    #[test]
+    fn radiation_compute_produces_result_and_readout() {
+        let mut s = AcousticsWorkbenchState::default();
+        compute_radiation_now(&mut s);
+        assert!(
+            s.error.is_none(),
+            "default radiation should compute: {:?}",
+            s.error
+        );
+        let (pressure, level) = s.radiation.expect("a radiation result");
+        assert!(pressure > 0.0, "pressure = {pressure}");
+        assert!(level.is_finite(), "spl = {level}");
+        let readout = s.agent_readout().expect("readout after radiate");
+        assert!(readout.contains("Acoustics"), "readout: {readout}");
+        assert!(readout.contains("SPL="), "readout names SPL: {readout}");
+    }
+
+    #[test]
+    fn agent_set_radiation_controls() {
+        use crate::agent_commands::AgentValue;
+        let mut s = AcousticsWorkbenchState::default();
+        s.agent_set("source radius (m)", &AgentValue::Float(0.2))
+            .expect("a");
+        assert!((s.source_radius_m - 0.2).abs() < 1e-9);
+        s.agent_set("surface velocity (m/s)", &AgentValue::Float(0.05))
+            .expect("U");
+        assert!((s.surface_velocity - 0.05).abs() < 1e-9);
+        s.agent_set("frequency (Hz)", &AgentValue::Float(500.0))
+            .expect("f");
+        assert!((s.frequency_hz - 500.0).abs() < 1e-9);
+        s.agent_set("observer distance (m)", &AgentValue::Float(3.0))
+            .expect("r");
+        assert!((s.observer_distance_m - 3.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn agent_set_rejects_bad_radiation_values() {
+        use crate::agent_commands::AgentValue;
+        let mut s = AcousticsWorkbenchState::default();
+        assert!(s
+            .agent_set("source radius (m)", &AgentValue::Float(-1.0))
+            .is_err());
+        assert!(s
+            .agent_set("frequency (Hz)", &AgentValue::Float(0.0))
+            .is_err());
+        assert!(s
+            .agent_set("observer distance (m)", &AgentValue::Float(f64::NAN))
+            .is_err());
+        assert!(s.agent_set("bogus", &AgentValue::Float(1.0)).is_err());
+    }
+
+    #[test]
+    fn readout_is_none_before_radiate() {
+        let s = AcousticsWorkbenchState::default();
+        assert!(
+            s.agent_readout().is_none(),
+            "no readout before a radiation compute"
+        );
+    }
+
+    #[test]
+    fn run_bridge_helper_radiates_through_app() {
+        let mut app = ValenxApp::default();
+        run(&mut app);
+        assert!(
+            app.acoustics.radiation.is_some(),
+            "the acoustics.compute bridge helper should produce a radiation result"
+        );
+    }
+
+    #[test]
+    fn control_names_are_listed() {
+        let names = AcousticsWorkbenchState::agent_control_names();
+        for c in [
+            "source radius (m)",
+            "surface velocity (m/s)",
+            "frequency (Hz)",
+            "observer distance (m)",
+        ] {
+            assert!(names.contains(&c), "missing control name {c}");
+        }
+    }
+
     #[test]
     fn room_mesh_for_default_is_nonempty_and_in_range() {
         let s = AcousticsWorkbenchState::default();
@@ -510,12 +818,28 @@ mod tests {
 #[allow(clippy::field_reassign_with_default)]
 mod headless_ui_tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
 
     fn draw_workbench(app: &mut ValenxApp) {
         let ctx = egui::Context::default();
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
             draw_acoustics_workbench(app, ctx);
         });
+    }
+
+    /// As [`draw_workbench`], but with accesskit enabled, returning the emitted
+    /// accessibility tree nodes — the same tree a screen reader / AI driver
+    /// consumes. `accesskit` is re-exported by egui, so no extra dependency.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_acoustics_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
     }
 
     #[test]
@@ -531,5 +855,45 @@ mod headless_ui_tests {
         app.show_acoustics_workbench = true;
         run_acoustics(&mut app.acoustics);
         draw_workbench(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // The room + air + source/listener DragValues are SpinButtons; each
+        // must be `labelled_by` its caption (egui clears a DragValue's own
+        // Name), so an AI / screen reader can find the control by the caption.
+        let mut app = ValenxApp::default();
+        app.show_acoustics_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // Lx, Ly, Lz, absorption, temperature, source level, ref distance,
+        // listener distance.
+        assert!(
+            spin_buttons.len() >= 8,
+            "expected the acoustics numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every acoustics DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        for caption in ["Lx (m)", "absorption ᾱ", "listener distance (m)"] {
+            assert!(
+                nodes.iter().any(|(_, n)| n.name() == Some(caption)),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        // The Analyze button stays a named, invokable node.
+        assert!(
+            nodes.iter().any(|(_, n)| n.role() == Role::Button
+                && n.name().is_some_and(|s| s.contains("Analyze"))),
+            "the Analyze button is a named, invokable node"
+        );
     }
 }

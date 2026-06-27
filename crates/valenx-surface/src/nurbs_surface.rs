@@ -339,44 +339,129 @@ impl NurbsSurface {
     }
 
     /// The six **fundamental-form coefficients** `(E, F, G, L, M, N)` at
-    /// `(u, v)`, from a single consistent stencil. The first fundamental form
-    /// `E = Sᵤ·Sᵤ, F = Sᵤ·Sᵥ, G = Sᵥ·Sᵥ` (the metric) and the second
-    /// `L = Sᵤᵤ·n, M = Sᵤᵥ·n, N = Sᵥᵥ·n` (the normal-direction bending), with
-    /// `n` the unit normal. `None` at a degenerate point (parallel/zero tangents,
-    /// or a domain too small to form the stencil).
-    fn fundamental_forms(&self, u: f64, v: f64) -> Option<(f64, f64, f64, f64, f64, f64)> {
+    /// `(u, v)` — the fail-loud counterpart of the (private) infallible
+    /// `fundamental_forms`, returned directly to public callers.
+    ///
+    /// The first fundamental form `E = Sᵤ·Sᵤ, F = Sᵤ·Sᵥ, G = Sᵥ·Sᵥ` (the metric)
+    /// and the second `L = Sᵤᵤ·n, M = Sᵤᵥ·n, N = Sᵥᵥ·n` (the normal-direction
+    /// bending), with `n` the unit normal, all read off a single consistent 3×3
+    /// stencil so the metric and the normal are mutually consistent.
+    ///
+    /// # Accuracy
+    ///
+    /// The partials are **finite differences** (the surface exposes no analytic
+    /// partials), but each form is **Richardson-extrapolated** over two step
+    /// sizes `(h, h/2)` as `(4·Q(h/2) − Q(h))/3`, which cancels the leading
+    /// `O(h²)` truncation term of the central differences. On the exact rational
+    /// sphere this recovers `K, H` to roughly `1e-9`–`1e-11`, far past a single
+    /// stencil's `~1e-5`.
+    ///
+    /// # Sign convention
+    ///
+    /// `n = (Sᵤ × Sᵥ)/|Sᵤ × Sᵥ|` — the right-hand-rule normal of the `(u, v)`
+    /// parameterisation (the same one [`normal`](Self::normal) returns). `L, M, N`
+    /// and hence the mean curvature `H` are signed *relative to that orientation*;
+    /// reversing the parameterisation flips their sign. The Gaussian curvature
+    /// `K = (LN − M²)/(EG − F²)` is orientation-independent.
+    ///
+    /// # Errors
+    ///
+    /// [`SurfaceError::DegenerateGeometry`] when the quantity is undefined:
+    /// the domain is too small in either direction to form the stencil, or the
+    /// requested point is parametrically singular so the tangents are parallel or
+    /// vanish (`|Sᵤ × Sᵥ| ≈ 0`, e.g. a pole of a surface of revolution) and the
+    /// normal cannot be normalised. The pole is checked at the *requested* point
+    /// (un-clamped tangents) so a query exactly at a pole fails loud rather than
+    /// being silently nudged to a regular neighbour.
+    pub fn try_fundamental_forms(
+        &self,
+        u: f64,
+        v: f64,
+    ) -> Result<(f64, f64, f64, f64, f64, f64), SurfaceError> {
         let (u_min, u_max) = self.u_range();
         let (v_min, v_max) = self.v_range();
         let hu = ((u_max - u_min) * 1e-3).max(1e-6);
         let hv = ((v_max - v_min) * 1e-3).max(1e-6);
         if u_max - u_min < 4.0 * hu || v_max - v_min < 4.0 * hv {
-            return None;
+            return Err(SurfaceError::DegenerateGeometry {
+                reason: "parameter domain too small to form the curvature stencil".into(),
+            });
         }
-        // Clamp the stencil centre so all 3×3 samples stay in the domain.
-        let uc = u.max(u_min + hu).min(u_max - hu);
-        let vc = v.max(v_min + hv).min(v_max - hv);
-        let sample = |du: f64, dv: f64| self.evaluate(uc + du, vc + dv);
-        let c = sample(0.0, 0.0);
-        let su = (sample(hu, 0.0) - sample(-hu, 0.0)) / (2.0 * hu);
-        let sv = (sample(0.0, hv) - sample(0.0, -hv)) / (2.0 * hv);
-        let suu = (sample(hu, 0.0) - 2.0 * c + sample(-hu, 0.0)) / (hu * hu);
-        let svv = (sample(0.0, hv) - 2.0 * c + sample(0.0, -hv)) / (hv * hv);
-        let suv = (sample(hu, hv) - sample(hu, -hv) - sample(-hu, hv) + sample(-hu, -hv))
-            / (4.0 * hu * hv);
-        let cross = su.cross(&sv);
-        let cross_mag = cross.norm();
-        if cross_mag < 1e-12 {
-            return None;
+        // Degeneracy pre-check AT THE REQUESTED POINT: the stencil centre is
+        // clamped into the interior below (so the samples stay in-domain), which
+        // would mask a query right at a parametric pole. The clamp-free tangents
+        // from `partial_u`/`partial_v` evaluate at the queried (u, v) itself, so a
+        // vanishing cross product here is a genuine singularity, not a stencil
+        // artefact.
+        let cross_at_point = self.partial_u(u, v).cross(&self.partial_v(u, v));
+        if cross_at_point.norm() < 1e-9 {
+            return Err(SurfaceError::DegenerateGeometry {
+                reason: "parallel or vanishing surface tangents (|Sᵤ × Sᵥ| ≈ 0); \
+                         the unit normal is undefined"
+                    .into(),
+            });
         }
-        let n = cross / cross_mag;
-        Some((
-            su.dot(&su),
-            su.dot(&sv),
-            sv.dot(&sv),
-            suu.dot(&n),
-            suv.dot(&n),
-            svv.dot(&n),
+
+        // One central-difference stencil of half-step (hu, hv), clamped so all
+        // nine samples stay in-domain. Returns the six raw forms, or `None` if
+        // the (clamped) tangents collapse.
+        let stencil = |hu: f64, hv: f64| -> Option<(f64, f64, f64, f64, f64, f64)> {
+            let uc = u.max(u_min + hu).min(u_max - hu);
+            let vc = v.max(v_min + hv).min(v_max - hv);
+            let sample = |du: f64, dv: f64| self.evaluate(uc + du, vc + dv);
+            let c = sample(0.0, 0.0);
+            let su = (sample(hu, 0.0) - sample(-hu, 0.0)) / (2.0 * hu);
+            let sv = (sample(0.0, hv) - sample(0.0, -hv)) / (2.0 * hv);
+            let suu = (sample(hu, 0.0) - 2.0 * c + sample(-hu, 0.0)) / (hu * hu);
+            let svv = (sample(0.0, hv) - 2.0 * c + sample(0.0, -hv)) / (hv * hv);
+            let suv = (sample(hu, hv) - sample(hu, -hv) - sample(-hu, hv) + sample(-hu, -hv))
+                / (4.0 * hu * hv);
+            let cross = su.cross(&sv);
+            let cross_mag = cross.norm();
+            if cross_mag < 1e-12 {
+                return None;
+            }
+            let n = cross / cross_mag;
+            Some((
+                su.dot(&su),
+                su.dot(&sv),
+                sv.dot(&sv),
+                suu.dot(&n),
+                suv.dot(&n),
+                svv.dot(&n),
+            ))
+        };
+
+        let degenerate = || SurfaceError::DegenerateGeometry {
+            reason: "parallel or vanishing surface tangents (|Sᵤ × Sᵥ| ≈ 0); \
+                     the unit normal is undefined"
+                .into(),
+        };
+        let coarse = stencil(hu, hv).ok_or_else(degenerate)?;
+        let fine = stencil(hu * 0.5, hv * 0.5).ok_or_else(degenerate)?;
+        // Richardson extrapolation per coefficient: (4·Q(h/2) − Q(h))/3 cancels
+        // the leading O(h²) error of the central differences.
+        let rich = |c: f64, f: f64| (4.0 * f - c) / 3.0;
+        Ok((
+            rich(coarse.0, fine.0),
+            rich(coarse.1, fine.1),
+            rich(coarse.2, fine.2),
+            rich(coarse.3, fine.3),
+            rich(coarse.4, fine.4),
+            rich(coarse.5, fine.5),
         ))
+    }
+
+    /// The six **fundamental-form coefficients** `(E, F, G, L, M, N)` at
+    /// `(u, v)`, from a single consistent stencil. The first fundamental form
+    /// `E = Sᵤ·Sᵤ, F = Sᵤ·Sᵥ, G = Sᵥ·Sᵥ` (the metric) and the second
+    /// `L = Sᵤᵤ·n, M = Sᵤᵥ·n, N = Sᵥᵥ·n` (the normal-direction bending), with
+    /// `n` the unit normal. `None` at a degenerate point (parallel/zero tangents,
+    /// or a domain too small to form the stencil) — see
+    /// [`try_fundamental_forms`](Self::try_fundamental_forms) for the fail-loud
+    /// variant that reports *why*.
+    fn fundamental_forms(&self, u: f64, v: f64) -> Option<(f64, f64, f64, f64, f64, f64)> {
+        self.try_fundamental_forms(u, v).ok()
     }
 
     /// The **Gaussian curvature** `K = (LN − M²)/(EG − F²)` at `(u, v)` — the
@@ -423,6 +508,65 @@ impl NurbsSurface {
             }
             None => 0.0,
         }
+    }
+
+    /// The **Gaussian curvature** `K = (LN − M²)/(EG − F²)` at `(u, v)` — the
+    /// fail-loud counterpart of [`gaussian_curvature`](Self::gaussian_curvature).
+    ///
+    /// `K` is the product of the two principal curvatures and the
+    /// parameterisation-*independent* intrinsic curvature (sphere of radius `r`:
+    /// `K = 1/r²`; any developable — plane, cylinder, cone: `K = 0`; saddle:
+    /// `K < 0`). Its sign is independent of the normal's orientation.
+    ///
+    /// # Errors
+    ///
+    /// [`SurfaceError::DegenerateGeometry`] at a parametrically singular point
+    /// (parallel or zero tangents, or a domain too small for the stencil — see
+    /// [`try_fundamental_forms`](Self::try_fundamental_forms)), or when the metric
+    /// determinant `EG − F² ≤ 0` so the curvature is undefined. Where the
+    /// infallible method silently returns `0.0`, this returns the reason.
+    ///
+    /// [`gaussian_curvature`]: Self::gaussian_curvature
+    pub fn try_gaussian_curvature(&self, u: f64, v: f64) -> Result<f64, SurfaceError> {
+        let (e, f, g, l, m, n) = self.try_fundamental_forms(u, v)?;
+        let denom = e * g - f * f;
+        if denom <= 1e-30 {
+            return Err(SurfaceError::DegenerateGeometry {
+                reason: format!("first-fundamental-form determinant EG − F² = {denom:e} ≤ 0"),
+            });
+        }
+        Ok((l * n - m * m) / denom)
+    }
+
+    /// The **mean curvature** `H = (EN − 2FM + GL)/(2(EG − F²))` at `(u, v)` — the
+    /// fail-loud counterpart of [`mean_curvature`](Self::mean_curvature).
+    ///
+    /// `H` is the average of the two principal curvatures (sphere of radius `r`:
+    /// `|H| = 1/r`; cylinder of radius `r`: `|H| = 1/(2r)`; minimal surface:
+    /// `H = 0`).
+    ///
+    /// # Sign convention
+    ///
+    /// `H` is signed relative to the right-hand-rule normal
+    /// `n = (Sᵤ × Sᵥ)/|Sᵤ × Sᵥ|` ([`normal`](Self::normal)): reversing the
+    /// parameterisation flips its sign, so callers comparing against an analytic
+    /// value should compare magnitudes.
+    ///
+    /// # Errors
+    ///
+    /// [`SurfaceError::DegenerateGeometry`] under the same conditions as
+    /// [`try_gaussian_curvature`](Self::try_gaussian_curvature).
+    ///
+    /// [`mean_curvature`]: Self::mean_curvature
+    pub fn try_mean_curvature(&self, u: f64, v: f64) -> Result<f64, SurfaceError> {
+        let (e, f, g, l, m, n) = self.try_fundamental_forms(u, v)?;
+        let denom = e * g - f * f;
+        if denom <= 1e-30 {
+            return Err(SurfaceError::DegenerateGeometry {
+                reason: format!("first-fundamental-form determinant EG − F² = {denom:e} ≤ 0"),
+            });
+        }
+        Ok((e * n - 2.0 * f * m + g * l) / (2.0 * denom))
     }
 }
 
@@ -714,5 +858,85 @@ mod tests {
         let s = quarter_cylinder(2.0, 3.0);
         assert!(s.gaussian_curvature(0.0, 0.0).is_finite());
         assert!(s.mean_curvature(1.0, 1.0).is_finite());
+    }
+
+    /// An **exact** NURBS sphere of radius `r`: a rational-quadratic semicircle
+    /// profile (pole → shoulder → equator → shoulder → pole in the xz half-plane)
+    /// revolved a full 360° about the Z-axis — the same construction the
+    /// `revolve` module validates against the analytic surface area `4πr²`.
+    fn nurbs_sphere(r: f64) -> NurbsSurface {
+        use crate::nurbs_curve::NurbsCurve;
+        use crate::revolve::revolve_z_full;
+        let s = std::f64::consts::FRAC_1_SQRT_2;
+        let profile = NurbsCurve::new(
+            2,
+            vec![0.0, 0.0, 0.0, 0.5, 0.5, 1.0, 1.0, 1.0],
+            vec![
+                Vector3::new(0.0, 0.0, r),  // north pole (on axis)
+                Vector3::new(r, 0.0, r),    // shoulder
+                Vector3::new(r, 0.0, 0.0),  // equator
+                Vector3::new(r, 0.0, -r),   // shoulder
+                Vector3::new(0.0, 0.0, -r), // south pole (on axis)
+            ],
+            vec![1.0, s, 1.0, s, 1.0],
+        )
+        .unwrap();
+        revolve_z_full(&profile).unwrap()
+    }
+
+    #[test]
+    fn sphere_has_constant_gaussian_and_mean_curvature() {
+        // GROUND TRUTH: a sphere of radius r has, everywhere away from the poles,
+        // Gaussian curvature K = 1/r² and mean curvature |H| = 1/r (both principal
+        // curvatures equal 1/r). The sign of H tracks the parameterisation's
+        // normal, so compare the magnitude.
+        for &r in &[1.0_f64, 2.5, 4.0] {
+            let s = nurbs_sphere(r);
+            let k_exact = 1.0 / (r * r);
+            let h_exact = 1.0 / r;
+            // Sample interior (u, v) away from the parametric poles (v = 0, 1).
+            for &(u, v) in &[(0.2_f64, 0.35_f64), (0.5, 0.5), (0.8, 0.6), (0.15, 0.75)] {
+                let k = s.try_gaussian_curvature(u, v).unwrap();
+                let h = s.try_mean_curvature(u, v).unwrap().abs();
+                assert!(
+                    (k - k_exact).abs() < 1e-6,
+                    "sphere r={r}: K {k} != 1/r² {k_exact} at ({u},{v})"
+                );
+                assert!(
+                    (h - h_exact).abs() < 1e-6,
+                    "sphere r={r}: |H| {h} != 1/r {h_exact} at ({u},{v})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn try_curvature_fails_loud_at_the_sphere_pole() {
+        // At the parametric pole (v = 0, the north pole) the v-tangent collapses,
+        // so |Sᵤ × Sᵥ| → 0 and the fundamental forms / curvatures are undefined.
+        // The fail-loud API must surface that, not silently return a number.
+        let s = nurbs_sphere(2.0);
+        let err = s.try_gaussian_curvature(0.5, 0.0).unwrap_err();
+        assert_eq!(err.code(), "surface.degenerate_geometry");
+        assert_eq!(err.category(), "geometry");
+        assert!(s.try_mean_curvature(0.5, 0.0).is_err());
+        assert!(s.try_fundamental_forms(0.5, 0.0).is_err());
+        // The infallible companions stay silent (0.0) for the existing callers.
+        assert_eq!(s.gaussian_curvature(0.5, 0.0), 0.0);
+        assert_eq!(s.mean_curvature(0.5, 0.0), 0.0);
+    }
+
+    #[test]
+    fn try_curvature_agrees_with_infallible_where_defined() {
+        // Where the geometry is non-degenerate the fail-loud and silent methods
+        // return the identical value — the only difference is the error path.
+        let s = quarter_cylinder(2.0, 3.0);
+        for &(u, v) in &[(0.3_f64, 0.4_f64), (0.5, 0.5), (0.7, 0.6)] {
+            assert_eq!(
+                s.try_gaussian_curvature(u, v).unwrap(),
+                s.gaussian_curvature(u, v)
+            );
+            assert_eq!(s.try_mean_curvature(u, v).unwrap(), s.mean_curvature(u, v));
+        }
     }
 }

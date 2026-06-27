@@ -16,7 +16,7 @@
 //! viewport via the `(Mesh, Field)` colour-ramp overlay.
 
 use eframe::egui;
-use egui_plot::{Line, Plot, PlotPoints, Points};
+use egui_plot::{Line, PlotPoints, Points};
 use nalgebra::Vector3;
 
 use valenx_fem::material::FemMaterial;
@@ -26,6 +26,7 @@ use valenx_fem::native_solver::{
 };
 use valenx_fields::{Field, FieldKind, Location, RegionRef, TimeKey};
 
+use crate::plot_ui::managed_plot_mem;
 use crate::types::LoadedMesh;
 use crate::ValenxApp;
 
@@ -114,6 +115,113 @@ impl Default for FemWorkbenchState {
     }
 }
 
+impl FemWorkbenchState {
+    /// The user-visible captions of every control the agent bridge can set via
+    /// `SetControl` (see [`crate::agent_commands`]). Returned by `ListControls`;
+    /// each string matches exactly the caption the form draws. The two
+    /// solver-dependent captions (`Tip load Fy (N, downward)` for the static
+    /// solve, `# modes` for the modal solve) are BOTH listed so an agent can
+    /// set either field regardless of which solver radio is active.
+    pub fn agent_control_names() -> &'static [&'static str] {
+        &[
+            "Lx",
+            "Ly",
+            "Lz",
+            "nx",
+            "ny",
+            "nz",
+            "E (GPa)",
+            "Poisson ν",
+            "Density (kg/m³)",
+            "Yield σy (MPa)",
+            "Tip load Fy (N, downward)",
+            "# modes",
+        ]
+    }
+
+    /// Set one labelled control by its user-visible caption, for the agent
+    /// `SetControl` bridge. Fail-loud: an unknown caption or a value of the
+    /// wrong type / out of range returns `Err(String)` — never a panic. Ranges
+    /// mirror the form's `DragValue` clamps + the solver's preconditions: box
+    /// dimensions `Lx`/`Ly`/`Lz` finite `> 0`; subdivisions `nx` in `1..=40`,
+    /// `ny`/`nz` in `1..=20` (the node count grows as their product, so this is
+    /// what keeps a solve from OOM-ing); `E (GPa)`, `Density`, `Yield` finite
+    /// `> 0`; `Poisson ν` in the isotropic range `(-1, 0.5)`; tip load any
+    /// finite value (a sign sets the direction); `# modes >= 1`.
+    pub fn agent_set(
+        &mut self,
+        name: &str,
+        value: &crate::agent_commands::AgentValue,
+    ) -> Result<(), String> {
+        let positive = |v: f64, what: &str| -> Result<f64, String> {
+            if v.is_finite() && v > 0.0 {
+                Ok(v)
+            } else {
+                Err(format!("{what} must be > 0, got {v}"))
+            }
+        };
+        // A subdivision count in an inclusive integer range (matches the UI clamp).
+        let subdiv = |value: &crate::agent_commands::AgentValue,
+                      max: i64,
+                      what: &str|
+         -> Result<usize, String> {
+            let n = value.as_i64()?;
+            if (1..=max).contains(&n) {
+                Ok(n as usize)
+            } else {
+                Err(format!("{what} must be in 1..={max}, got {n}"))
+            }
+        };
+        match name {
+            "Lx" => self.lx = positive(value.as_f64()?, "Lx")?,
+            "Ly" => self.ly = positive(value.as_f64()?, "Ly")?,
+            "Lz" => self.lz = positive(value.as_f64()?, "Lz")?,
+            "nx" => self.nx = subdiv(value, 40, "nx")?,
+            "ny" => self.ny = subdiv(value, 20, "ny")?,
+            "nz" => self.nz = subdiv(value, 20, "nz")?,
+            "E (GPa)" => self.youngs_gpa = positive(value.as_f64()?, "E (GPa)")?,
+            "Poisson ν" => {
+                let v = value.as_f64()?;
+                if !(v.is_finite() && v > -1.0 && v < 0.5) {
+                    return Err(format!("Poisson ν must be in (-1, 0.5), got {v}"));
+                }
+                self.poisson = v;
+            }
+            "Density (kg/m³)" => self.density = positive(value.as_f64()?, "Density")?,
+            "Yield σy (MPa)" => self.yield_mpa = positive(value.as_f64()?, "Yield σy")?,
+            "Tip load Fy (N, downward)" => {
+                let v = value.as_f64()?;
+                if !v.is_finite() {
+                    return Err(format!("tip load Fy must be finite, got {v}"));
+                }
+                self.force_n = v;
+            }
+            "# modes" => {
+                let n = value.as_i64()?;
+                if n < 1 {
+                    return Err(format!("# modes must be >= 1, got {n}"));
+                }
+                self.n_modes = n as usize;
+            }
+            other => return Err(format!("unknown FEM control: {other:?}")),
+        }
+        Ok(())
+    }
+
+    /// The current computed-result text for the agent `ReadReadout` bridge (see
+    /// [`crate::agent_commands`]): the same `Result` string the panel renders
+    /// once a solve has produced one, else the last `error`, else `None` when the
+    /// model has not been run yet. Read-only — lets an agent read the answer back
+    /// after driving a solve, closing the live-driving loop.
+    pub fn agent_readout(&self) -> Option<String> {
+        if !self.result.is_empty() {
+            Some(self.result.clone())
+        } else {
+            self.error.clone()
+        }
+    }
+}
+
 /// Draw the FEM Workbench right-side panel. A no-op when the
 /// `show_fem_workbench` toggle is off.
 pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
@@ -178,43 +286,69 @@ pub(crate) fn fem_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.label(egui::RichText::new("Geometry — structured box mesh (m)").strong());
+                    // Each numeric `DragValue` is associated with its caption via
+                    // `labelled_by`, so the control carries the caption text as its
+                    // accessibility / UI-Automation Name (egui clears a DragValue's
+                    // own name — see egui 0.28 `DragValue` — so without this the
+                    // spin button is anonymous to a screen reader / AI driver). The
+                    // hover text gives the same caption to a mouse user.
                     ui.horizontal(|ui| {
-                        ui.label("Lx");
-                        ui.add(egui::DragValue::new(&mut s.lx).speed(0.05));
-                        ui.label("Ly");
-                        ui.add(egui::DragValue::new(&mut s.ly).speed(0.01));
-                        ui.label("Lz");
-                        ui.add(egui::DragValue::new(&mut s.lz).speed(0.01));
+                        let lx = ui.label("Lx");
+                        ui.add(egui::DragValue::new(&mut s.lx).speed(0.05))
+                            .labelled_by(lx.id)
+                            .on_hover_text("Box length Lx (m)");
+                        let ly = ui.label("Ly");
+                        ui.add(egui::DragValue::new(&mut s.ly).speed(0.01))
+                            .labelled_by(ly.id)
+                            .on_hover_text("Box length Ly (m)");
+                        let lz = ui.label("Lz");
+                        ui.add(egui::DragValue::new(&mut s.lz).speed(0.01))
+                            .labelled_by(lz.id)
+                            .on_hover_text("Box length Lz (m)");
                     });
                     ui.horizontal(|ui| {
                         // Clamp the mesh resolution: node count grows as
                         // (nx+1)(ny+1)(nz+1) and the solve as its cube, so an
                         // unbounded drag could hang the app for minutes / OOM.
-                        ui.label("nx");
-                        ui.add(egui::DragValue::new(&mut s.nx).speed(0.2).range(1..=40));
-                        ui.label("ny");
-                        ui.add(egui::DragValue::new(&mut s.ny).speed(0.2).range(1..=20));
-                        ui.label("nz");
-                        ui.add(egui::DragValue::new(&mut s.nz).speed(0.2).range(1..=20));
+                        let nx = ui.label("nx");
+                        ui.add(egui::DragValue::new(&mut s.nx).speed(0.2).range(1..=40))
+                            .labelled_by(nx.id)
+                            .on_hover_text("Subdivisions along x");
+                        let ny = ui.label("ny");
+                        ui.add(egui::DragValue::new(&mut s.ny).speed(0.2).range(1..=20))
+                            .labelled_by(ny.id)
+                            .on_hover_text("Subdivisions along y");
+                        let nz = ui.label("nz");
+                        ui.add(egui::DragValue::new(&mut s.nz).speed(0.2).range(1..=20))
+                            .labelled_by(nz.id)
+                            .on_hover_text("Subdivisions along z");
                     });
 
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new("Material").strong());
                     ui.horizontal(|ui| {
-                        ui.label("E (GPa)");
-                        ui.add(egui::DragValue::new(&mut s.youngs_gpa).speed(1.0));
+                        let e = ui.label("E (GPa)");
+                        ui.add(egui::DragValue::new(&mut s.youngs_gpa).speed(1.0))
+                            .labelled_by(e.id)
+                            .on_hover_text("Young's modulus E (GPa)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Poisson ν");
-                        ui.add(egui::DragValue::new(&mut s.poisson).speed(0.005));
+                        let nu = ui.label("Poisson ν");
+                        ui.add(egui::DragValue::new(&mut s.poisson).speed(0.005))
+                            .labelled_by(nu.id)
+                            .on_hover_text("Poisson's ratio ν");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Density (kg/m³)");
-                        ui.add(egui::DragValue::new(&mut s.density).speed(10.0));
+                        let rho = ui.label("Density (kg/m³)");
+                        ui.add(egui::DragValue::new(&mut s.density).speed(10.0))
+                            .labelled_by(rho.id)
+                            .on_hover_text("Mass density ρ (kg/m³)");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Yield σy (MPa)");
-                        ui.add(egui::DragValue::new(&mut s.yield_mpa).speed(5.0));
+                        let sy = ui.label("Yield σy (MPa)");
+                        ui.add(egui::DragValue::new(&mut s.yield_mpa).speed(5.0))
+                            .labelled_by(sy.id)
+                            .on_hover_text("Yield stress σy (MPa)");
                     });
 
                     ui.add_space(4.0);
@@ -228,14 +362,18 @@ pub(crate) fn fem_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     match s.solver {
                         FemSolver::LinearStatic => {
                             ui.horizontal(|ui| {
-                                ui.label("Tip load Fy (N, downward)");
-                                ui.add(egui::DragValue::new(&mut s.force_n).speed(50.0));
+                                let f = ui.label("Tip load Fy (N, downward)");
+                                ui.add(egui::DragValue::new(&mut s.force_n).speed(50.0))
+                                    .labelled_by(f.id)
+                                    .on_hover_text("Downward tip load Fy (N)");
                             });
                         }
                         FemSolver::Modal => {
                             ui.horizontal(|ui| {
-                                ui.label("# modes");
-                                ui.add(egui::DragValue::new(&mut s.n_modes).speed(0.2));
+                                let m = ui.label("# modes");
+                                ui.add(egui::DragValue::new(&mut s.n_modes).speed(0.2))
+                                    .labelled_by(m.id)
+                                    .on_hover_text("Number of natural modes to extract");
                             });
                         }
                     }
@@ -567,7 +705,7 @@ pub(crate) fn fem_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                         match plot {
                             FemPlot::Modal(freqs) => {
                                 ui.label(egui::RichText::new("Natural frequencies").strong());
-                                Plot::new("fem_modal_plot").height(150.0).show(ui, |pui| {
+                                managed_plot_mem(ui, "fem_modal_plot", 150.0, |pui| {
                                     let pts: Vec<[f64; 2]> = freqs
                                         .iter()
                                         .enumerate()
@@ -579,7 +717,7 @@ pub(crate) fn fem_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             }
                             FemPlot::LoadDisp(pts) => {
                                 ui.label(egui::RichText::new("Load – displacement").strong());
-                                Plot::new("fem_loaddisp_plot").height(150.0).show(ui, |pui| {
+                                managed_plot_mem(ui, "fem_loaddisp_plot", 150.0, |pui| {
                                     pui.line(Line::new(PlotPoints::from(pts.clone())).name("tip"));
                                 });
                             }
@@ -1196,6 +1334,28 @@ pub(crate) fn fem_product() -> crate::WorkspaceProduct {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_commands::AgentValue;
+
+    #[test]
+    fn agent_set_sets_param_unknown_and_type_mismatch_err() {
+        let mut s = FemWorkbenchState::default();
+        // Representative float + integer sets land in state.
+        s.agent_set("E (GPa)", &AgentValue::Float(70.0)).unwrap();
+        assert_eq!(s.youngs_gpa, 70.0);
+        s.agent_set("nx", &AgentValue::Int(20)).unwrap();
+        assert_eq!(s.nx, 20);
+        // Unknown caption -> Err (no panic).
+        assert!(s.agent_set("no such control", &AgentValue::Int(1)).is_err());
+        // Type mismatch (string into a numeric field) -> Err.
+        assert!(s
+            .agent_set("E (GPa)", &AgentValue::Str("stiff".into()))
+            .is_err());
+        // Out-of-range subdivision (> 40) -> Err, field untouched.
+        assert!(s.agent_set("nx", &AgentValue::Int(99)).is_err());
+        assert_eq!(s.nx, 20, "rejected set leaves field untouched");
+        // Poisson outside the isotropic range -> Err.
+        assert!(s.agent_set("Poisson ν", &AgentValue::Float(0.6)).is_err());
+    }
 
     #[test]
     fn linear_static_runs_on_default_box() {
@@ -1489,5 +1649,98 @@ mod tests {
         assert!(s.result.contains("max principal"), "result: {}", s.result);
         // The Tresca maximum shear stress is reported alongside it.
         assert!(s.result.contains("max shear"), "result: {}", s.result);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
+mod headless_ui_tests {
+    use super::*;
+    use egui::accesskit::{Node, NodeId, Role};
+
+    /// Draw the whole panel once in a headless egui context **with accesskit
+    /// enabled**, and return the emitted accessibility tree nodes. This is the
+    /// same tree a screen reader or an AI UI-Automation driver consumes, so
+    /// asserting on it verifies the panel is drivable by name. `accesskit` is
+    /// re-exported by egui (`egui::accesskit`), so no extra dependency is
+    /// needed.
+    fn draw_and_collect_nodes(app: &mut ValenxApp) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_fem_workbench(app, ctx);
+        });
+        out.platform_output
+            .accesskit_update
+            .expect("accesskit tree is produced when enabled")
+            .nodes
+    }
+
+    /// True if some node in the tree carries `name` as its accessibility Name
+    /// (egui derives a label's / button's Name from its text).
+    fn has_named_node(nodes: &[(NodeId, Node)], name: &str) -> bool {
+        nodes.iter().any(|(_, n)| n.name() == Some(name))
+    }
+
+    #[test]
+    fn workbench_is_a_noop_when_hidden() {
+        let mut app = ValenxApp::default();
+        assert!(!app.show_fem_workbench);
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            draw_fem_workbench(&mut app, ctx);
+        });
+    }
+
+    #[test]
+    fn workbench_draws_when_shown_without_panic() {
+        let mut app = ValenxApp::default();
+        app.show_fem_workbench = true;
+        // Drawing a populated result + error must also not panic.
+        run_fem(&mut app.fem);
+        app.fem.error = Some("invalid FEM input".to_string());
+        let _ = draw_and_collect_nodes(&mut app);
+    }
+
+    #[test]
+    fn numeric_controls_are_named_and_associated() {
+        // Every DragValue (accesskit Role::SpinButton) must be associated with a
+        // caption via `labelled_by`, because egui clears a DragValue's own Name —
+        // without the association the control is anonymous to an AI / screen
+        // reader. We also confirm the caption text itself is present in the tree.
+        let mut app = ValenxApp::default();
+        app.show_fem_workbench = true;
+        let nodes = draw_and_collect_nodes(&mut app);
+
+        let spin_buttons: Vec<&Node> = nodes
+            .iter()
+            .map(|(_, n)| n)
+            .filter(|n| n.role() == Role::SpinButton)
+            .collect();
+        // The geometry/material/analysis form draws at least the box dims,
+        // material and the active-solver field as numeric spin buttons.
+        assert!(
+            spin_buttons.len() >= 8,
+            "expected the FEM numeric controls as spin buttons, got {}",
+            spin_buttons.len()
+        );
+        assert!(
+            spin_buttons.iter().all(|n| !n.labelled_by().is_empty()),
+            "every FEM DragValue must be labelled_by its caption (AI-drivable name)"
+        );
+
+        // The captions a driver searches for are present as named nodes.
+        for caption in ["Lx", "nx", "E (GPa)", "Poisson ν", "Density (kg/m³)"] {
+            assert!(
+                has_named_node(&nodes, caption),
+                "caption '{caption}' should be a named node in the a11y tree"
+            );
+        }
+        // The run button keeps its plain-text Name (its label is the Name).
+        assert!(
+            nodes.iter().any(|(_, n)| n.role() == Role::Button
+                && n.name().is_some_and(|s| s.contains("Run analysis"))),
+            "the Run analysis button is a named, invokable node"
+        );
     }
 }
