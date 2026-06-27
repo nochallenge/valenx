@@ -57,8 +57,9 @@
 //!   sample-then-train path the in-panel **Train** button calls.
 
 use eframe::egui;
-use egui_plot::{Legend, Line, Plot, PlotPoints};
+use egui_plot::{Legend, Line, PlotPoints};
 
+use crate::plot_ui::managed_plot_mem_cfg;
 use crate::ValenxApp;
 
 // ---------------------------------------------------------------------------
@@ -861,13 +862,16 @@ fn surrogate_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
             [Truth::length(x1), model.predict(x0, x1)]
         })
         .collect();
-    Plot::new("surrogate_sweep")
-        .height(200.0)
-        .legend(Legend::default())
-        .show(ui, |pui| {
+    managed_plot_mem_cfg(
+        ui,
+        "surrogate_sweep",
+        200.0,
+        |plot| plot.legend(Legend::default()),
+        |pui| {
             pui.line(Line::new(true_pts).name("true \u{03B4}(L)"));
             pui.line(Line::new(surr_pts).name("surrogate"));
-        });
+        },
+    );
 }
 
 /// One labelled integer `DragValue` parameter row inside a grid. The caption is

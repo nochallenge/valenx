@@ -188,6 +188,7 @@ pub mod ocean_workbench;
 pub mod openchannel_workbench;
 pub mod osmosis_workbench;
 pub mod plate_workbench;
+pub(crate) mod plot_ui;
 pub mod pneumatics_workbench;
 pub mod popdynamics_workbench;
 pub mod powerfactor_workbench;

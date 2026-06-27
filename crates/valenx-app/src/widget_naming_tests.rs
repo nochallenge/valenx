@@ -771,7 +771,7 @@ fn panel_table_covers_every_workbench_in_the_dispatch() {
     // `update.rs` (the tab strip is not a workbench and is excluded).
     assert_eq!(
         PANELS.len(),
-        151,
+        154,
         "PANELS must list every show_*_workbench panel drawn in update.rs"
     );
     // No duplicate panel ids.

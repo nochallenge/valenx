@@ -30,8 +30,9 @@ use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
 use eframe::egui;
-use egui_plot::{Line, Plot, PlotPoints, Points};
+use egui_plot::{Line, PlotPoints, Points};
 
+use crate::plot_ui::{managed_plot, managed_plot_mem};
 use crate::types::LoadedMesh;
 use crate::ValenxApp;
 use valenx_astro::{
@@ -241,6 +242,11 @@ pub struct RocketWorkbenchState {
     scrub_t: f64,
     /// Which trajectory channel the ascent plot draws against time.
     plot_y: PlotQuantity,
+    /// One-shot request to reset the pinned ascent plot back to auto-bounds
+    /// (set by the "Reset view" button; consumed on the next plot draw). The
+    /// plot is also double-click-resettable, but this gives a discoverable,
+    /// AI-drivable control that restores the view after panning / zooming.
+    plot_reset: bool,
 }
 
 impl Default for RocketWorkbenchState {
@@ -260,6 +266,7 @@ impl Default for RocketWorkbenchState {
             auto: None,
             scrub_t: 0.0,
             plot_y: PlotQuantity::default(),
+            plot_reset: false,
         }
     }
 }
@@ -869,6 +876,143 @@ pub(crate) fn rocket_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
     // Poll any background optimization before drawing (non-blocking);
     // `opt_running` is a live progress snapshot while one is in flight.
     let opt_running = poll_opt_job(s, ui.ctx());
+
+    // ── Valenx LV-1 — PINNED ascent inspector ─────────────────
+    // Rendered *above* the scrolling parameter form (and therefore outside
+    // its `ScrollArea`) so the live trajectory plot, its channel toggles and
+    // the playback scrubber stay visible while the form below is scrolled —
+    // and so the plot's scroll-wheel zoom is not swallowed by a surrounding
+    // scroll container. The form (auto-design, optimizer, structure knobs)
+    // follows in the `ScrollArea`.
+    ui.label(egui::RichText::new("Valenx LV-1 — ascent to orbit").strong());
+    ui.label(
+        egui::RichText::new("a from-scratch two-stage launcher, flown live by valenx-astro")
+            .weak()
+            .small(),
+    );
+    ui.horizontal_wrapped(|ui| {
+        let fly_clicked = ui
+            .button(egui::RichText::new("▶ Fly the Valenx LV-1").strong())
+            .clicked();
+        if s.lv1.is_none() || fly_clicked {
+            s.lv1 = Some(fly_lv1());
+        }
+        // 3-D rocket model → central viewport (auto-loads once on first open;
+        // the button reloads / re-frames it).
+        let show_3d = ui
+            .button(egui::RichText::new("Show the 3-D rocket model").strong())
+            .on_hover_text(
+                "Loads a 3-D model of the LV-1 into the centre viewport — orbit / zoom it.",
+            )
+            .clicked();
+        if show_3d || !s.loaded_3d_once {
+            s.loaded_3d_once = true;
+            s.show_3d_request = true;
+        }
+    });
+    if s.lv1.is_some() {
+        // Summary + flight window (immutable view, released before the
+        // scrubber borrows `scrub_t` mutably below).
+        let (t_max, has_plot) = {
+            let f = s.lv1.as_ref().unwrap();
+            ui.label(egui::RichText::new(&f.summary).monospace().small());
+            (f.t_max.max(0.0), !f.alt_pts.is_empty())
+        };
+        s.scrub_t = s.scrub_t.clamp(0.0, t_max);
+
+        if has_plot {
+            // Pick which telemetry channel the plot draws; the numeric
+            // readout below always shows every quantity.
+            ui.horizontal_wrapped(|ui| {
+                ui.label(egui::RichText::new("plot:").small());
+                ui.radio_value(&mut s.plot_y, PlotQuantity::Altitude, "alt");
+                ui.radio_value(&mut s.plot_y, PlotQuantity::Speed, "speed");
+                ui.radio_value(&mut s.plot_y, PlotQuantity::Mach, "Mach");
+                ui.radio_value(&mut s.plot_y, PlotQuantity::DynPressure, "q");
+                ui.radio_value(&mut s.plot_y, PlotQuantity::AccelG, "g");
+            });
+            let q = s.plot_y;
+            ui.label(
+                egui::RichText::new(format!(
+                    "{} vs time (s) · dots = staging + MECO · drag to scrub",
+                    q.axis_label()
+                ))
+                .weak()
+                .small(),
+            );
+
+            // ▶ Playback scrubber — drag through the flight and read the full
+            // vehicle state at that instant. Its `.text(..)` makes egui
+            // auto-name the value sub-node (Role::SpinButton), so it is
+            // already AI-drivable / screen-reader-named.
+            if t_max > 0.0 {
+                ui.add(egui::Slider::new(&mut s.scrub_t, 0.0..=t_max).text("▶ playback · t (s)"));
+            }
+
+            let f = s.lv1.as_ref().unwrap();
+            let scrub = sample_at(&f.samples, s.scrub_t);
+            if let Some(p) = scrub {
+                ui.label(
+                    egui::RichText::new(format!(
+                        "t {:>6.1} s   alt {:>7.2} km   downrange {:>7.2} km\n\
+                                 v_rel {:>6.0} m/s   v_inert {:>6.0} m/s   Mach {:>5.2}\n\
+                                 q {:>6.1} kPa   accel {:>5.2} g   mass {:>7.2} t",
+                        p.time,
+                        p.altitude_m / 1000.0,
+                        p.downrange_m / 1000.0,
+                        p.speed_relative,
+                        p.speed_inertial,
+                        p.mach,
+                        p.dynamic_pressure / 1000.0,
+                        p.acceleration_g,
+                        p.mass / 1000.0,
+                    ))
+                    .monospace()
+                    .small(),
+                );
+            }
+
+            // Line + event + now markers all follow the selected channel,
+            // derived from the one retained sample series.
+            let line_pts: Vec<[f64; 2]> = if q == PlotQuantity::Altitude {
+                f.alt_pts.clone()
+            } else {
+                f.samples
+                    .iter()
+                    .map(|smp| [smp.time, q.value(smp)])
+                    .collect()
+            };
+            let event_pts: Vec<[f64; 2]> = f
+                .event_pts
+                .iter()
+                .filter_map(|ep| sample_at(&f.samples, ep[0]).map(|smp| [ep[0], q.value(&smp)]))
+                .collect();
+            let now_pt = scrub.map(|p| [p.time, q.value(&p)]);
+            let axis_name = q.axis_label();
+            // Pinned, maneuverable, resizable plot (drag-pan / scroll-zoom /
+            // box-zoom / double-click- or button-reset).
+            managed_plot(ui, "lv1_ascent_plot", 240.0, &mut s.plot_reset, |pui| {
+                pui.line(Line::new(PlotPoints::from(line_pts)).name(axis_name));
+                if !event_pts.is_empty() {
+                    pui.points(
+                        Points::new(PlotPoints::from(event_pts))
+                            .radius(5.0)
+                            .name("staging / MECO"),
+                    );
+                }
+                if let Some(pt) = now_pt {
+                    pui.points(
+                        Points::new(PlotPoints::from(vec![pt]))
+                            .radius(7.0)
+                            .color(egui::Color32::from_rgb(255, 196, 0))
+                            .name("now"),
+                    );
+                }
+            });
+        }
+    }
+    ui.separator();
+
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show(ui, |ui| {
@@ -919,136 +1063,6 @@ pub(crate) fn rocket_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
             ui.add_space(6.0);
             ui.separator();
 
-            // ── Valenx LV-1 — watch it fly to orbit ───────────────
-            ui.label(egui::RichText::new("Valenx LV-1 — ascent to orbit").strong());
-            ui.label(
-                egui::RichText::new(
-                    "a from-scratch two-stage launcher, flown live by valenx-astro",
-                )
-                .weak()
-                .small(),
-            );
-            let fly_clicked = ui
-                .button(egui::RichText::new("▶ Fly the Valenx LV-1").strong())
-                .clicked();
-            if s.lv1.is_none() || fly_clicked {
-                s.lv1 = Some(fly_lv1());
-            }
-            // 3-D rocket model → central viewport (auto-loads once
-            // on first open; the button reloads / re-frames it).
-            let show_3d = ui
-                .button(egui::RichText::new("Show the 3-D rocket model").strong())
-                .on_hover_text(
-                    "Loads a 3-D model of the LV-1 into the centre viewport — orbit / zoom it.",
-                )
-                .clicked();
-            if show_3d || !s.loaded_3d_once {
-                s.loaded_3d_once = true;
-                s.show_3d_request = true;
-            }
-            if s.lv1.is_some() {
-                // Summary + flight window (immutable view, released before
-                // the scrubber borrows `scrub_t` mutably below).
-                let (t_max, has_plot) = {
-                    let f = s.lv1.as_ref().unwrap();
-                    ui.label(egui::RichText::new(&f.summary).monospace().small());
-                    (f.t_max.max(0.0), !f.alt_pts.is_empty())
-                };
-                s.scrub_t = s.scrub_t.clamp(0.0, t_max);
-
-                if has_plot {
-                    // Pick which telemetry channel the plot draws; the
-                    // numeric readout below always shows every quantity.
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(egui::RichText::new("plot:").small());
-                        ui.radio_value(&mut s.plot_y, PlotQuantity::Altitude, "alt");
-                        ui.radio_value(&mut s.plot_y, PlotQuantity::Speed, "speed");
-                        ui.radio_value(&mut s.plot_y, PlotQuantity::Mach, "Mach");
-                        ui.radio_value(&mut s.plot_y, PlotQuantity::DynPressure, "q");
-                        ui.radio_value(&mut s.plot_y, PlotQuantity::AccelG, "g");
-                    });
-                    let q = s.plot_y;
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "{} vs time (s) · dots = staging + MECO · drag to scrub",
-                            q.axis_label()
-                        ))
-                        .weak()
-                        .small(),
-                    );
-
-                    // ▶ Playback scrubber — drag through the flight and read the
-                    // full vehicle state at that instant. Its `.text(..)` makes
-                    // egui auto-name the value sub-node (Role::SpinButton), so it
-                    // is already AI-drivable / screen-reader-named.
-                    if t_max > 0.0 {
-                        ui.add(
-                            egui::Slider::new(&mut s.scrub_t, 0.0..=t_max)
-                                .text("▶ playback · t (s)"),
-                        );
-                    }
-
-                    let f = s.lv1.as_ref().unwrap();
-                    let scrub = sample_at(&f.samples, s.scrub_t);
-                    if let Some(p) = scrub {
-                        ui.label(
-                            egui::RichText::new(format!(
-                                "t {:>6.1} s   alt {:>7.2} km   downrange {:>7.2} km\n\
-                                         v_rel {:>6.0} m/s   v_inert {:>6.0} m/s   Mach {:>5.2}\n\
-                                         q {:>6.1} kPa   accel {:>5.2} g   mass {:>7.2} t",
-                                p.time,
-                                p.altitude_m / 1000.0,
-                                p.downrange_m / 1000.0,
-                                p.speed_relative,
-                                p.speed_inertial,
-                                p.mach,
-                                p.dynamic_pressure / 1000.0,
-                                p.acceleration_g,
-                                p.mass / 1000.0,
-                            ))
-                            .monospace()
-                            .small(),
-                        );
-                    }
-
-                    // Line + event + now markers all follow the selected
-                    // channel, derived from the one retained sample series.
-                    let line_pts: Vec<[f64; 2]> = if q == PlotQuantity::Altitude {
-                        f.alt_pts.clone()
-                    } else {
-                        f.samples
-                            .iter()
-                            .map(|smp| [smp.time, q.value(smp)])
-                            .collect()
-                    };
-                    let event_pts: Vec<[f64; 2]> = f
-                        .event_pts
-                        .iter()
-                        .filter_map(|ep| {
-                            sample_at(&f.samples, ep[0]).map(|smp| [ep[0], q.value(&smp)])
-                        })
-                        .collect();
-                    let now_pt = scrub.map(|p| [p.time, q.value(&p)]);
-                    Plot::new("lv1_ascent_plot").height(210.0).show(ui, |pui| {
-                        pui.line(Line::new(PlotPoints::from(line_pts)).name(q.axis_label()));
-                        if !event_pts.is_empty() {
-                            pui.points(
-                                Points::new(PlotPoints::from(event_pts))
-                                    .radius(5.0)
-                                    .name("staging / MECO"),
-                            );
-                        }
-                        if let Some(pt) = now_pt {
-                            pui.points(
-                                Points::new(PlotPoints::from(vec![pt]))
-                                    .radius(7.0)
-                                    .color(egui::Color32::from_rgb(255, 196, 0))
-                                    .name("now"),
-                            );
-                        }
-                    });
-                }
-            }
             // ── AI optimizer — multi-objective design search ──────
             ui.add_space(6.0);
             ui.label(egui::RichText::new("AI optimizer — multi-objective design search").strong());
@@ -1161,7 +1175,7 @@ pub(crate) fn rocket_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                         OptObjective::MinPeakG => ("best peak-g vs sim #", "best peak g"),
                     };
                     ui.label(egui::RichText::new(axis).weak().small());
-                    Plot::new("lv1_opt_plot").height(170.0).show(ui, |pui| {
+                    managed_plot_mem(ui, "lv1_opt_plot", 170.0, |pui| {
                         pui.line(Line::new(PlotPoints::from(conv.clone())).name(series));
                     });
                 }

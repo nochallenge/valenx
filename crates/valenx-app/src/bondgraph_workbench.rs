@@ -50,8 +50,9 @@
 //!   SAME derive-then-integrate path the in-panel **Solve** button calls.
 
 use eframe::egui;
-use egui_plot::{Legend, Line, Plot, PlotPoints};
+use egui_plot::{Legend, Line, PlotPoints};
 
+use crate::plot_ui::managed_plot_mem_cfg;
 use crate::ValenxApp;
 
 // ---------------------------------------------------------------------------
@@ -1012,10 +1013,12 @@ fn bondgraph_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
         ui.label(egui::RichText::new("Press Solve to integrate the response.").weak());
     } else {
         let n_states = sol.state_names.len();
-        Plot::new("bondgraph_response")
-            .height(200.0)
-            .legend(Legend::default())
-            .show(ui, |pui| {
+        managed_plot_mem_cfg(
+            ui,
+            "bondgraph_response",
+            200.0,
+            |plot| plot.legend(Legend::default()),
+            |pui| {
                 for s in 0..n_states {
                     let pts: PlotPoints = sol
                         .samples
@@ -1024,7 +1027,8 @@ fn bondgraph_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                         .collect();
                     pui.line(Line::new(pts).name(sol.state_names[s]));
                 }
-            });
+            },
+        );
     }
 }
 

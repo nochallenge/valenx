@@ -22,7 +22,7 @@
 //! ball-and-stick model via [`crate::genetics::molecule_view`].
 
 use eframe::egui;
-use egui_plot::{Legend, Line, Plot, PlotPoints};
+use egui_plot::{Legend, Line, PlotPoints};
 use nalgebra::Vector3;
 
 use valenx_md::analysis::rmsd::rmsd as kabsch_rmsd;
@@ -43,6 +43,7 @@ use valenx_md::system::System;
 
 use super::common;
 use super::molecule_view::{self, ViewMolecule};
+use crate::plot_ui::managed_plot_mem_cfg;
 use crate::ValenxApp;
 
 /// Which time integrator the run uses.
@@ -739,25 +740,31 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
         let pot: PlotPoints = p.trace.iter().map(|(s, v, _, _)| [*s, *v]).collect();
         let kin: PlotPoints = p.trace.iter().map(|(s, _, v, _)| [*s, *v]).collect();
         let tot: PlotPoints = p.trace.iter().map(|(s, _, _, v)| [*s, *v]).collect();
-        Plot::new("md_energy_plot")
-            .height(150.0)
-            .legend(Legend::default())
-            .show(ui, |plot_ui| {
+        managed_plot_mem_cfg(
+            ui,
+            "md_energy_plot",
+            150.0,
+            |plot| plot.legend(Legend::default()),
+            |plot_ui| {
                 plot_ui.line(Line::new(pot).name("potential"));
                 plot_ui.line(Line::new(kin).name("kinetic"));
                 plot_ui.line(Line::new(tot).name("total"));
-            });
+            },
+        );
     }
 
     if !p.temp_trace.is_empty() {
         common::section(ui, "Temperature (K)");
         let temp: PlotPoints = p.temp_trace.iter().map(|(s, t)| [*s, *t]).collect();
-        Plot::new("md_temp_plot")
-            .height(120.0)
-            .legend(Legend::default())
-            .show(ui, |plot_ui| {
+        managed_plot_mem_cfg(
+            ui,
+            "md_temp_plot",
+            120.0,
+            |plot| plot.legend(Legend::default()),
+            |plot_ui| {
                 plot_ui.line(Line::new(temp).name("temperature"));
-            });
+            },
+        );
     }
 
     if !p.result.is_empty() {
