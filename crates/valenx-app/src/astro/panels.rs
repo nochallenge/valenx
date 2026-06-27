@@ -19,10 +19,11 @@
 //! [`super::run`]. Mirrors the CFD-side [`crate::aero::panels`].
 
 use eframe::egui;
-use egui_plot::{Legend, Line, Plot, PlotPoints};
+use egui_plot::{Legend, Line, PlotPoints};
 use nalgebra::Vector3;
 
 use super::model::{self, AstroTab, GuidanceChoice, StageForm};
+use crate::plot_ui::managed_plot_mem_cfg;
 use crate::ValenxApp;
 use valenx_astro::{landing, maneuver, rendezvous, windows};
 
@@ -533,16 +534,21 @@ pub fn draw_results_section(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     .iter()
                     .map(|s| [s.time, s.dynamic_pressure / 1_000.0])
                     .collect();
-                Plot::new("astro_profile_plot")
-                    .height(190.0)
-                    .legend(Legend::default())
-                    .x_axis_label("mission time (s)")
-                    .show(ui, |plot_ui| {
+                managed_plot_mem_cfg(
+                    ui,
+                    "astro_profile_plot",
+                    190.0,
+                    |plot| {
+                        plot.legend(Legend::default())
+                            .x_axis_label("mission time (s)")
+                    },
+                    |plot_ui| {
                         plot_ui.line(Line::new(altitude).name("altitude (km)"));
                         plot_ui.line(Line::new(velocity).name("inertial speed (km/s)"));
                         plot_ui.line(Line::new(mach).name("Mach"));
                         plot_ui.line(Line::new(qpress).name("dynamic pressure (kPa)"));
-                    });
+                    },
+                );
                 derived(
                     ui,
                     "Altitude in km, inertial speed in km/s, Mach dimensionless, \

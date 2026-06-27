@@ -8,7 +8,7 @@
 //! Compute is synchronous (a few seconds); a background runner is future work.
 
 use eframe::egui;
-use egui_plot::{Legend, Line, Plot, PlotPoints};
+use egui_plot::{Legend, Line, PlotPoints};
 use nalgebra::Vector3;
 
 use valenx_neuro::{
@@ -18,6 +18,7 @@ use valenx_neuro::{
 };
 
 use crate::agent_commands::AgentValue;
+use crate::plot_ui::{managed_plot_mem, managed_plot_mem_cfg};
 use crate::ValenxApp;
 
 /// Persistent state for the neural-interface workbench.
@@ -554,16 +555,19 @@ pub fn draw_neuro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                         );
                         ui.add_space(4.0);
                         ui.label(egui::RichText::new("Recruitment vs current (µA)").strong());
-                        Plot::new("neuro_recruitment")
-                            .height(130.0)
-                            .legend(Legend::default())
-                            .show(ui, |pui| {
+                        managed_plot_mem_cfg(
+                            ui,
+                            "neuro_recruitment",
+                            130.0,
+                            |plot| plot.legend(Legend::default()),
+                            |pui| {
                                 let pts: Vec<[f64; 2]> =
                                     r.recruitment_curve.iter().map(|&(c, f)| [c, f]).collect();
                                 pui.line(Line::new(PlotPoints::from(pts)).name("fraction"));
-                            });
+                            },
+                        );
                         ui.label(egui::RichText::new("Electrode |Z| Bode (log–log)").strong());
-                        Plot::new("neuro_impedance").height(130.0).show(ui, |pui| {
+                        managed_plot_mem(ui, "neuro_impedance", 130.0, |pui| {
                             let pts: Vec<[f64; 2]> = r
                                 .impedance_bode
                                 .iter()
@@ -580,7 +584,7 @@ pub fn draw_neuro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
                                 ))
                                 .strong(),
                             );
-                            Plot::new("neuro_eap").height(130.0).show(ui, |pui| {
+                            managed_plot_mem(ui, "neuro_eap", 130.0, |pui| {
                                 let pts: Vec<[f64; 2]> = r
                                     .eap_uv
                                     .iter()

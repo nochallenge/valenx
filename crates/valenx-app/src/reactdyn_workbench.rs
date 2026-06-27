@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use eframe::egui;
-use egui_plot::{Legend, Line, Plot, PlotPoints};
+use egui_plot::{Legend, Line, PlotPoints};
 
 use valenx_qchem::element::Element;
 use valenx_qchem::geometry::{MolecularGeometry, BOHR_PER_ANGSTROM};
@@ -26,6 +26,7 @@ use valenx_reactdyn::{
 };
 
 use crate::genetics::molecule_view::{self, ViewAtom, ViewMolecule};
+use crate::plot_ui::managed_plot_mem_cfg;
 use crate::ValenxApp;
 
 /// A built-in small-molecule starting point.
@@ -920,14 +921,17 @@ fn draw_results_and_playback(
     });
     ui.add(egui::Slider::new(&mut s.frame_idx, 0..=n - 1).text("frame"));
 
-    Plot::new("reactdyn_energy")
-        .height(150.0)
-        .legend(Legend::default())
-        .show(ui, |pui| {
+    managed_plot_mem_cfg(
+        ui,
+        "reactdyn_energy",
+        150.0,
+        |plot| plot.legend(Legend::default()),
+        |pui| {
             pui.line(Line::new(PlotPoints::from(pe)).name("potential"));
             pui.line(Line::new(PlotPoints::from(ke)).name("kinetic"));
             pui.line(Line::new(PlotPoints::from(tot)).name("total"));
-        });
+        },
+    );
 
     // Current-frame readout + stage the viewport mesh when the frame
     // changes (recompute bonds each frame → bonds visibly form/break).

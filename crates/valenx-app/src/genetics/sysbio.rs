@@ -16,7 +16,7 @@
 //! replaces that with a genuine model the user builds from nothing.
 
 use eframe::egui;
-use egui_plot::{Legend, Line, Plot, PlotPoints};
+use egui_plot::{Legend, Line, PlotPoints};
 
 use valenx_sysbio::fba::FbaProblem;
 use valenx_sysbio::model::{Model, RateLaw, Reaction, Species};
@@ -24,6 +24,7 @@ use valenx_sysbio::ode::TimeCourse;
 use valenx_sysbio::stochastic::StochasticModel;
 
 use super::common;
+use crate::plot_ui::managed_plot_mem_cfg;
 use crate::ValenxApp;
 
 /// Which simulation engine is showing.
@@ -429,14 +430,17 @@ pub fn draw(app: &mut ValenxApp, ui: &mut egui::Ui) {
     if !p.series.is_empty() {
         ui.separator();
         common::section(ui, "Time course");
-        Plot::new("sysbio_plot")
-            .height(170.0)
-            .legend(Legend::default())
-            .show(ui, |plot_ui| {
+        managed_plot_mem_cfg(
+            ui,
+            "sysbio_plot",
+            170.0,
+            |plot| plot.legend(Legend::default()),
+            |plot_ui| {
                 for (name, pts) in &p.series {
                     plot_ui.line(Line::new(PlotPoints::from(pts.clone())).name(name));
                 }
-            });
+            },
+        );
     }
 
     if !p.result.is_empty() {

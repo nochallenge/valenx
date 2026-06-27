@@ -21,6 +21,7 @@ param(
   [string]$Out = "$env:TEMP\valenx_shot.png",
   [switch]$Tile,              # send {"cmd":"tile"} to grid the open panels before capture
   [switch]$Maximize,          # maximize the window before capture
+  [switch]$Show3d,            # open the 3-D viewport (show the designed model) before capture
   [switch]$NoBuild,           # skip the cargo rebuild (use the current binary)
   [int]$WaitSec = 8           # GPU-init wait after launch
 )
@@ -65,6 +66,7 @@ if ($Product -ne "") {
   Start-Sleep -Seconds 3
 }
 if ($Tile)     { Send-Cmd '{"cmd":"tile"}'; Start-Sleep -Seconds 2 }
+if ($Show3d)   { Send-Cmd '{"cmd":"show_3d"}'; Start-Sleep -Seconds 2 }   # render the designed model, not just panels
 if ($Maximize) { [VShot]::ShowWindow($h, 3) | Out-Null }
 [VShot]::SetForegroundWindow($h) | Out-Null
 Start-Sleep -Milliseconds 1000

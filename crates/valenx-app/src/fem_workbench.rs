@@ -16,7 +16,7 @@
 //! viewport via the `(Mesh, Field)` colour-ramp overlay.
 
 use eframe::egui;
-use egui_plot::{Line, Plot, PlotPoints, Points};
+use egui_plot::{Line, PlotPoints, Points};
 use nalgebra::Vector3;
 
 use valenx_fem::material::FemMaterial;
@@ -26,6 +26,7 @@ use valenx_fem::native_solver::{
 };
 use valenx_fields::{Field, FieldKind, Location, RegionRef, TimeKey};
 
+use crate::plot_ui::managed_plot_mem;
 use crate::types::LoadedMesh;
 use crate::ValenxApp;
 
@@ -704,7 +705,7 @@ pub(crate) fn fem_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                         match plot {
                             FemPlot::Modal(freqs) => {
                                 ui.label(egui::RichText::new("Natural frequencies").strong());
-                                Plot::new("fem_modal_plot").height(150.0).show(ui, |pui| {
+                                managed_plot_mem(ui, "fem_modal_plot", 150.0, |pui| {
                                     let pts: Vec<[f64; 2]> = freqs
                                         .iter()
                                         .enumerate()
@@ -716,7 +717,7 @@ pub(crate) fn fem_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                             }
                             FemPlot::LoadDisp(pts) => {
                                 ui.label(egui::RichText::new("Load – displacement").strong());
-                                Plot::new("fem_loaddisp_plot").height(150.0).show(ui, |pui| {
+                                managed_plot_mem(ui, "fem_loaddisp_plot", 150.0, |pui| {
                                     pui.line(Line::new(PlotPoints::from(pts.clone())).name("tip"));
                                 });
                             }

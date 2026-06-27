@@ -6,12 +6,13 @@
 //! slider with a live readout. The animation sampling is headless-testable.
 
 use eframe::egui;
-use egui_plot::{Line, Plot, PlotPoints};
+use egui_plot::{Line, PlotPoints};
 use std::f64::consts::PI;
 
 use valenx_animate::{Animation, Keyframe, TweenMode};
 
 use crate::agent_commands::AgentValue;
+use crate::plot_ui::managed_plot_mem;
 use crate::ValenxApp;
 
 /// Persistent state for the animation workbench.
@@ -201,7 +202,7 @@ pub fn draw_animate_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
             );
             ui.separator();
             ui.label(egui::RichText::new("Joint value over time").strong());
-            Plot::new("animate_curve").height(160.0).show(ui, |pui| {
+            managed_plot_mem(ui, "animate_curve", 160.0, |pui| {
                 let n = 120;
                 let pts: Vec<[f64; 2]> = (0..=n)
                     .map(|i| {

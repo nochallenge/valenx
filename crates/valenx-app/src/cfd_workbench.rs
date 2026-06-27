@@ -13,11 +13,12 @@
 //! toggled from the View menu.
 
 use eframe::egui;
-use egui_plot::{Line, Plot, PlotPoints, VLine};
+use egui_plot::{Line, PlotPoints, VLine};
 
 use valenx_cfd_native::{solve_simple, Boundaries, FlowSolution, Fluid, Grid, SimpleControls};
 
 use crate::background::{BackgroundJob, JobState};
+use crate::plot_ui::managed_plot_mem_cfg;
 use crate::ValenxApp;
 
 /// Which canonical flow case the workbench solves.
@@ -417,11 +418,12 @@ pub(crate) fn cfd_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                     if let Some(profile) = &s.profile {
                         ui.add_space(4.0);
                         ui.label(egui::RichText::new("Centreline speed vs height").strong());
-                        Plot::new("cfd_profile_plot")
-                            .height(160.0)
-                            .x_axis_label("speed (m/s)")
-                            .y_axis_label("y (m)")
-                            .show(ui, |pui| {
+                        managed_plot_mem_cfg(
+                            ui,
+                            "cfd_profile_plot",
+                            160.0,
+                            |plot| plot.x_axis_label("speed (m/s)").y_axis_label("y (m)"),
+                            |pui| {
                                 pui.line(Line::new(PlotPoints::from(profile.clone())).name("|u|"));
                                 if let Some(analytic) = &s.analytic_profile {
                                     pui.line(
@@ -432,7 +434,8 @@ pub(crate) fn cfd_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
                                 if let Some(ub) = s.bulk_velocity {
                                     pui.vline(VLine::new(ub).name("U_bulk (Q/H)"));
                                 }
-                            });
+                            },
+                        );
                     }
                 });
 }
