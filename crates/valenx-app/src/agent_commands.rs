@@ -2703,6 +2703,36 @@ fn probe_active_workbench(
     out.platform_output.accesskit_update.map(|u| u.nodes)
 }
 
+/// Probe the active workbench panel headlessly and return its **readable text**
+/// (static-label captions + the live value of any value-bearing control) as a
+/// list of trimmed, non-empty strings. The crate-internal engine the
+/// [`crate::self_test`] generic product check reads output from — the SAME
+/// `probe_active_workbench` tree [`read_text`] posts to the feed, returned as
+/// data instead of a feed note. `None` when there is no active workbench (or the
+/// panel emitted no accesskit tree); `Some(vec)` (possibly empty) otherwise.
+pub(crate) fn probe_active_workbench_text(app: &mut ValenxApp) -> Option<Vec<String>> {
+    use egui::accesskit::Role;
+    let nodes = probe_active_workbench(app)?;
+    let mut parts: Vec<String> = Vec::new();
+    for (_, n) in &nodes {
+        let text: Option<String> = match n.role() {
+            Role::StaticText => n.name().map(str::to_string),
+            Role::TextInput | Role::SpinButton => n
+                .value()
+                .map(str::to_string)
+                .or_else(|| n.name().map(str::to_string)),
+            _ => None,
+        };
+        if let Some(t) = text {
+            let t = t.trim();
+            if !t.is_empty() {
+                parts.push(t.to_string());
+            }
+        }
+    }
+    Some(parts)
+}
+
 /// Read the current value of the active workbench's `show_*` flag, so
 /// [`probe_active_workbench`] can restore it after the probe. Mirrors
 /// [`set_workbench_show_flag`].

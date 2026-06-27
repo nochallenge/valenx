@@ -152,6 +152,13 @@ impl GasDynamicsWorkbenchState {
     }
 }
 
+/// Run the compressible-flow compute (the in-panel **Compute** action).
+/// Factored out so the button, the panel's first-open auto-compute, and the
+/// product self-test ([`crate::self_test`]) share one path.
+pub(crate) fn run(app: &mut ValenxApp) {
+    run_gasdynamics(&mut app.gasdynamics);
+}
+
 fn run_gasdynamics(s: &mut GasDynamicsWorkbenchState) {
     s.error = None;
     match compute_report(s.mach, s.gamma) {

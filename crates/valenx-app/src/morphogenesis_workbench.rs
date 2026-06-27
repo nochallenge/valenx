@@ -174,6 +174,15 @@ impl MorphogenesisWorkbenchState {
 // Bridge run actions (play / pause)
 // ---------------------------------------------------------------------------
 
+/// Advance the Gray–Scott field by a fixed number of explicit-Euler steps
+/// (one playback frame's worth). Factored out so the product self-test
+/// ([`crate::self_test`]) can drive the SAME `field.step` the playback loop runs
+/// without starting real-time animation.
+pub(crate) fn run(app: &mut ValenxApp) {
+    let n = app.morphogenesis.steps_per_frame;
+    app.morphogenesis.field.step(n);
+}
+
 /// Start real-time playback (the in-panel Play action). Factored out so the
 /// button and the `morphogenesis.play` bridge id share one path.
 pub(crate) fn play(app: &mut ValenxApp) {

@@ -59,6 +59,30 @@ impl VariantEffectWorkbenchState {
         }
         Ok(())
     }
+
+    /// Read-only readout for the agent `ReadReadout` bridge and the product
+    /// self-test ([`crate::self_test`]): one line per parsed variant
+    /// (`<line> → <description>` on success, `<line> → error: …` on failure), or
+    /// `None` before the first parse. Mirrors the panel's per-line result list.
+    pub fn agent_readout(&self) -> Option<String> {
+        let results = self.results.as_ref()?;
+        Some(
+            results
+                .iter()
+                .map(|(line, r)| match r {
+                    Ok(v) => format!("{line} → {}", describe(v)),
+                    Err(e) => format!("{line} → error: {e}"),
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+    }
+}
+
+/// Run the HGVS batch parse (the in-panel **Parse** action). Factored out so the
+/// button and the product self-test ([`crate::self_test`]) share one path.
+pub(crate) fn run(app: &mut ValenxApp) {
+    app.variant_effect.results = Some(parse_batch(&app.variant_effect.input));
 }
 
 /// A human-readable description of a parsed variant.

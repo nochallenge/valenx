@@ -80,6 +80,25 @@ impl SheetmetalWorkbenchState {
         }
         Ok(())
     }
+
+    /// The current computed-result text for the agent `ReadReadout` bridge and
+    /// the product self-test ([`crate::self_test`]): the bend readout (neutral
+    /// radius, bend allowance, bend deduction) once computed, else the last
+    /// `error`, else `None` before the first compute. Read-only.
+    pub fn agent_readout(&self) -> Option<String> {
+        if !self.result.is_empty() {
+            Some(self.result.clone())
+        } else {
+            self.error.clone()
+        }
+    }
+}
+
+/// Run the bend-allowance compute (the in-panel **Compute** action). Factored
+/// out so the button and the product self-test ([`crate::self_test`]) share one
+/// path.
+pub(crate) fn run(app: &mut ValenxApp) {
+    run_sheetmetal(&mut app.sheetmetal);
 }
 
 /// Draw the Sheet Metal Workbench right-side panel. A no-op when the

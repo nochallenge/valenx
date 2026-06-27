@@ -108,6 +108,18 @@ impl CollisionWorkbenchState {
         corner[axis] = v;
         Ok(())
     }
+
+    /// The current computed-result text for the agent `ReadReadout` bridge and
+    /// the product self-test ([`crate::self_test`]): the geometry + overlap
+    /// readout once computed, else the last `error`, else `None` before the
+    /// first compute. Read-only.
+    pub fn agent_readout(&self) -> Option<String> {
+        if !self.result.is_empty() {
+            Some(self.result.clone())
+        } else {
+            self.error.clone()
+        }
+    }
 }
 
 /// Draw the Collision Workbench right-side panel. A no-op when the
@@ -307,6 +319,13 @@ fn draw_boxes_preview(ui: &mut egui::Ui, edges: &[([Vector3<f64>; 2], egui::Colo
 /// Build the two [`Aabb`]s from the form, compute their geometry + the
 /// pairwise overlap/separation, and format the readout. Extracted from the
 /// draw closure so it is unit-testable.
+/// Run the AABB overlap/separation compute (the in-panel **Compute** action).
+/// Factored out so the button and the product self-test ([`crate::self_test`])
+/// share one path.
+pub(crate) fn run(app: &mut ValenxApp) {
+    run_collision(&mut app.collision);
+}
+
 fn run_collision(s: &mut CollisionWorkbenchState) {
     s.error = None;
 
