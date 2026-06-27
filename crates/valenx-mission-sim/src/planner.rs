@@ -212,7 +212,8 @@ pub struct PlannerScenario {
 
 impl PlannerScenario {
     /// Advance the whole scenario by `dt_s` seconds: bump `sim_time_s` and move
-    /// every entity toward its current waypoint (see [`Entity::step`]).
+    /// every entity toward its current waypoint (via each `Entity`'s private
+    /// per-tick step).
     ///
     /// Pure — no I/O. A `dt_s` of `0` (or negative) is a no-op for movement; the
     /// simulated clock only advances for a positive `dt_s`, so a paused tick does

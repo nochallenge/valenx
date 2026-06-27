@@ -12,7 +12,7 @@
 //! ## Channel routing
 //!
 //! valenx splits commands across two files (see [`crate::bridge`]):
-//! [`Command::new_unit`](agent) is **global** (`valenx_chat_cmd.jsonl`); every
+//! the `new_unit` command is **global** (`valenx_chat_cmd.jsonl`); every
 //! other command is **per-unit** (`valenx_chat_cmd_u{n}.jsonl`). The per-unit
 //! tools therefore take an optional `unit` argument (default `1`) that selects
 //! which Workbench+Agent unit to drive; its acks come back on that unit's feed.

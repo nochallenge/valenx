@@ -135,8 +135,8 @@ pub fn to_gcode_checked(toolpath: &Toolpath) -> Result<String, CamError> {
 /// An empty toolpath yields a valid no-op program (header + footer
 /// only). A move with a non-finite cut feed or coordinate returns
 /// [`CamError::PostprocessorFailed`] (rapids degrade their bad
-/// coordinates to `0.000` via [`format_g0`], matching postprocessor
-/// behaviour).
+/// coordinates to `0.000` via the internal `format_g0` helper, matching
+/// postprocessor behaviour).
 pub fn to_gcode_with(toolpath: &Toolpath, opts: GcodeOptions) -> Result<String, CamError> {
     let mut out = String::new();
 

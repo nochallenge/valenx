@@ -167,7 +167,12 @@ jobs:
             libasound2-dev libpipewire-0.3-dev libdbus-1-dev libudev-dev
       # Scoped to the changed crates on a PR (see the `changes` job);
       # `--workspace` on push-to-master and nightly.
-      - run: cargo clippy ${{ needs.changes.outputs.build_scope }} --all-targets --all-features -- -D warnings
+      # NOTE: no `--all-features`. It is a cross-platform footgun: it enables
+      # Linux-only optional-dep features (e.g. eframe/walkers EGL/PipeWire)
+      # that the Windows dev box can't lint, so lints stay invisible locally
+      # and every push surfaces a new failing crate. This matches the
+      # locally-reproducible default-feature `cargo clippy` check.
+      - run: cargo clippy ${{ needs.changes.outputs.build_scope }} --all-targets -- -D warnings
 
   # -------------------------------------------------------------------
   # Linux test — the REQUIRED merge gate (it is in `ci-ok`'s `needs`).
@@ -291,7 +296,12 @@ jobs:
             libasound2-dev libpipewire-0.3-dev libdbus-1-dev libudev-dev
       # Scoped to the changed crates on a PR (see the `changes` job);
       # `--workspace` on push-to-master and nightly.
-      - run: cargo doc ${{ needs.changes.outputs.build_scope }} --no-deps --all-features
+      # NOTE: no `--all-features`. It is a cross-platform footgun: it enables
+      # Linux-only optional-dep features (e.g. eframe/walkers EGL/PipeWire)
+      # that the Windows dev box can't doc, so doc warnings stay invisible
+      # locally and every push surfaces a new broken-link crate. This matches
+      # the locally-reproducible default-feature `cargo doc` check.
+      - run: cargo doc ${{ needs.changes.outputs.build_scope }} --no-deps
 
   # -------------------------------------------------------------------
   # mdBook user manual — catches broken markdown links, bad code examples.
