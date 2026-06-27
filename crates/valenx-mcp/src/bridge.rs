@@ -12,7 +12,7 @@
 //!
 //! - **Global** command file `<base>/valenx_chat_cmd.jsonl` (no suffix). valenx
 //!   polls this on every frame regardless of how many units exist, and it is the
-//!   **only** channel that honours [`Command::new_unit`] (the bootstrap that
+//!   **only** channel that honours the `new_unit` command (the bootstrap that
 //!   opens a Workbench+Agent unit before any unit exists). See [`global_cmd_path`].
 //! - **Per-unit** command file `<base>/valenx_chat_cmd_u{n}.jsonl` for unit `n`.
 //!   Every *other* command (open_workbench, set_control, run_command, …) is a
@@ -74,7 +74,7 @@ pub fn base_dir() -> PathBuf {
 }
 
 /// The **global** command file `<base>/valenx_chat_cmd.jsonl` (no `_u` suffix).
-/// The only channel that honours [`Command::new_unit`].
+/// The only channel that honours the `new_unit` command.
 pub fn global_cmd_path() -> PathBuf {
     base_dir().join(format!("{CMD_STEM}.jsonl"))
 }

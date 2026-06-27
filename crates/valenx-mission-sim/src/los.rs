@@ -3,7 +3,7 @@
 //! A small, dependency-free **supercover ray-march** that answers a single
 //! defensive / analysis question: from one grid cell, can an observer *see*
 //! another cell, or does the terrain / an obstacle **mask** the view? It reuses
-//! the very same [`CostGrid`](crate::routing::CostGrid) the [`crate::routing`] A\*
+//! the very same [`crate::routing::CostGrid`] the [`crate::routing`] A\*
 //! planner runs over — open ground is transparent, an `f32::INFINITY` cell is an
 //! opaque obstacle that blocks the sight line.
 //!
