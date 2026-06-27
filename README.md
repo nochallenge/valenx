@@ -21,7 +21,9 @@
 > shadow ray-tracer); **quantum computing** — a state-vector circuit
 > simulator; and **defense / mission planning** — a map-based tactical planner
 > (OSM basemap, MIL-STD-2525 symbology, A\* routing, line-of-sight), analysis /
-> planning only. Native Rust solvers plus 141 open-source tool integrations.
+> planning only. **A complete in-house suite** — its own native Rust solvers
+> across every domain above, validated against published ground truth — with
+> *optional* adapters to external tools when you want them.
 
 **Status:** `0.1.0-alpha.1` — pre-release. The workflow loop is
 usable end-to-end (load project, click a case, **Prepare**, **Run**,
@@ -38,29 +40,32 @@ commercial release** — **contributors wanted.**
 
 ## What it does
 
-Valenx unifies a stack of [open-source simulation tools](#supported-solvers)
-behind one Rust-native desktop shell so you can:
+Valenx is a **complete, native simulation suite** — its own from-scratch Rust
+solvers across engineering, physics, chemistry, and biology, in one desktop app,
+on your laptop. The native engines are the product, and they're
+[validated against published ground truth](#validation):
 
-- Run **CFD / FEA / EM / battery / multibody** simulations from one UI
-  (OpenFOAM, SU2, CalculiX, Code_Aster, Elmer, OpenRadioss, openEMS,
-  Meep, PyBaMM, MuJoCo, preCICE, …)
-- Drive **molecular dynamics** (GROMACS, LAMMPS, OpenMM, NAMD,
-  AmberTools, HOOMD-blue)
-- Predict **protein structure** (AlphaFold 2/3, ESMFold, OpenFold,
-  RoseTTAFold, OmegaFold, ColabFold)
-- Design **proteins** (RFdiffusion, ProteinMPNN, ESM-IF, Chroma,
-  RFantibody, ESM3)
-- Design **CRISPR guides** + analyze edit outcomes (CHOPCHOP, CRISPOR,
-  Cas-OFFinder, inDelphi, FORECasT, BE-Designer, PrimeDesign)
-- Fold **RNA** + design **mRNA vaccines** (ViennaRNA, NUPACK, mfold,
-  LinearFold, DNA Chisel, LinearDesign)
-- Reconstruct **cryo-EM** volumes (RELION, EMAN2, CTFFIND)
-- Pipe everything through **reproducible workflows** (Snakemake,
-  Nextflow, Cromwell, cwltool)
+- **Aerospace** — launch-vehicle ascent to orbit, 3-D orbital mechanics (J2),
+  a 6-DOF attitude core, impulsive + Lambert-rendezvous maneuvers
+- **CFD / FEA / EM / multibody / thermal** — a 3-D wind-tunnel aero workbench,
+  k-ω SST CFD, 8 FEA solvers, topology optimization, MPM large-deformation
+- **Chemistry & materials** — molecular dynamics, quantum chemistry
+  (Hartree–Fock / MP2 / DFT), reaction dynamics (AIMD), cheminformatics
+- **Computational biology** — a 14-panel Genetics Workbench: alignment,
+  phylogenetics, population genetics, RNA/mRNA design, protein structure,
+  docking, CRISPR gene-editing
+- **More native engines** — general relativity / black-holes, neural-interface
+  / BCI, geometric optics, a quantum-circuit simulator, and a parametric
+  CAD / CAM / CAE suite with a B-Rep solid kernel
 
-**The idea:** native Rust engines for the core science, one app, your laptop —
-plus optional adapters to 141 external tools when you want them. No cloud, no
-API keys, your data never leaves your machine.
+Everything is **AI-drivable end to end** — every workbench exposes named
+accessible widgets + an agent-command bridge, so an AI agent can set parameters,
+run, and read results across the whole app, not just a human.
+
+**Optional interop:** when you specifically want a reference implementation, a
+GPU/ML model (e.g. AlphaFold), or a domain not yet native, Valenx can *also*
+drive external tools through optional adapters — a convenience layer, never a
+requirement. No cloud, no API keys, your data never leaves your machine.
 
 ## Native engines — included, nothing to install
 
@@ -282,7 +287,8 @@ full dev setup.
 
 | | |
 |---|---|
-| Live adapters | **141 fully live** with real prepare/run/collect across CFD / FEA / EM / chemistry / MD / battery / multibody / coupling + a 123-adapter biology stack (structure prediction, alignment, variant calling, single-cell, workflow managers, viewers, cheminformatics, quantum chemistry, protein design, RNA structure, phylogenetics, CRISPR, cryo-EM, microscopy, mRNA design, and more) |
+| Native solvers | **150+ in-house workbenches** across aerospace, CFD/FEA, MD, quantum chemistry, biology, neuro, GR, optics, and CAD/CAM — written from scratch in Rust and **validated against published ground truth** (see [Validation](#validation)) |
+| Optional adapters | **141** external open-source tools *also* integrate (CFD / FEA / MD / chemistry / protein / RNA / CRISPR / cryo-EM / workflows) for reference implementations + GPU-ML models — a convenience layer, not the core |
 | Tests | 10,000+ passing, 0 failed, 0 clippy warnings, 0 rustdoc warnings (workspace-wide) |
 | Workflow loop | load project → click case → Run / Prepare / Open workdir / Run-from-prepared, all live |
 | Sweeps + export | grid / Latin-hypercube / gradient-descent optimisers, materialise → run (sync or threaded) → assemble dataset (csv / npy / npz / manifest.json) |
@@ -373,10 +379,11 @@ Full per-tool status and capability matrix: [STATUS.md](./STATUS.md).
 2. **Open source, dual MIT / Apache-2.0.** Free forever, commercial
    friendly, ecosystem-standard.
 3. **Rust first.** Safe, fast, modern tooling.
-4. **Bundle existing solvers.** Reuse decades of validated physics.
-   Don't rewrite what already works.
-5. **Replace where it matters.** The UX, the integration, the
-   workflow — that's what we build new.
+4. **Native-first.** The core science is our own from-scratch Rust solvers,
+   validated against published ground truth — that's the product, not a wrapper.
+5. **Optional interop, not dependency.** External tools integrate through
+   optional adapters (reference implementations, GPU/ML models, not-yet-native
+   domains) — a convenience layer you reach for only when you want it.
 6. **AI-drivable first.** Every workbench exposes named accessible
    widgets + an agent-command bridge, so AI agents operate the app as
    first-class users — not just humans.
