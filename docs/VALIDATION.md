@@ -1,5 +1,41 @@
 # Validation status — definitive
 
+## Self-validation — `valenx --self-test`
+
+Valenx ships a **headless self-validation harness** — verify the solvers
+yourself in seconds, no GUI required:
+
+```sh
+valenx --self-test                 # every product
+valenx --self-test --group aerospace
+valenx --self-test --id rocket
+```
+
+It builds the app in memory, drives each product's **real** compute path, and
+prints a compact, machine-parseable report — one line per product
+(`id  PASS|FAIL|SKIP  <value or reason>`) plus a summary tally:
+
+```
+— 56 product(s): 53 PASS · 0 FAIL · 3 SKIP
+```
+
+Of the **56 products**:
+
+- **50 deep checks** — each drives the real solver and asserts a known analytic
+  or published value (e.g. the LEO→GEO Hohmann Δv, the hydrogen-atom Kohn–Sham
+  energy, a Hodgkin–Huxley action potential — the same references tabulated
+  elsewhere in this document).
+- **3 generic checks** — the product's panel renders substantive output without
+  panicking.
+- **3 skipped**, each with a documented reason.
+
+The harness **exits non-zero if any check fails**, so it doubles as a CI gate,
+and its line-oriented output is consumable by any **agent, script, or CI job** —
+no human interpretation of a visualization required. The
+`registry_covers_every_template` test enforces 1:1 coverage between the
+self-test registry and the product list, so a newly-added product cannot
+silently escape validation. Source: `crates/valenx-app/src/self_test.rs`.
+
 > **Update (2026-06-12 — ground-truth gap-closure):** a workspace-wide
 > validation-coverage audit confirmed the native solvers are already
 > validated against named external ground truth (Ghia 1982, Szabo–Ostlund,

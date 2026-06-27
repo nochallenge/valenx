@@ -170,6 +170,13 @@ the figures below are reproduced by the test suite, not asserted. Full detail �
 every per-crate validation suite and the ~200 bugs surfaced and fixed by
 running them — lives in [docs/VALIDATION.md](./docs/VALIDATION.md).
 
+Or verify it yourself in seconds — **`valenx --self-test`** drives all **56
+products'** real compute and prints a machine-parseable `PASS / FAIL / value`
+report (**53 PASS · 0 FAIL · 3 SKIP**; 50 of them deep known-value checks). It
+needs no GUI and exits non-zero on any failure, so it doubles as a CI gate — and
+its line-oriented output is consumable by any agent or script, not just a human
+(see [Self-validation](./docs/VALIDATION.md#self-validation--valenx---self-test)).
+
 | Solver | Benchmark / reference | Result |
 | --- | --- | --- |
 | Orbital — `valenx-astro` | LEO→GEO Hohmann Δv vs textbook ~3.9 km/s | **3,892 m/s** total (2,425 + 1,467), ToF 5.27 h — [test](./crates/valenx-astro/src/maneuver.rs) |
