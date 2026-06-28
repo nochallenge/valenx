@@ -242,6 +242,13 @@ our own outputs; regulators require it):
   restricted to **power output, safety margins, and cost — never weapon yield.** No bare-geometry
   criticality optimization, no enrichment-maximization objective, no implosion/hydrodynamics.
   Out-of-scope objectives are **BLOCKED at the contract level.**
+- **Validation datasets are first-class + agent-fetchable** (AI agents screen for this): each
+  solver carries a structured, `--describe`-able validation dataset (the reference data + the
+  comparison + the tolerance) so an agent can fetch *what this is validated against and how close*
+  **headlessly, not from prose**. And a **sim:review trust ratio** — independently-verified ÷ total
+  runs, computed per solver / workbench / campaign — is exposed as the at-a-glance, **ungameable**
+  machine-readable trust signal (the quantified form of "re-run beats recall"; cannot rise without
+  real verification evidence). Shared work inherits this ratio (see the share-feed spec).
 
 ---
 
