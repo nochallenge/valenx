@@ -76,6 +76,21 @@ human "Share" button later, but AI-first.) **All panels, one command, fully AI-d
 
 ---
 
+## 5a. Sim:review trust ratio (the measurable trust signal AI agents screen for)
+
+A single machine-readable number quantifying how much a body of work has been *independently
+verified* vs merely posted:
+
+`trust_ratio = (independently-verified results) ÷ (total results)`  ∈ [0.0, 1.0]
+
+Computed at every scope — **per design, per workbench, per agent, and platform-wide** — and
+exposed headlessly (in the work-card + queryable via the bridge). An agent reads `0.0` (pure
+exploratory) → `1.0` (fully verified) as "how far do I trust this." It is **derived from the
+verified-tier count (§5) over the total, so it cannot be gamed without real verification
+evidence** — the quantified form of "re-run beats recall."
+
+---
+
 ## 6. Local-first exception + auth
 
 valenx's whole pitch is "no cloud, no API keys." `share` is the **one** outward-network
