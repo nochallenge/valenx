@@ -64,6 +64,20 @@ ignore = [
     "RUSTSEC-2025-0057", # unmaintained transitive (fxhash family)
     "RUSTSEC-2025-0058", # unmaintained transitive (bincode family)
     "RUSTSEC-2025-0141", # unmaintained transitive (custom_derive family)
+    # ── New nightly advisories (published ~2026-06-30) against PRE-EXISTING
+    # transitive deps; the code did not change — the advisory DB updated, which is
+    # why only the scheduled/nightly run flags them. quick-xml 0.22.0 (a deep,
+    # pinned transitive of the vendored vtkio VTK parser and others; a newer
+    # quick-xml is also in the tree and is NOT flagged) has two DoS advisories —
+    # both require a maliciously-crafted XML file and are DoS-only. valenx is a
+    # DESKTOP app parsing the user's OWN local files, not untrusted network input,
+    # so the surface is self-inflicted-only. Proper fix = bump the vtkio/quick-xml
+    # line; tracked as a follow-up. ttf-parser 0.25.1 is merely UNMAINTAINED (not a
+    # vulnerability) — a transitive font-parsing dep via egui/eframe (epaint /
+    # egui-wgpu) with no drop-in replacement; drops when egui's font stack updates.
+    "RUSTSEC-2026-0194", # quick-xml — quadratic-time duplicate-attribute check (DoS)
+    "RUSTSEC-2026-0195", # quick-xml — unbounded NsReader namespace alloc (memory DoS)
+    "RUSTSEC-2026-0192", # ttf-parser — unmaintained (not a vulnerability)
 ]
 
 [licenses]
