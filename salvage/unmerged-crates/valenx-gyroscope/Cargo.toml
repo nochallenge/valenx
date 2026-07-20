@@ -1,0 +1,17 @@
+[package]
+name        = "valenx-gyroscope"
+description = "Gyroscopic-couple workbench — textbook rigid-rotor precession (C = I*w*wp), active/reactive couple sense, and ship/aeroplane couple cases, validated against analytic ground truth. Research/educational grade, NOT a clinical or production-certified engineering tool (no tolerances, safety factors, or code compliance)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

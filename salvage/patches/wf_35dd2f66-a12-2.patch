@@ -1,0 +1,30 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..4a8c15ce 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -6965,6 +6965,13 @@ dependencies = [
+  "tracing",
+ ]
+ 
++[[package]]
++name = "valenx-flywheel"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-fonts"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..9f9cb2ee 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -71,6 +71,7 @@ members = [
+     "crates/valenx-symbols",
+     "crates/valenx-frames",
+     "crates/valenx-gears",
++    "crates/valenx-flywheel",
+     "crates/valenx-springs",
+     "crates/valenx-manipulator",
+     "crates/valenx-kicad",

@@ -1,0 +1,19 @@
+[package]
+name        = "valenx-fin"
+description = "Extended-surface (straight fin) heat-transfer core — fin parameter m, efficiency, effectiveness, and tip heat rate from the 1-D constant-area fin equation. Research/educational grade: textbook closed-form models validated against analytic ground truth, NOT a clinical/medical or production-certified engineering tool (no component tolerances, safety factors, fatigue/thermal limits, or code compliance)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+
+[dev-dependencies]
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

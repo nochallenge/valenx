@@ -1,0 +1,32 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..99cf39bc 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -6756,6 +6756,15 @@ dependencies = [
+  "valenx-a11y",
+ ]
+ 
++[[package]]
++name = "valenx-dimensional"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "serde",
++ "serde_json",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-dock"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..0a133774 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -22,6 +22,7 @@ members = [
+     "crates/valenx-icons",
+     "crates/valenx-fonts",
+     "crates/valenx-design-tokens",
++    "crates/valenx-dimensional",
+     "crates/valenx-plugin",
+     "crates/valenx-plugin-sdk",
+     "crates/valenx-optimize",

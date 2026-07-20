@@ -1,0 +1,17 @@
+[package]
+name        = "valenx-rlcresonance"
+description = "Series & parallel RLC resonance: resonant frequency f0 = 1/(2 pi sqrt(LC)), quality factor Q, bandwidth BW = f0/Q, and the underdamped/critical/overdamped regime. Research/educational grade — textbook closed-form models validated against analytic ground truth, NOT a clinical/medical or production-certified engineering tool (no component tolerances, safety factors, fatigue/thermal limits, or code compliance)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

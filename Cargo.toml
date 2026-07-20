@@ -9,6 +9,10 @@
 
 [workspace]
 resolver = "2"
+# `salvage/` holds archived, never-reviewed draft crates rescued from deleted
+# agent worktrees (see salvage/README.md). Excluded so they never take part in
+# a workspace build; copy one into `crates/` and add it to `members` to revive.
+exclude = ["salvage/*"]
 members = [
     # Native shell + canonical types
     "crates/valenx-app",

@@ -1,0 +1,31 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..f4f8662f 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -7730,6 +7730,14 @@ dependencies = [
+  "valenx-mesh",
+ ]
+ 
++[[package]]
++name = "valenx-transformer"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "serde",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-variant-effect"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..33d20d36 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -72,6 +72,7 @@ members = [
+     "crates/valenx-frames",
+     "crates/valenx-gears",
+     "crates/valenx-springs",
++    "crates/valenx-transformer",
+     "crates/valenx-manipulator",
+     "crates/valenx-kicad",
+     "crates/valenx-defeaturing",

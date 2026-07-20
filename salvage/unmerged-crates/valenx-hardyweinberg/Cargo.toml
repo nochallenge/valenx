@@ -1,0 +1,19 @@
+[package]
+name        = "valenx-hardyweinberg"
+description = "Hardy-Weinberg population-genetics calculators: allele frequencies from genotype counts, expected genotype frequencies (p^2, 2pq, q^2), and a chi-square goodness-of-fit test for Hardy-Weinberg equilibrium. Research/educational grade — standard textbook closed-form models validated against analytic ground truth, NOT a clinical/medical or production-certified tool (no safety factors or code compliance)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+
+[dev-dependencies]
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

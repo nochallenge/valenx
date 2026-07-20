@@ -1,0 +1,32 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..c8631771 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -7557,6 +7557,15 @@ dependencies = [
+  "valenx-bioseq",
+ ]
+ 
++[[package]]
++name = "valenx-rootfind"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "serde",
++ "serde_json",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-salome-bridge"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..8a2e89a3 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -25,6 +25,7 @@ members = [
+     "crates/valenx-plugin",
+     "crates/valenx-plugin-sdk",
+     "crates/valenx-optimize",
++    "crates/valenx-rootfind",
+     "crates/valenx-audit",
+     "crates/valenx-rbac",
+     "crates/valenx-sketch",

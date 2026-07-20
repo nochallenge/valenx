@@ -1,0 +1,31 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..da0f094e 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -7539,6 +7539,13 @@ dependencies = [
+  "valenx-mesh-to-brep",
+ ]
+ 
++[[package]]
++name = "valenx-rlcresonance"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-rnadesign"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..a75c07d6 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -123,6 +123,8 @@ members = [
+     "crates/valenx-variant-effect",
+     "crates/valenx-reactdyn",
+ 
++    "crates/valenx-rlcresonance",
++
+     "crates/valenx-test-utils",
+     "crates/valenx-e2e-tests",
+ 

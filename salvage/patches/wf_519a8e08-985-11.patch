@@ -1,0 +1,31 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..ab655b86 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -6714,6 +6714,14 @@ dependencies = [
+  "valenx-core",
+ ]
+ 
++[[package]]
++name = "valenx-creep"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "serde",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-curves"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..5722ca4a 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -72,6 +72,7 @@ members = [
+     "crates/valenx-frames",
+     "crates/valenx-gears",
+     "crates/valenx-springs",
++    "crates/valenx-creep",
+     "crates/valenx-manipulator",
+     "crates/valenx-kicad",
+     "crates/valenx-defeaturing",

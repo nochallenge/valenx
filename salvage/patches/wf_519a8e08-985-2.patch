@@ -1,0 +1,33 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..58e15a25 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -7348,6 +7348,14 @@ dependencies = [
+  "valenx-cad",
+ ]
+ 
++[[package]]
++name = "valenx-optics"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "serde",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-optimize"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..7cb3a20d 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -123,6 +123,9 @@ members = [
+     "crates/valenx-variant-effect",
+     "crates/valenx-reactdyn",
+ 
++    # Geometric optics
++    "crates/valenx-optics",
++
+     "crates/valenx-test-utils",
+     "crates/valenx-e2e-tests",
+ 

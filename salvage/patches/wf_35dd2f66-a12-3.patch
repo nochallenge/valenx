@@ -1,0 +1,30 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..a8ea75ac 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -7045,6 +7045,13 @@ dependencies = [
+  "valenx-mesh",
+ ]
+ 
++[[package]]
++name = "valenx-gyroscope"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-heekscad"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..0a9e29fb 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -71,6 +71,7 @@ members = [
+     "crates/valenx-symbols",
+     "crates/valenx-frames",
+     "crates/valenx-gears",
++    "crates/valenx-gyroscope",
+     "crates/valenx-springs",
+     "crates/valenx-manipulator",
+     "crates/valenx-kicad",

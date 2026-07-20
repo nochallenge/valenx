@@ -1,0 +1,32 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..6aa7334a 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -7510,6 +7510,15 @@ dependencies = [
+  "valenx-mesh",
+ ]
+ 
++[[package]]
++name = "valenx-reliability"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "serde",
++ "serde_json",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-render-bridge"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..5adca979 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -72,6 +72,7 @@ members = [
+     "crates/valenx-frames",
+     "crates/valenx-gears",
+     "crates/valenx-springs",
++    "crates/valenx-reliability",
+     "crates/valenx-manipulator",
+     "crates/valenx-kicad",
+     "crates/valenx-defeaturing",

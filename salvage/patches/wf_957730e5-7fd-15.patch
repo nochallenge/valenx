@@ -1,0 +1,33 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..01d4f5fd 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -7749,6 +7749,15 @@ dependencies = [
+  "thiserror 2.0.18",
+ ]
+ 
++[[package]]
++name = "valenx-vibration"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "serde",
++ "serde_json",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-viz"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..c1abddcb 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -123,6 +123,8 @@ members = [
+     "crates/valenx-variant-effect",
+     "crates/valenx-reactdyn",
+ 
++    "crates/valenx-vibration",
++
+     "crates/valenx-test-utils",
+     "crates/valenx-e2e-tests",
+ 

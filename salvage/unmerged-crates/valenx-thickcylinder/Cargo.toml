@@ -1,0 +1,17 @@
+[package]
+name        = "valenx-thickcylinder"
+description = "Lame thick-walled-cylinder stress solver (hoop/radial sigma = A +/- B/r^2 under internal/external pressure, thin-wall limit recovery). Research/educational grade: textbook closed-form elasticity validated against analytic ground truth, NOT a production-certified pressure-vessel design tool (no tolerances, safety factors, fatigue/thermal limits, or code compliance)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

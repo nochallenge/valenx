@@ -1,0 +1,17 @@
+[package]
+name        = "valenx-radiation"
+description = "Thermal-radiation primitives for Valenx: Stefan-Boltzmann emissive power Eb = sigma T^4, gray-body net exchange Q = eps sigma A (T1^4 - T2^4), and two-surface view-factor exchange with reciprocity A1 F12 = A2 F21. Research/educational grade — standard textbook closed-form models validated against analytic ground truth, NOT a clinical or production-certified engineering tool (no tolerances, safety factors, fatigue/thermal limits, or code compliance)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

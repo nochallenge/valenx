@@ -1,0 +1,32 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..71e79757 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -7565,6 +7565,15 @@ dependencies = [
+  "thiserror 2.0.18",
+ ]
+ 
++[[package]]
++name = "valenx-shaftdesign"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "serde",
++ "serde_json",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-sheet-metal"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..e91fa16f 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -72,6 +72,7 @@ members = [
+     "crates/valenx-frames",
+     "crates/valenx-gears",
+     "crates/valenx-springs",
++    "crates/valenx-shaftdesign",
+     "crates/valenx-manipulator",
+     "crates/valenx-kicad",
+     "crates/valenx-defeaturing",

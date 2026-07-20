@@ -1,0 +1,32 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..0e56e7ef 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -7499,6 +7499,15 @@ dependencies = [
+  "valenx-qchem",
+ ]
+ 
++[[package]]
++name = "valenx-regression"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "nalgebra",
++ "serde",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-reinforcement"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..6a34a66e 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -63,6 +63,7 @@ members = [
+     "crates/valenx-cfd-native",
+     "crates/valenx-aero",
+     "crates/valenx-plot",
++    "crates/valenx-regression",
+     "crates/valenx-meshpart",
+     "crates/valenx-reinforcement",
+     "crates/valenx-sheet-metal",

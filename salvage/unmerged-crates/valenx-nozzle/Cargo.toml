@@ -1,0 +1,17 @@
+[package]
+name        = "valenx-nozzle"
+description = "Isentropic compressible flow in a converging-diverging nozzle: area-Mach relation A/A*, the T0/T, p0/p and rho0/rho stagnation ratios, choked-flow mass parameter, and the sub/supersonic area-Mach inversion. Research/educational grade — standard textbook closed-form models validated against analytic ground truth, NOT a production-certified engineering tool (no tolerances, safety factors, or thermal/structural limits)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

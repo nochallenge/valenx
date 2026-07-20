@@ -1,0 +1,17 @@
+[package]
+name        = "valenx-doseresponse"
+description = "Closed-form pharmacology dose-response models: the Hill equation E = Emax*C^n/(EC50^n + C^n), its inverse, pEC50, single-site occupancy, and ECx / slope / dynamic-range metrics. Research/educational grade — textbook models validated against analytic ground truth, NOT a clinical/medical or production-certified tool (no dosing, PK/ADME, safety margins, or regulatory fitting)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

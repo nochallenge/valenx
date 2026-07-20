@@ -1,0 +1,32 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..e17b1b7d 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -7127,6 +7127,15 @@ dependencies = [
+  "valenx-surface",
+ ]
+ 
++[[package]]
++name = "valenx-led"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "serde",
++ "serde_json",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-libigl-port"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..d4ba97b5 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -74,6 +74,7 @@ members = [
+     "crates/valenx-springs",
+     "crates/valenx-manipulator",
+     "crates/valenx-kicad",
++    "crates/valenx-led",
+     "crates/valenx-defeaturing",
+     "crates/valenx-collision",
+     "crates/valenx-openscad-import",

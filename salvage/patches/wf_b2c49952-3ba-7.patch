@@ -1,0 +1,32 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..1d725c02 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -7525,6 +7525,15 @@ dependencies = [
+  "valenx-mesh",
+ ]
+ 
++[[package]]
++name = "valenx-retainingwall"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "serde",
++ "serde_json",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-reverse"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..a9dd2885 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -72,6 +72,7 @@ members = [
+     "crates/valenx-frames",
+     "crates/valenx-gears",
+     "crates/valenx-springs",
++    "crates/valenx-retainingwall",
+     "crates/valenx-manipulator",
+     "crates/valenx-kicad",
+     "crates/valenx-defeaturing",

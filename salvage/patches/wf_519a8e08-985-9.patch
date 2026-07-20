@@ -1,0 +1,31 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..a0d10f83 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -4018,6 +4018,14 @@ dependencies = [
+  "serde_json",
+ ]
+ 
++[[package]]
++name = "valenx-acidbase"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "serde",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-adapter-alphafold2"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..0f70ab7f 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -122,6 +122,7 @@ members = [
+     "crates/valenx-rnadesign",
+     "crates/valenx-variant-effect",
+     "crates/valenx-reactdyn",
++    "crates/valenx-acidbase",
+ 
+     "crates/valenx-test-utils",
+     "crates/valenx-e2e-tests",

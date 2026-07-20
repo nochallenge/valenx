@@ -1,0 +1,32 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..3cb477b4 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -7499,6 +7499,15 @@ dependencies = [
+  "valenx-qchem",
+ ]
+ 
++[[package]]
++name = "valenx-regnet"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "serde",
++ "serde_json",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-reinforcement"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..084754cc 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -122,6 +122,7 @@ members = [
+     "crates/valenx-rnadesign",
+     "crates/valenx-variant-effect",
+     "crates/valenx-reactdyn",
++    "crates/valenx-regnet",
+ 
+     "crates/valenx-test-utils",
+     "crates/valenx-e2e-tests",

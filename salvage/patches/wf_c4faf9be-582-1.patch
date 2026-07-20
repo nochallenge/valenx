@@ -1,0 +1,31 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..7917d84b 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -6840,6 +6840,14 @@ dependencies = [
+  "valenx-test-utils",
+ ]
+ 
++[[package]]
++name = "valenx-endurance"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "serde",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-executor-slurm"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..5aeab735 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -122,6 +122,7 @@ members = [
+     "crates/valenx-rnadesign",
+     "crates/valenx-variant-effect",
+     "crates/valenx-reactdyn",
++    "crates/valenx-endurance",
+ 
+     "crates/valenx-test-utils",
+     "crates/valenx-e2e-tests",

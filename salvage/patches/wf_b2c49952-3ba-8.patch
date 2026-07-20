@@ -1,0 +1,32 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..70c733c7 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -7760,6 +7760,15 @@ dependencies = [
+  "tracing",
+ ]
+ 
++[[package]]
++name = "valenx-weir"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "serde",
++ "serde_json",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valuable"
+ version = "0.1.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..b19b2215 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -82,6 +82,7 @@ members = [
+     "crates/valenx-threads-pro",
+     "crates/valenx-piping",
+     "crates/valenx-hvac",
++    "crates/valenx-weir",
+     "crates/valenx-print-bed",
+     "crates/valenx-openscad",
+     "crates/valenx-solvespace-3d",

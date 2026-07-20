@@ -1,0 +1,32 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..e1b15159 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -7399,6 +7399,15 @@ dependencies = [
+  "valenx-bioseq",
+ ]
+ 
++[[package]]
++name = "valenx-pipenetwork"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "nalgebra",
++ "serde",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-piping"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..560b38bd 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -82,6 +82,7 @@ members = [
+     "crates/valenx-threads-pro",
+     "crates/valenx-piping",
+     "crates/valenx-hvac",
++    "crates/valenx-pipenetwork",
+     "crates/valenx-print-bed",
+     "crates/valenx-openscad",
+     "crates/valenx-solvespace-3d",

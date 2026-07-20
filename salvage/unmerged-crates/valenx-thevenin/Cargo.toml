@@ -1,0 +1,17 @@
+[package]
+name        = "valenx-thevenin"
+description = "Thevenin/Norton equivalent networks and maximum power transfer (Vth, Rth, In = Vth/Rth, P_max = Vth^2/(4 Rth) at R_load = Rth) — research/educational grade, textbook closed-form DC circuit models validated against analytic ground truth, NOT a clinical/medical or production-certified engineering tool (no component tolerances, safety factors, fatigue/thermal limits, or code compliance)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

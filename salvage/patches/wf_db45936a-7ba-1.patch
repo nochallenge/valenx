@@ -1,0 +1,2020 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..4dffc930 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -28,6 +28,16 @@ version = "0.1.10"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "366ffbaa4442f4684d91e2cd7c5ea7c4ed8add41959a31447066e279e432b618"
+ 
++[[package]]
++name = "accesskit"
++version = "0.12.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "74a4b14f3d99c1255dcba8f45621ab1a2e7540a0009652d33989005a4d0bfc6b"
++dependencies = [
++ "enumn",
++ "serde",
++]
++
+ [[package]]
+ name = "adler2"
+ version = "2.0.1"
+@@ -43,6 +53,7 @@ dependencies = [
+  "cfg-if",
+  "getrandom 0.3.4",
+  "once_cell",
++ "serde",
+  "version_check",
+  "zerocopy",
+ ]
+@@ -899,6 +910,7 @@ checksum = "2e6b451ff1143f6de0f33fc7f1b68fecfd2c7de06e104de96c4514de3f5396f8"
+ dependencies = [
+  "bytemuck",
+  "emath",
++ "serde",
+ ]
+ 
+ [[package]]
+@@ -940,11 +952,13 @@ version = "0.28.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "20c97e70a2768de630f161bb5392cbd3874fcf72868f14df0e002e82e06cb798"
+ dependencies = [
++ "accesskit",
+  "ahash",
+  "emath",
+  "epaint",
+  "log",
+  "nohash-hasher",
++ "serde",
+ ]
+ 
+ [[package]]
+@@ -1011,6 +1025,19 @@ dependencies = [
+  "emath",
+ ]
+ 
++[[package]]
++name = "egui_tiles"
++version = "0.9.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "9ec2e18c8665b7aaccfb560e383d08bfbce9cb905e055417f6bb0ecd63056561"
++dependencies = [
++ "ahash",
++ "egui",
++ "itertools 0.13.0",
++ "log",
++ "serde",
++]
++
+ [[package]]
+ name = "either"
+ version = "1.15.0"
+@@ -1024,6 +1051,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "0a6a21708405ea88f63d8309650b4d77431f4bc28fb9d8e6f77d3963b51249e6"
+ dependencies = [
+  "bytemuck",
++ "serde",
+ ]
+ 
+ [[package]]
+@@ -1067,6 +1095,17 @@ dependencies = [
+  "syn 2.0.117",
+ ]
+ 
++[[package]]
++name = "enumn"
++version = "0.1.14"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "2f9ed6b3789237c8a0c1c505af1c7eb2c560df6186f01b098c3a1064ea532f38"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "syn 2.0.117",
++]
++
+ [[package]]
+ name = "epaint"
+ version = "0.28.1"
+@@ -1081,6 +1120,7 @@ dependencies = [
+  "log",
+  "nohash-hasher",
+  "parking_lot",
++ "serde",
+ ]
+ 
+ [[package]]
+@@ -6298,6 +6338,7 @@ dependencies = [
+  "eframe",
+  "egui",
+  "egui_plot",
++ "egui_tiles",
+  "embed-resource",
+  "naga",
+  "nalgebra",
+diff --git a/crates/valenx-app/Cargo.toml b/crates/valenx-app/Cargo.toml
+index cc75d025..f0dc8998 100644
+--- a/crates/valenx-app/Cargo.toml
++++ b/crates/valenx-app/Cargo.toml
+@@ -470,6 +470,7 @@ valenx-i18n                = { path = "../valenx-i18n" }
+ # USER=admin@example.com` and bypass both. License is
+ # Apache-2.0 OR BSL-1.0 OR MIT (all in deny.toml allow-list).
+ whoami = "2.1.1"
++egui_tiles = "0.9"
+ 
+ [dev-dependencies]
+ # Used by the run-orchestration unit test's dummy adapter.
+diff --git a/crates/valenx-app/src/aero_workbench.rs b/crates/valenx-app/src/aero_workbench.rs
+index 6feb8e31..03c10ff7 100644
+--- a/crates/valenx-app/src/aero_workbench.rs
++++ b/crates/valenx-app/src/aero_workbench.rs
+@@ -108,9 +108,13 @@ impl AeroWorkbenchState {
+         }
+     }
+     /// `true` if Ctrl+Z would change the form state.
+-    pub fn can_undo(&self) -> bool { self.history.can_undo() }
++    pub fn can_undo(&self) -> bool {
++        self.history.can_undo()
++    }
+     /// `true` if Ctrl+Y would change the form state.
+-    pub fn can_redo(&self) -> bool { self.history.can_redo() }
++    pub fn can_redo(&self) -> bool {
++        self.history.can_redo()
++    }
+ }
+ 
+ /// Draw the Aerodynamics / Wind Tunnel right-side panel.
+@@ -134,48 +138,67 @@ pub fn draw_aero_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
+         .default_width(400.0)
+         .width_range(330.0..=680.0)
+         .show(ctx, |ui| {
+-            ui.horizontal(|ui| {
+-                ui.heading("Wind Tunnel");
+-            });
+-            ui.label(
+-                egui::RichText::new(
+-                    "Virtual wind tunnel — 3-D external-aerodynamics CFD",
+-                )
+-                .weak()
+-                .small(),
+-            );
+-            ui.label(
+-                egui::RichText::new("backed by `valenx-aero`")
+-                    .weak()
+-                    .small(),
+-            );
+-            ui.separator();
++            aero_workbench_body(app, ui);
++        });
++}
+ 
+-            // Fade-in animation on workbench open — when the user
+-            // toggles the workbench on via Ctrl+3 / View → Wind Tunnel
+-            // the panel body fades in over 0.18 s rather than popping
+-            // in instantly. The animation auto-resets when the panel
+-            // closes.
+-            let anim_id = egui::Id::new("valenx_aero_workbench_open");
+-            let t = ctx.animate_bool_with_time(anim_id, true, 0.18);
+-            egui::ScrollArea::vertical()
+-                .auto_shrink([false, false])
+-                .show(ui, |ui| {
+-                    ui.scope(|ui| {
+-                        ui.set_opacity(t.clamp(0.0, 1.0));
+-                        panels::draw_body_section(app, ui);
+-                        panels::draw_wind_section(app, ui);
+-                        panels::draw_ground_section(app, ui);
+-                        panels::draw_tunnel_section(app, ui);
+-                        panels::draw_solver_section(app, ui);
+-                        panels::draw_run_section(app, ui);
+-                        panels::draw_results_section(app, ui);
+-                        panels::draw_visualization_section(app, ui);
+-                    });
+-                });
++/// Render the Wind Tunnel workbench body (heading + fade-in scrollable
++/// sections) into an existing [`egui::Ui`]. Shared by the classic
++/// right-side [`draw_aero_workbench`] SidePanel and the docked-layout
++/// tile in [`crate::docking`].
++///
++/// NB: the background-run pump (`pump_aero_run`) is NOT called here — the
++/// classic path runs it in [`draw_aero_workbench`] before drawing, and
++/// the docked-layout path runs it once per frame (via
++/// [`pump_aero_run_external`]) before the tile tree is rendered. Keeping
++/// it out of the body avoids polling the channel twice in one frame.
++pub fn aero_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
++    ui.horizontal(|ui| {
++        ui.heading("Wind Tunnel");
++    });
++    ui.label(
++        egui::RichText::new("Virtual wind tunnel — 3-D external-aerodynamics CFD")
++            .weak()
++            .small(),
++    );
++    ui.label(
++        egui::RichText::new("backed by `valenx-aero`")
++            .weak()
++            .small(),
++    );
++    ui.separator();
++
++    // Fade-in animation on workbench open — when the user
++    // toggles the workbench on via Ctrl+3 / View → Wind Tunnel
++    // the panel body fades in over 0.18 s rather than popping
++    // in instantly. The animation auto-resets when the panel
++    // closes.
++    let anim_id = egui::Id::new("valenx_aero_workbench_open");
++    let t = ui.ctx().animate_bool_with_time(anim_id, true, 0.18);
++    egui::ScrollArea::vertical()
++        .auto_shrink([false, false])
++        .show(ui, |ui| {
++            ui.scope(|ui| {
++                ui.set_opacity(t.clamp(0.0, 1.0));
++                panels::draw_body_section(app, ui);
++                panels::draw_wind_section(app, ui);
++                panels::draw_ground_section(app, ui);
++                panels::draw_tunnel_section(app, ui);
++                panels::draw_solver_section(app, ui);
++                panels::draw_run_section(app, ui);
++                panels::draw_results_section(app, ui);
++                panels::draw_visualization_section(app, ui);
++            });
+         });
+ }
+ 
++/// Poll the background wind-tunnel run from outside the workbench (used by
++/// the docked layout, which pumps once per frame before rendering the
++/// tile tree). Thin public wrapper over the module-private pump.
++pub fn pump_aero_run_external(app: &mut ValenxApp, ctx: &egui::Context) {
++    pump_aero_run(app, ctx);
++}
++
+ /// Poll the background wind-tunnel run: drain progress messages into
+ /// the live plots, and on completion move the result into the
+ /// workbench state.
+@@ -236,8 +259,7 @@ fn pump_aero_run(app: &mut ValenxApp, ctx: &egui::Context) {
+                 app.aero.last_polar = None;
+             }
+             AeroOutcome::Sweep(curve) => {
+-                app.aero.status =
+-                    format!("Sweep complete — {} angles", curve.points.len());
++                app.aero.status = format!("Sweep complete — {} angles", curve.points.len());
+                 app.aero.last_polar = Some(PolarSweepResult { curve: *curve });
+                 app.aero.last_result = None;
+                 app.aero.last_report = None;
+diff --git a/crates/valenx-app/src/astro_workbench.rs b/crates/valenx-app/src/astro_workbench.rs
+index 3adec508..5b1034ef 100644
+--- a/crates/valenx-app/src/astro_workbench.rs
++++ b/crates/valenx-app/src/astro_workbench.rs
+@@ -116,47 +116,55 @@ pub fn draw_astro_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
+         .default_width(400.0)
+         .width_range(330.0..=680.0)
+         .show(ctx, |ui| {
+-            ui.horizontal(|ui| {
+-                ui.heading("Astro / Launch");
+-            });
+-            ui.label(
+-                egui::RichText::new("Launch-vehicle ascent + trajectory simulator")
+-                    .weak()
+-                    .small(),
+-            );
+-            ui.label(
+-                egui::RichText::new("backed by `valenx-astro`")
+-                    .weak()
+-                    .small(),
+-            );
+-            ui.separator();
++            astro_workbench_body(app, ui);
++        });
++}
+ 
+-            // Fade-in animation on workbench open — when the user toggles
+-            // the workbench on via Ctrl+4 / View → Astro / Launch the
+-            // panel body fades in over 0.18 s rather than popping in
+-            // instantly. The animation auto-resets when the panel closes
+-            // (matches the wind tunnel).
+-            let anim_id = egui::Id::new("valenx_astro_workbench_open");
+-            let t = ctx.animate_bool_with_time(anim_id, true, 0.18);
+-            egui::ScrollArea::vertical()
+-                .auto_shrink([false, false])
+-                .show(ui, |ui| {
+-                    ui.scope(|ui| {
+-                        ui.set_opacity(t.clamp(0.0, 1.0));
+-                        panels::draw_tab_selector(app, ui);
+-                        match app.astro.tab {
+-                            AstroTab::Ascent => {
+-                                panels::draw_vehicle_section(app, ui);
+-                                panels::draw_guidance_section(app, ui);
+-                                panels::draw_run_section(app, ui);
+-                                panels::draw_results_section(app, ui);
+-                            }
+-                            AstroTab::Planners => {
+-                                panels::draw_planners_section(app, ui);
+-                            }
+-                        }
+-                    });
+-                });
++/// Render the Astro / Launch workbench body (heading + tabbed, fade-in
++/// scrollable form) into an existing [`egui::Ui`]. Shared by the classic
++/// right-side [`draw_astro_workbench`] SidePanel and the docked-layout
++/// tile in [`crate::docking`].
++pub fn astro_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
++    ui.horizontal(|ui| {
++        ui.heading("Astro / Launch");
++    });
++    ui.label(
++        egui::RichText::new("Launch-vehicle ascent + trajectory simulator")
++            .weak()
++            .small(),
++    );
++    ui.label(
++        egui::RichText::new("backed by `valenx-astro`")
++            .weak()
++            .small(),
++    );
++    ui.separator();
++
++    // Fade-in animation on workbench open — when the user toggles
++    // the workbench on via Ctrl+4 / View → Astro / Launch the
++    // panel body fades in over 0.18 s rather than popping in
++    // instantly. The animation auto-resets when the panel closes
++    // (matches the wind tunnel).
++    let anim_id = egui::Id::new("valenx_astro_workbench_open");
++    let t = ui.ctx().animate_bool_with_time(anim_id, true, 0.18);
++    egui::ScrollArea::vertical()
++        .auto_shrink([false, false])
++        .show(ui, |ui| {
++            ui.scope(|ui| {
++                ui.set_opacity(t.clamp(0.0, 1.0));
++                panels::draw_tab_selector(app, ui);
++                match app.astro.tab {
++                    AstroTab::Ascent => {
++                        panels::draw_vehicle_section(app, ui);
++                        panels::draw_guidance_section(app, ui);
++                        panels::draw_run_section(app, ui);
++                        panels::draw_results_section(app, ui);
++                    }
++                    AstroTab::Planners => {
++                        panels::draw_planners_section(app, ui);
++                    }
++                }
++            });
+         });
+ }
+ 
+diff --git a/crates/valenx-app/src/cfd_workbench.rs b/crates/valenx-app/src/cfd_workbench.rs
+index 7a7ca0aa..cea2a2b1 100644
+--- a/crates/valenx-app/src/cfd_workbench.rs
++++ b/crates/valenx-app/src/cfd_workbench.rs
+@@ -98,96 +98,106 @@ pub fn draw_cfd_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
+         .default_width(360.0)
+         .width_range(300.0..=560.0)
+         .show(ctx, |ui| {
+-            ui.heading("CFD Workbench");
+-            ui.label(
+-                egui::RichText::new("native 2-D incompressible CFD · valenx-cfd-native")
+-                    .weak()
+-                    .small(),
+-            );
+-            ui.separator();
+-            let s = &mut app.cfd;
+-            egui::ScrollArea::vertical()
+-                .auto_shrink([false, false])
+-                .show(ui, |ui| {
+-                    ui.label(egui::RichText::new("Case").strong());
+-                    ui.horizontal(|ui| {
+-                        ui.radio_value(&mut s.case, CfdCase::LidDrivenCavity, "Lid-driven cavity")
+-                            .on_hover_text("Square cavity, sliding top lid — the recirculation benchmark.");
+-                        ui.radio_value(&mut s.case, CfdCase::ChannelFlow, "Channel flow")
+-                            .on_hover_text("Uniform inlet developing a parabolic profile.");
+-                    });
++            cfd_workbench_body(app, ui);
++        });
++}
+ 
+-                    ui.add_space(4.0);
+-                    ui.label(egui::RichText::new("Grid — staggered finite volume").strong());
+-                    ui.horizontal(|ui| {
+-                        ui.label("nx");
+-                        ui.add(egui::DragValue::new(&mut s.nx).speed(0.5));
+-                        ui.label("ny");
+-                        ui.add(egui::DragValue::new(&mut s.ny).speed(0.5));
+-                    });
+-                    ui.horizontal(|ui| {
+-                        ui.label("Lx");
+-                        ui.add(egui::DragValue::new(&mut s.lx).speed(0.05));
+-                        ui.label("Ly");
+-                        ui.add(egui::DragValue::new(&mut s.ly).speed(0.05));
+-                    });
++/// Render the CFD Workbench body (heading + scrollable form) into an
++/// existing [`egui::Ui`]. Shared by the classic right-side
++/// [`draw_cfd_workbench`] SidePanel and the docked-layout tile in
++/// [`crate::docking`], so both render the identical content.
++pub fn cfd_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
++    ui.heading("CFD Workbench");
++    ui.label(
++        egui::RichText::new("native 2-D incompressible CFD · valenx-cfd-native")
++            .weak()
++            .small(),
++    );
++    ui.separator();
++    let s = &mut app.cfd;
++    egui::ScrollArea::vertical()
++        .auto_shrink([false, false])
++        .show(ui, |ui| {
++            ui.label(egui::RichText::new("Case").strong());
++            ui.horizontal(|ui| {
++                ui.radio_value(&mut s.case, CfdCase::LidDrivenCavity, "Lid-driven cavity")
++                    .on_hover_text("Square cavity, sliding top lid — the recirculation benchmark.");
++                ui.radio_value(&mut s.case, CfdCase::ChannelFlow, "Channel flow")
++                    .on_hover_text("Uniform inlet developing a parabolic profile.");
++            });
++
++            ui.add_space(4.0);
++            ui.label(egui::RichText::new("Grid — staggered finite volume").strong());
++            ui.horizontal(|ui| {
++                ui.label("nx");
++                ui.add(egui::DragValue::new(&mut s.nx).speed(0.5));
++                ui.label("ny");
++                ui.add(egui::DragValue::new(&mut s.ny).speed(0.5));
++            });
++            ui.horizontal(|ui| {
++                ui.label("Lx");
++                ui.add(egui::DragValue::new(&mut s.lx).speed(0.05));
++                ui.label("Ly");
++                ui.add(egui::DragValue::new(&mut s.ly).speed(0.05));
++            });
+ 
+-                    ui.add_space(4.0);
+-                    ui.label(egui::RichText::new("Fluid").strong());
+-                    ui.horizontal(|ui| {
+-                        ui.label("density ρ (kg/m³)");
+-                        ui.add(egui::DragValue::new(&mut s.density).speed(0.1));
+-                    });
+-                    ui.horizontal(|ui| {
+-                        ui.label("kinematic ν (m²/s)");
+-                        ui.add(egui::DragValue::new(&mut s.viscosity).speed(0.001));
+-                    });
+-                    let drive = match s.case {
+-                        CfdCase::LidDrivenCavity => "lid speed U (m/s)",
+-                        CfdCase::ChannelFlow => "inlet speed U (m/s)",
+-                    };
+-                    ui.horizontal(|ui| {
+-                        ui.label(drive);
+-                        ui.add(egui::DragValue::new(&mut s.speed).speed(0.05));
+-                    });
+-                    if s.viscosity > 0.0 {
+-                        let re = s.speed.abs() * characteristic_length(s) / s.viscosity;
+-                        ui.label(
+-                            egui::RichText::new(format!("Reynolds number ≈ {re:.1}"))
+-                                .weak()
+-                                .small(),
+-                        );
+-                    }
++            ui.add_space(4.0);
++            ui.label(egui::RichText::new("Fluid").strong());
++            ui.horizontal(|ui| {
++                ui.label("density ρ (kg/m³)");
++                ui.add(egui::DragValue::new(&mut s.density).speed(0.1));
++            });
++            ui.horizontal(|ui| {
++                ui.label("kinematic ν (m²/s)");
++                ui.add(egui::DragValue::new(&mut s.viscosity).speed(0.001));
++            });
++            let drive = match s.case {
++                CfdCase::LidDrivenCavity => "lid speed U (m/s)",
++                CfdCase::ChannelFlow => "inlet speed U (m/s)",
++            };
++            ui.horizontal(|ui| {
++                ui.label(drive);
++                ui.add(egui::DragValue::new(&mut s.speed).speed(0.05));
++            });
++            if s.viscosity > 0.0 {
++                let re = s.speed.abs() * characteristic_length(s) / s.viscosity;
++                ui.label(
++                    egui::RichText::new(format!("Reynolds number ≈ {re:.1}"))
++                        .weak()
++                        .small(),
++                );
++            }
+ 
+-                    ui.add_space(4.0);
+-                    ui.horizontal(|ui| {
+-                        ui.label("max SIMPLE iterations");
+-                        ui.add(egui::DragValue::new(&mut s.max_iterations).speed(5.0));
+-                    });
+-                    ui.label(
+-                        egui::RichText::new("Solve runs synchronously — a finer grid or more iterations takes longer.")
+-                            .weak()
+-                            .small(),
+-                    );
++            ui.add_space(4.0);
++            ui.horizontal(|ui| {
++                ui.label("max SIMPLE iterations");
++                ui.add(egui::DragValue::new(&mut s.max_iterations).speed(5.0));
++            });
++            ui.label(
++                egui::RichText::new(
++                    "Solve runs synchronously — a finer grid or more iterations takes longer.",
++                )
++                .weak()
++                .small(),
++            );
+ 
+-                    ui.add_space(6.0);
+-                    if ui
+-                        .button(egui::RichText::new("▶ Solve flow").strong())
+-                        .clicked()
+-                    {
+-                        run_cfd(s);
+-                    }
++            ui.add_space(6.0);
++            if ui
++                .button(egui::RichText::new("▶ Solve flow").strong())
++                .clicked()
++            {
++                run_cfd(s);
++            }
+ 
+-                    if let Some(e) = &s.error {
+-                        ui.add_space(4.0);
+-                        ui.colored_label(egui::Color32::from_rgb(220, 90, 90), e);
+-                    }
+-                    if !s.result.is_empty() {
+-                        ui.separator();
+-                        ui.label(egui::RichText::new("Result").strong());
+-                        ui.label(egui::RichText::new(&s.result).monospace());
+-                    }
+-                });
++            if let Some(e) = &s.error {
++                ui.add_space(4.0);
++                ui.colored_label(egui::Color32::from_rgb(220, 90, 90), e);
++            }
++            if !s.result.is_empty() {
++                ui.separator();
++                ui.label(egui::RichText::new("Result").strong());
++                ui.label(egui::RichText::new(&s.result).monospace());
++            }
+         });
+ }
+ 
+diff --git a/crates/valenx-app/src/fem_workbench.rs b/crates/valenx-app/src/fem_workbench.rs
+index 2b6a7be1..b276f87c 100644
+--- a/crates/valenx-app/src/fem_workbench.rs
++++ b/crates/valenx-app/src/fem_workbench.rs
+@@ -86,98 +86,106 @@ pub fn draw_fem_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
+         .default_width(360.0)
+         .width_range(300.0..=560.0)
+         .show(ctx, |ui| {
+-            ui.heading("FEM Workbench");
+-            ui.label(
+-                egui::RichText::new("native finite-element analysis · valenx-fem")
+-                    .weak()
+-                    .small(),
+-            );
+-            ui.separator();
+-            let s = &mut app.fem;
+-            egui::ScrollArea::vertical()
+-                .auto_shrink([false, false])
+-                .show(ui, |ui| {
+-                    ui.label(egui::RichText::new("Geometry — structured box mesh (m)").strong());
+-                    ui.horizontal(|ui| {
+-                        ui.label("Lx");
+-                        ui.add(egui::DragValue::new(&mut s.lx).speed(0.05));
+-                        ui.label("Ly");
+-                        ui.add(egui::DragValue::new(&mut s.ly).speed(0.01));
+-                        ui.label("Lz");
+-                        ui.add(egui::DragValue::new(&mut s.lz).speed(0.01));
+-                    });
+-                    ui.horizontal(|ui| {
+-                        ui.label("nx");
+-                        ui.add(egui::DragValue::new(&mut s.nx).speed(0.2));
+-                        ui.label("ny");
+-                        ui.add(egui::DragValue::new(&mut s.ny).speed(0.2));
+-                        ui.label("nz");
+-                        ui.add(egui::DragValue::new(&mut s.nz).speed(0.2));
+-                    });
++            fem_workbench_body(app, ui);
++        });
++}
+ 
+-                    ui.add_space(4.0);
+-                    ui.label(egui::RichText::new("Material").strong());
+-                    ui.horizontal(|ui| {
+-                        ui.label("E (GPa)");
+-                        ui.add(egui::DragValue::new(&mut s.youngs_gpa).speed(1.0));
+-                    });
+-                    ui.horizontal(|ui| {
+-                        ui.label("Poisson ν");
+-                        ui.add(egui::DragValue::new(&mut s.poisson).speed(0.005));
+-                    });
++/// Render the FEM Workbench body (heading + scrollable form) into an
++/// existing [`egui::Ui`]. Shared by the classic right-side
++/// [`draw_fem_workbench`] SidePanel and the docked-layout tile in
++/// [`crate::docking`], so both render the identical content.
++pub fn fem_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
++    ui.heading("FEM Workbench");
++    ui.label(
++        egui::RichText::new("native finite-element analysis · valenx-fem")
++            .weak()
++            .small(),
++    );
++    ui.separator();
++    let s = &mut app.fem;
++    egui::ScrollArea::vertical()
++        .auto_shrink([false, false])
++        .show(ui, |ui| {
++            ui.label(egui::RichText::new("Geometry — structured box mesh (m)").strong());
++            ui.horizontal(|ui| {
++                ui.label("Lx");
++                ui.add(egui::DragValue::new(&mut s.lx).speed(0.05));
++                ui.label("Ly");
++                ui.add(egui::DragValue::new(&mut s.ly).speed(0.01));
++                ui.label("Lz");
++                ui.add(egui::DragValue::new(&mut s.lz).speed(0.01));
++            });
++            ui.horizontal(|ui| {
++                ui.label("nx");
++                ui.add(egui::DragValue::new(&mut s.nx).speed(0.2));
++                ui.label("ny");
++                ui.add(egui::DragValue::new(&mut s.ny).speed(0.2));
++                ui.label("nz");
++                ui.add(egui::DragValue::new(&mut s.nz).speed(0.2));
++            });
++
++            ui.add_space(4.0);
++            ui.label(egui::RichText::new("Material").strong());
++            ui.horizontal(|ui| {
++                ui.label("E (GPa)");
++                ui.add(egui::DragValue::new(&mut s.youngs_gpa).speed(1.0));
++            });
++            ui.horizontal(|ui| {
++                ui.label("Poisson ν");
++                ui.add(egui::DragValue::new(&mut s.poisson).speed(0.005));
++            });
++            ui.horizontal(|ui| {
++                ui.label("Density (kg/m³)");
++                ui.add(egui::DragValue::new(&mut s.density).speed(10.0));
++            });
++
++            ui.add_space(4.0);
++            ui.label(egui::RichText::new("Analysis").strong());
++            ui.horizontal(|ui| {
++                ui.radio_value(&mut s.solver, FemSolver::LinearStatic, "Linear static")
++                    .on_hover_text("Cantilever bending under a tip load (Cholesky).");
++                ui.radio_value(&mut s.solver, FemSolver::Modal, "Modal")
++                    .on_hover_text("Natural frequencies + mode shapes (K φ = λ M φ).");
++            });
++            match s.solver {
++                FemSolver::LinearStatic => {
+                     ui.horizontal(|ui| {
+-                        ui.label("Density (kg/m³)");
+-                        ui.add(egui::DragValue::new(&mut s.density).speed(10.0));
++                        ui.label("Tip load Fy (N, downward)");
++                        ui.add(egui::DragValue::new(&mut s.force_n).speed(50.0));
+                     });
+-
+-                    ui.add_space(4.0);
+-                    ui.label(egui::RichText::new("Analysis").strong());
++                }
++                FemSolver::Modal => {
+                     ui.horizontal(|ui| {
+-                        ui.radio_value(&mut s.solver, FemSolver::LinearStatic, "Linear static")
+-                            .on_hover_text("Cantilever bending under a tip load (Cholesky).");
+-                        ui.radio_value(&mut s.solver, FemSolver::Modal, "Modal")
+-                            .on_hover_text("Natural frequencies + mode shapes (K φ = λ M φ).");
++                        ui.label("# modes");
++                        ui.add(egui::DragValue::new(&mut s.n_modes).speed(0.2));
+                     });
+-                    match s.solver {
+-                        FemSolver::LinearStatic => {
+-                            ui.horizontal(|ui| {
+-                                ui.label("Tip load Fy (N, downward)");
+-                                ui.add(egui::DragValue::new(&mut s.force_n).speed(50.0));
+-                            });
+-                        }
+-                        FemSolver::Modal => {
+-                            ui.horizontal(|ui| {
+-                                ui.label("# modes");
+-                                ui.add(egui::DragValue::new(&mut s.n_modes).speed(0.2));
+-                            });
+-                        }
+-                    }
+-                    ui.label(
+-                        egui::RichText::new(
+-                            "The x=0 face is fixed; the load / modes are evaluated on the bar.",
+-                        )
+-                        .weak()
+-                        .small(),
+-                    );
++                }
++            }
++            ui.label(
++                egui::RichText::new(
++                    "The x=0 face is fixed; the load / modes are evaluated on the bar.",
++                )
++                .weak()
++                .small(),
++            );
+ 
+-                    ui.add_space(6.0);
+-                    if ui
+-                        .button(egui::RichText::new("▶ Run analysis").strong())
+-                        .clicked()
+-                    {
+-                        run_fem(s);
+-                    }
++            ui.add_space(6.0);
++            if ui
++                .button(egui::RichText::new("▶ Run analysis").strong())
++                .clicked()
++            {
++                run_fem(s);
++            }
+ 
+-                    if let Some(e) = &s.error {
+-                        ui.add_space(4.0);
+-                        ui.colored_label(egui::Color32::from_rgb(220, 90, 90), e);
+-                    }
+-                    if !s.result.is_empty() {
+-                        ui.separator();
+-                        ui.label(egui::RichText::new("Result").strong());
+-                        ui.label(egui::RichText::new(&s.result).monospace());
+-                    }
+-                });
++            if let Some(e) = &s.error {
++                ui.add_space(4.0);
++                ui.colored_label(egui::Color32::from_rgb(220, 90, 90), e);
++            }
++            if !s.result.is_empty() {
++                ui.separator();
++                ui.label(egui::RichText::new("Result").strong());
++                ui.label(egui::RichText::new(&s.result).monospace());
++            }
+         });
+ }
+ 
+@@ -258,7 +266,11 @@ fn run_fem(s: &mut FemWorkbenchState) {
+                         constraints.len()
+                     );
+                     for (i, m) in sol.modes.iter().enumerate() {
+-                        out.push_str(&format!("  mode {:>2}: {:>12.4} Hz\n", i + 1, m.frequency_hz));
++                        out.push_str(&format!(
++                            "  mode {:>2}: {:>12.4} Hz\n",
++                            i + 1,
++                            m.frequency_hz
++                        ));
+                     }
+                     s.result = out;
+                 }
+diff --git a/crates/valenx-app/src/genetics_workbench.rs b/crates/valenx-app/src/genetics_workbench.rs
+index f5093c89..09b6d9c0 100644
+--- a/crates/valenx-app/src/genetics_workbench.rs
++++ b/crates/valenx-app/src/genetics_workbench.rs
+@@ -173,104 +173,104 @@ pub fn draw_genetics_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
+         .default_width(380.0)
+         .width_range(300.0..=620.0)
+         .show(ctx, |ui| {
+-            ui.horizontal(|ui| {
+-                ui.heading("Genetics Workbench");
+-            });
+-            ui.label(
+-                egui::RichText::new("14 native computational-biology toolkits")
+-                    .weak()
+-                    .small(),
+-            );
+-            ui.separator();
++            genetics_workbench_body(app, ui);
++        });
++}
+ 
+-            // --- Panel selector --------------------------------------
+-            // A combo box for compact switching plus a wrapped grid of
+-            // selectable chips so the 14 panels are all one click away
+-            // — the same "tool palette" feel as the CAD workbenches.
+-            //
+-            // Each chip carries a hover tooltip sourced from
+-            // crate::panel_help so the user can see what a panel does
+-            // before switching to it. F1 once inside a panel opens
+-            // the full help popup.
+-            egui::ComboBox::from_id_source("genetics_panel_combo")
+-                .selected_text(app.genetics.active.label())
+-                .width(ui.available_width())
+-                .show_ui(ui, |ui| {
+-                    for panel in GeneticsPanel::ALL {
+-                        ui.selectable_value(&mut app.genetics.active, panel, panel.label())
+-                            .on_hover_text(crate::panel_help::short_summary(panel.label()));
+-                    }
+-                });
+-            ui.add_space(2.0);
+-            ui.horizontal_wrapped(|ui| {
+-                for panel in GeneticsPanel::ALL {
+-                    let selected = app.genetics.active == panel;
+-                    if ui
+-                        .selectable_label(selected, panel.label())
+-                        .on_hover_text(crate::panel_help::short_summary(panel.label()))
+-                        .clicked()
+-                    {
+-                        app.genetics.active = panel;
+-                    }
+-                }
+-            });
+-            ui.separator();
++/// Render the Genetics Workbench body (panel selector + active-panel
++/// header + fade-in scrollable panel) into an existing [`egui::Ui`].
++/// Shared by the classic right-side [`draw_genetics_workbench`] SidePanel
++/// and the docked-layout tile in [`crate::docking`].
++pub fn genetics_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
++    ui.horizontal(|ui| {
++        ui.heading("Genetics Workbench");
++    });
++    ui.label(
++        egui::RichText::new("14 native computational-biology toolkits")
++            .weak()
++            .small(),
++    );
++    ui.separator();
+ 
+-            // --- Active panel header ---------------------------------
+-            let active = app.genetics.active;
+-            ui.horizontal(|ui| {
+-                ui.label(egui::RichText::new(active.label()).heading());
+-            });
+-            ui.label(
+-                egui::RichText::new(format!("backed by `{}`", active.crate_name()))
+-                    .weak()
+-                    .small(),
+-            );
+-            ui.separator();
++    // --- Panel selector --------------------------------------
++    // A combo box for compact switching plus a wrapped grid of
++    // selectable chips so the 14 panels are all one click away
++    // — the same "tool palette" feel as the CAD workbenches.
++    //
++    // Each chip carries a hover tooltip sourced from
++    // crate::panel_help so the user can see what a panel does
++    // before switching to it. F1 once inside a panel opens
++    // the full help popup.
++    egui::ComboBox::from_id_source("genetics_panel_combo")
++        .selected_text(app.genetics.active.label())
++        .width(ui.available_width())
++        .show_ui(ui, |ui| {
++            for panel in GeneticsPanel::ALL {
++                ui.selectable_value(&mut app.genetics.active, panel, panel.label())
++                    .on_hover_text(crate::panel_help::short_summary(panel.label()));
++            }
++        });
++    ui.add_space(2.0);
++    ui.horizontal_wrapped(|ui| {
++        for panel in GeneticsPanel::ALL {
++            let selected = app.genetics.active == panel;
++            if ui
++                .selectable_label(selected, panel.label())
++                .on_hover_text(crate::panel_help::short_summary(panel.label()))
++                .clicked()
++            {
++                app.genetics.active = panel;
++            }
++        }
++    });
++    ui.separator();
+ 
+-            // --- Active panel body -----------------------------------
+-            //
+-            // Fade-in animation on panel switch — egui's
+-            // `animate_bool_with_time` interpolates 0..1 on a state flip
+-            // (the `false → true` transition). We key the animation id
+-            // on the active-panel label so switching panels makes a
+-            // *new* id whose stored value is `false`, then jumps to
+-            // `true` on this frame → the value crosses 0 to 1 over
+-            // 0.15 s. Stale ids are GC'd by egui automatically.
+-            let anim_id = egui::Id::new(("valenx_genetics_panel_switch", active.label()));
+-            let t = ui.ctx().animate_bool_with_time(anim_id, true, 0.15);
+-            egui::ScrollArea::vertical()
+-                .auto_shrink([false, false])
+-                .show(ui, |ui| {
+-                    ui.scope(|ui| {
+-                        ui.set_opacity(t.clamp(0.0, 1.0));
+-                        match active {
+-                            GeneticsPanel::Sequence => genetics::sequence::draw(app, ui),
+-                            GeneticsPanel::Alignment => genetics::alignment::draw(app, ui),
+-                            GeneticsPanel::Phylogenetics => {
+-                                genetics::phylogenetics::draw(app, ui)
+-                            }
+-                            GeneticsPanel::PopulationGenetics => {
+-                                genetics::popgen::draw(app, ui)
+-                            }
+-                            GeneticsPanel::RnaStructure => genetics::rnastruct::draw(app, ui),
+-                            GeneticsPanel::RnaDesigner => genetics::rna_designer::draw(app, ui),
+-                            GeneticsPanel::MolecularDynamics => genetics::md::draw(app, ui),
+-                            GeneticsPanel::Cheminformatics => genetics::cheminf::draw(app, ui),
+-                            GeneticsPanel::MacromolecularStructure => {
+-                                genetics::biostruct::draw(app, ui)
+-                            }
+-                            GeneticsPanel::QuantumChemistry => genetics::qchem::draw(app, ui),
+-                            GeneticsPanel::Genomics => genetics::genomics::draw(app, ui),
+-                            GeneticsPanel::SystemsBiology => genetics::sysbio::draw(app, ui),
+-                            GeneticsPanel::Docking => genetics::docking::draw(app, ui),
+-                            GeneticsPanel::GeneEditing => genetics::genediting::draw(app, ui),
+-                            GeneticsPanel::StructurePrediction => {
+-                                genetics::structpredict::draw(app, ui)
+-                            }
+-                        }
+-                    });
+-                });
++    // --- Active panel header ---------------------------------
++    let active = app.genetics.active;
++    ui.horizontal(|ui| {
++        ui.label(egui::RichText::new(active.label()).heading());
++    });
++    ui.label(
++        egui::RichText::new(format!("backed by `{}`", active.crate_name()))
++            .weak()
++            .small(),
++    );
++    ui.separator();
++
++    // --- Active panel body -----------------------------------
++    //
++    // Fade-in animation on panel switch — egui's
++    // `animate_bool_with_time` interpolates 0..1 on a state flip
++    // (the `false → true` transition). We key the animation id
++    // on the active-panel label so switching panels makes a
++    // *new* id whose stored value is `false`, then jumps to
++    // `true` on this frame → the value crosses 0 to 1 over
++    // 0.15 s. Stale ids are GC'd by egui automatically.
++    let anim_id = egui::Id::new(("valenx_genetics_panel_switch", active.label()));
++    let t = ui.ctx().animate_bool_with_time(anim_id, true, 0.15);
++    egui::ScrollArea::vertical()
++        .auto_shrink([false, false])
++        .show(ui, |ui| {
++            ui.scope(|ui| {
++                ui.set_opacity(t.clamp(0.0, 1.0));
++                match active {
++                    GeneticsPanel::Sequence => genetics::sequence::draw(app, ui),
++                    GeneticsPanel::Alignment => genetics::alignment::draw(app, ui),
++                    GeneticsPanel::Phylogenetics => genetics::phylogenetics::draw(app, ui),
++                    GeneticsPanel::PopulationGenetics => genetics::popgen::draw(app, ui),
++                    GeneticsPanel::RnaStructure => genetics::rnastruct::draw(app, ui),
++                    GeneticsPanel::RnaDesigner => genetics::rna_designer::draw(app, ui),
++                    GeneticsPanel::MolecularDynamics => genetics::md::draw(app, ui),
++                    GeneticsPanel::Cheminformatics => genetics::cheminf::draw(app, ui),
++                    GeneticsPanel::MacromolecularStructure => genetics::biostruct::draw(app, ui),
++                    GeneticsPanel::QuantumChemistry => genetics::qchem::draw(app, ui),
++                    GeneticsPanel::Genomics => genetics::genomics::draw(app, ui),
++                    GeneticsPanel::SystemsBiology => genetics::sysbio::draw(app, ui),
++                    GeneticsPanel::Docking => genetics::docking::draw(app, ui),
++                    GeneticsPanel::GeneEditing => genetics::genediting::draw(app, ui),
++                    GeneticsPanel::StructurePrediction => genetics::structpredict::draw(app, ui),
++                }
++            });
+         });
+ }
+ 
+@@ -302,7 +302,10 @@ mod tests {
+     #[test]
+     fn default_panel_is_sequence() {
+         assert_eq!(GeneticsPanel::default(), GeneticsPanel::Sequence);
+-        assert_eq!(GeneticsWorkbenchState::default().active, GeneticsPanel::Sequence);
++        assert_eq!(
++            GeneticsWorkbenchState::default().active,
++            GeneticsPanel::Sequence
++        );
+     }
+ }
+ 
+diff --git a/crates/valenx-app/src/lib.rs b/crates/valenx-app/src/lib.rs
+index 79ea2982..5bb0deb7 100644
+--- a/crates/valenx-app/src/lib.rs
++++ b/crates/valenx-app/src/lib.rs
+@@ -37,14 +37,14 @@
+ 
+ pub mod aero;
+ pub mod aero_workbench;
+-pub mod fem_workbench;
+-pub mod cfd_workbench;
+-pub mod reactdyn_workbench;
+ pub mod astro;
+ pub mod astro_workbench;
+ pub mod cam_overlay;
++pub mod cfd_workbench;
+ pub mod commands;
++pub mod docking;
+ pub mod draft_overlay;
++pub mod fem_workbench;
+ pub mod first_run;
+ pub mod genetics;
+ pub mod genetics_workbench;
+@@ -55,6 +55,7 @@ pub mod mesh_toolbox;
+ pub mod new_project_dialog;
+ pub mod panel_help;
+ pub mod pbr_forward_pass;
++pub mod reactdyn_workbench;
+ pub mod residuals;
+ pub mod run;
+ pub mod scene_overlay;
+@@ -453,6 +454,20 @@ pub struct ValenxApp {
+     /// viewport-kind switches so pan, zoom, and sub-view selection are
+     /// remembered when the user returns to the 2D view.
+     pub(crate) viewport_2d: crate::viewport_2d::Viewport2dState,
++
++    /// Opt-in **Docked layout** mode (View → Docked layout). When `true`,
++    /// the workbench panels are rendered through the [`crate::docking`]
++    /// tiling tree hosted in the central panel instead of as individual
++    /// `SidePanel`s; when `false` (the default) the classic layout is
++    /// rendered unchanged. See [`crate::docking`].
++    pub(crate) docked_layout: bool,
++    /// The tiling tree backing the docked layout. `None` until the first
++    /// docked render lazily builds the standard arrangement
++    /// ([`crate::docking::default_tree`]); thereafter it persists the
++    /// user's splits / drags / closes across frames. Wrapped in an
++    /// `Option` only so `ValenxApp` can keep deriving `Default`
++    /// (`egui_tiles::Tree` has no `Default` impl).
++    pub(crate) dock_tree: Option<egui_tiles::Tree<crate::docking::Pane>>,
+ }
+ 
+ impl ValenxApp {
+@@ -679,10 +694,7 @@ impl ValenxApp {
+     /// Make the right-side Genetics Workbench SidePanel visible and
+     /// select `panel` as its active tab. The screenshot harness drives
+     /// this once per genetics panel — one PNG per active selection.
+-    pub fn enable_genetics_workbench(
+-        &mut self,
+-        panel: crate::genetics_workbench::GeneticsPanel,
+-    ) {
++    pub fn enable_genetics_workbench(&mut self, panel: crate::genetics_workbench::GeneticsPanel) {
+         self.show_genetics_workbench = true;
+         self.genetics.active = panel;
+     }
+diff --git a/crates/valenx-app/src/mesh_toolbox.rs b/crates/valenx-app/src/mesh_toolbox.rs
+index 87bbd0ef..111f7a11 100644
+--- a/crates/valenx-app/src/mesh_toolbox.rs
++++ b/crates/valenx-app/src/mesh_toolbox.rs
+@@ -3014,6 +3014,24 @@ pub fn draw_mesh_toolbox(app: &mut ValenxApp, ctx: &egui::Context) {
+         .default_width(280.0)
+         .width_range(220.0..=420.0)
+         .show(ctx, |ui| {
++            mesh_toolbox_body(app, ui);
++        });
++}
++
++/// Render the Mesh Toolbox body (heading + scrollable column of CAD
++/// sub-panels) into an existing [`egui::Ui`]. Shared by the classic
++/// right-side [`draw_mesh_toolbox`] SidePanel and the docked-layout tile
++/// in [`crate::docking`].
++///
++/// NB: the body below is kept at its original (pre-extraction)
++/// indentation inside an explicit block so this extraction stays a
++/// minimal, reviewable diff in this 15k-line file. rustfmt would prefer
++/// it dedented one level; that is the one deliberate formatting deviation
++/// in this change (the surrounding file already carries pre-existing
++/// rustfmt drift).
++#[rustfmt::skip]
++pub fn mesh_toolbox_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
++    {
+             ui.heading("Mesh Toolbox")
+                 .on_hover_text(
+                     "CAD-side workbench. Ctrl+1 toggles. F1 opens panel help.",
+@@ -3105,7 +3123,7 @@ pub fn draw_mesh_toolbox(app: &mut ValenxApp, ctx: &egui::Context) {
+                     .header_response
+                     .on_hover_text(crate::panel_help::short_summary("Spreadsheet"));
+                 });
+-        });
++    }
+ }
+ 
+ fn draw_inspector(app: &ValenxApp, ui: &mut egui::Ui) {
+diff --git a/crates/valenx-app/src/reactdyn_workbench.rs b/crates/valenx-app/src/reactdyn_workbench.rs
+index b1ff48ee..c0be4d0c 100644
+--- a/crates/valenx-app/src/reactdyn_workbench.rs
++++ b/crates/valenx-app/src/reactdyn_workbench.rs
+@@ -285,7 +285,7 @@ fn build_reactive_inputs(s: &ReactdynWorkbenchState) -> Result<(ReactiveSystem,
+     let n = s.n_cluster.max(2);
+     let c = Element::from_symbol("C").map_err(|e| format!("element: {e}"))?;
+     let re = morse_param("C").r_e; // bohr
+-    // A planar ring with adjacent atoms one equilibrium bond apart.
++                                   // A planar ring with adjacent atoms one equilibrium bond apart.
+     let radius = re / (2.0 * (std::f64::consts::PI / n as f64).sin());
+     let pos_bohr: Vec<[f64; 3]> = (0..n)
+         .map(|i| {
+@@ -387,11 +387,15 @@ fn start_run(s: &mut ReactdynWorkbenchState) {
+     let handle = thread::spawn(move || {
+         let mut on_step = |step: usize| progress_w.store(step + 1, Ordering::Relaxed);
+         let outcome = match job {
+-            Job::Aimd(sys, c) => AimdEngine.run(&sys, &c, &mut on_step).map_err(|e| e.to_string()),
+-            Job::QmMm(sys, c) => QmMmEngine.run(&sys, &c, &mut on_step).map_err(|e| e.to_string()),
+-            Job::Reactive(sys, c) => {
+-                ReactiveEngine.run(&sys, &c, &mut on_step).map_err(|e| e.to_string())
+-            }
++            Job::Aimd(sys, c) => AimdEngine
++                .run(&sys, &c, &mut on_step)
++                .map_err(|e| e.to_string()),
++            Job::QmMm(sys, c) => QmMmEngine
++                .run(&sys, &c, &mut on_step)
++                .map_err(|e| e.to_string()),
++            Job::Reactive(sys, c) => ReactiveEngine
++                .run(&sys, &c, &mut on_step)
++                .map_err(|e| e.to_string()),
+         };
+         *result_w.lock().unwrap() = Some(outcome);
+     });
+@@ -437,28 +441,46 @@ pub fn draw_reactdyn_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
+     if !app.show_reactdyn_workbench {
+         return;
+     }
+-    poll_run(&mut app.reactdyn);
+-
+-    // A mesh to push into the 3-D viewport, set inside the panel closure
+-    // and applied *after* it releases its &mut borrow of `app`.
+-    let mut to_push: Option<(ViewMolecule, String)> = None;
+-
+     egui::SidePanel::right("valenx_reactdyn_workbench")
+         .resizable(true)
+         .default_width(370.0)
+         .width_range(320.0..=600.0)
+         .show(ctx, |ui| {
+-            ui.heading("Reaction Dynamics");
+-            ui.label(
+-                egui::RichText::new("native ab-initio MD · valenx-reactdyn")
+-                    .weak()
+-                    .small(),
+-            );
+-            ui.separator();
+-            let s = &mut app.reactdyn;
+-            let running = s.run.is_some();
+-
+-            egui::ScrollArea::vertical()
++            reactdyn_workbench_body(app, ui);
++        });
++}
++
++/// Render the Reaction Dynamics workbench body (heading + scrollable
++/// form + 3-D playback) into an existing [`egui::Ui`]. Shared by the
++/// classic right-side [`draw_reactdyn_workbench`] SidePanel and the
++/// docked-layout tile in [`crate::docking`].
++///
++/// Drains the background run (`poll_run`) up front, then pushes the
++/// selected playback frame into the shared 3-D viewport after the
++/// scroll-area scope releases its `&mut app.reactdyn` borrow — the same
++/// dance the SidePanel path previously did inline.
++pub fn reactdyn_workbench_body(app: &mut ValenxApp, ui: &mut egui::Ui) {
++    poll_run(&mut app.reactdyn);
++    let ctx = ui.ctx().clone();
++
++    // A mesh to push into the 3-D viewport, set inside the scroll-area
++    // scope and applied *after* it releases its &mut borrow of `app`.
++    let mut to_push: Option<(ViewMolecule, String)> = None;
++
++    // Scope the `&mut app.reactdyn` borrow so `to_push` can be applied
++    // against the whole `app` once the UI is drawn.
++    {
++        ui.heading("Reaction Dynamics");
++        ui.label(
++            egui::RichText::new("native ab-initio MD · valenx-reactdyn")
++                .weak()
++                .small(),
++        );
++        ui.separator();
++        let s = &mut app.reactdyn;
++        let running = s.run.is_some();
++
++        egui::ScrollArea::vertical()
+                 .auto_shrink([false, false])
+                 .show(ui, |ui| {
+                     ui.label(egui::RichText::new("System").strong());
+@@ -606,12 +628,12 @@ pub fn draw_reactdyn_workbench(app: &mut ValenxApp, ctx: &egui::Context) {
+                         ui.colored_label(egui::Color32::from_rgb(220, 90, 90), e);
+                     }
+ 
+-                    draw_results_and_playback(s, ui, ctx, &mut to_push);
++                    draw_results_and_playback(s, ui, &ctx, &mut to_push);
+                 });
+-        });
++    }
+ 
+-    // The panel closure has released its &mut app borrow — now push the
+-    // selected frame's molecule into the shared 3-D viewport.
++    // The scroll-area scope has released its &mut app borrow — now push
++    // the selected frame's molecule into the shared 3-D viewport.
+     if let Some((view, label)) = to_push {
+         let mesh = molecule_view::ball_and_stick(&view, 0.28, 0.18);
+         let _ = molecule_view::show_molecule(app, mesh, &label);
+@@ -630,9 +652,21 @@ fn draw_results_and_playback(
+     // Snapshot the energy series + frame count, dropping the s.last borrow
+     // so the playback UI can mutate s.frame_idx / s.playing freely.
+     let info = s.last.as_ref().map(|t| {
+-        let pe: Vec<[f64; 2]> = t.frames.iter().map(|f| [f.time_fs, f.potential_hartree]).collect();
+-        let ke: Vec<[f64; 2]> = t.frames.iter().map(|f| [f.time_fs, f.kinetic_hartree]).collect();
+-        let tot: Vec<[f64; 2]> = t.frames.iter().map(|f| [f.time_fs, f.total_hartree()]).collect();
++        let pe: Vec<[f64; 2]> = t
++            .frames
++            .iter()
++            .map(|f| [f.time_fs, f.potential_hartree])
++            .collect();
++        let ke: Vec<[f64; 2]> = t
++            .frames
++            .iter()
++            .map(|f| [f.time_fs, f.kinetic_hartree])
++            .collect();
++        let tot: Vec<[f64; 2]> = t
++            .frames
++            .iter()
++            .map(|f| [f.time_fs, f.total_hartree()])
++            .collect();
+         (t.frames.len(), pe, ke, tot)
+     });
+     let Some((n, pe, ke, tot)) = info else {
+@@ -696,7 +730,10 @@ fn draw_results_and_playback(
+             .small(),
+         );
+         if need_push {
+-            *to_push = Some((view_molecule_for_frame(t, cur), format!("AIMD frame {cur}/{}", n - 1)));
++            *to_push = Some((
++                view_molecule_for_frame(t, cur),
++                format!("AIMD frame {cur}/{}", n - 1),
++            ));
+         }
+     }
+     if need_push {
+@@ -793,7 +830,12 @@ mod tests {
+         let view = view_molecule_for_frame(&traj, 0);
+         assert_eq!(view.atoms.len(), 2);
+         // H2 at ~0.95 Å is bonded → exactly one bond.
+-        assert_eq!(view.bonds.len(), 1, "expected one H-H bond, got {:?}", view.bonds);
++        assert_eq!(
++            view.bonds.len(),
++            1,
++            "expected one H-H bond, got {:?}",
++            view.bonds
++        );
+     }
+ 
+     #[test]
+@@ -807,7 +849,9 @@ mod tests {
+         let (sys, controls) = build_qmmm_inputs(&s).expect("qmmm inputs build");
+         assert_eq!(sys.n_qm(), 2); // H2 default
+         assert_eq!(sys.n_mm(), 8); // the solvent shell
+-        let traj = QmMmEngine.run(&sys, &controls, &mut |_| {}).expect("qmmm run");
++        let traj = QmMmEngine
++            .run(&sys, &controls, &mut |_| {})
++            .expect("qmmm run");
+         assert_eq!(traj.system.n_atoms(), 10); // 2 QM + 8 MM atoms in 3-D
+     }
+ 
+@@ -821,7 +865,9 @@ mod tests {
+             ..Default::default()
+         };
+         let (sys, controls) = build_qmmm_inputs(&s).expect("electrostatic inputs");
+-        let traj = QmMmEngine.run(&sys, &controls, &mut |_| {}).expect("electrostatic run");
++        let traj = QmMmEngine
++            .run(&sys, &controls, &mut |_| {})
++            .expect("electrostatic run");
+         assert_eq!(traj.system.n_atoms(), 6); // 2 QM + 4 MM
+     }
+ 
+@@ -836,7 +882,9 @@ mod tests {
+         };
+         let (sys, controls) = build_reactive_inputs(&s).expect("reactive inputs");
+         assert_eq!(sys.n_atoms(), 6);
+-        let traj = ReactiveEngine.run(&sys, &controls, &mut |_| {}).expect("reactive run");
++        let traj = ReactiveEngine
++            .run(&sys, &controls, &mut |_| {})
++            .expect("reactive run");
+         assert_eq!(traj.system.n_atoms(), 6);
+         assert_eq!(traj.frames.len(), 6);
+     }
+diff --git a/crates/valenx-app/src/update.rs b/crates/valenx-app/src/update.rs
+index ec48e8ac..8bf7f9cd 100644
+--- a/crates/valenx-app/src/update.rs
++++ b/crates/valenx-app/src/update.rs
+@@ -149,7 +149,8 @@ impl eframe::App for ValenxApp {
+                 let info = i.viewport();
+                 (
+                     info.outer_rect.map(|r| [r.min.x.round(), r.min.y.round()]),
+-                    info.inner_rect.map(|r| [r.width().round(), r.height().round()]),
++                    info.inner_rect
++                        .map(|r| [r.width().round(), r.height().round()]),
+                 )
+             });
+             let mut dirty = false;
+@@ -263,6 +264,26 @@ impl eframe::App for ValenxApp {
+                              node — shows a marker + snapped X/Y/Z readout.",
+                         );
+ 
++                    ui.separator();
++                    // Opt-in dockable / tiling layout (egui_tiles). When
++                    // on, the viewport + browser + workbench panels are
++                    // arranged as resizable, drag-to-rearrange, tab-able
++                    // tiles in the central panel instead of fixed
++                    // SidePanels. Off by default — the classic layout is
++                    // untouched.
++                    if ui
++                        .checkbox(&mut self.docked_layout, "Docked layout")
++                        .on_hover_text(
++                            "Experimental: arrange the viewport, browser, and \
++                             workbench panels as resizable, drag-to-rearrange, \
++                             tab-able tiles (egui_tiles) instead of fixed side \
++                             panels. Toggle off to return to the classic layout.",
++                        )
++                        .changed()
++                    {
++                        ui.close_menu();
++                    }
++
+                     ui.separator();
+                     ui.label(egui::RichText::new("Workbenches").weak().small())
+                         .on_hover_text(
+@@ -811,320 +832,162 @@ impl eframe::App for ValenxApp {
+                 }
+             });
+ 
+-        // Browser (left) — collapsible via the ribbon toggle / View menu
+-        // so the viewport can take the full width.
+-        if self.show_browser {
+-            egui::SidePanel::left("valenx_browser")
+-                .resizable(true)
+-                .default_width(300.0)
+-                .width_range(220.0..=520.0)
+-                .show(ctx, |ui| {
+-                    ui.heading("Browser");
+-                    ui.separator();
+-                    self.draw_browser(ui);
+-                });
+-        }
++        // ── Layout fork: docked (tiling) vs classic (fixed SidePanels) ──
++        //
++        // When `docked_layout` is on (View → Docked layout, off by
++        // default) the workbench panels + browser + viewport are arranged
++        // in a single egui_tiles tree hosted in the central panel. The
++        // ribbon + status bar + bottom residual/log dock above stay as
++        // persistent chrome in both modes; the overlays (command palette,
++        // settings, dialogs) below the fork also run in both modes. When
++        // off, the classic SidePanel layout in the `else` arm renders
++        // unchanged.
++        if self.docked_layout {
++            egui::CentralPanel::default().show(ctx, |ui| {
++                crate::docking::render(self, ui, frame);
++            });
++        } else {
++            // Browser (left) — collapsible via the ribbon toggle / View menu
++            // so the viewport can take the full width.
++            if self.show_browser {
++                egui::SidePanel::left("valenx_browser")
++                    .resizable(true)
++                    .default_width(300.0)
++                    .width_range(220.0..=520.0)
++                    .show(ctx, |ui| {
++                        ui.heading("Browser");
++                        ui.separator();
++                        self.draw_browser(ui);
++                    });
++            }
+ 
+-        // Mesh Toolbox (right) — only paints when a mesh / STL is
+-        // loaded AND the user hasn't hidden it. Mounted before the
+-        // CentralPanel so egui docks it to the right of the viewport.
+-        crate::mesh_toolbox::draw_mesh_toolbox(self, ctx);
++            // Mesh Toolbox (right) — only paints when a mesh / STL is
++            // loaded AND the user hasn't hidden it. Mounted before the
++            // CentralPanel so egui docks it to the right of the viewport.
++            crate::mesh_toolbox::draw_mesh_toolbox(self, ctx);
+ 
+-        // Genetics Workbench (right) — the Round-6 computational-
+-        // biology panels. A no-op unless the user has toggled it on
+-        // via View → Genetics Workbench. Mounted before the
+-        // CentralPanel so egui docks it to the right (alongside the
+-        // Mesh Toolbox when both are open).
+-        crate::genetics_workbench::draw_genetics_workbench(self, ctx);
++            // Genetics Workbench (right) — the Round-6 computational-
++            // biology panels. A no-op unless the user has toggled it on
++            // via View → Genetics Workbench. Mounted before the
++            // CentralPanel so egui docks it to the right (alongside the
++            // Mesh Toolbox when both are open).
++            crate::genetics_workbench::draw_genetics_workbench(self, ctx);
+ 
+-        // Aerodynamics / Wind Tunnel workbench (right) — the
+-        // valenx-aero virtual-wind-tunnel CFD panels. A no-op unless
+-        // toggled on via View → Aerodynamics / Wind Tunnel. Mounted
+-        // before the CentralPanel so egui docks it to the right.
+-        crate::aero_workbench::draw_aero_workbench(self, ctx);
++            // Aerodynamics / Wind Tunnel workbench (right) — the
++            // valenx-aero virtual-wind-tunnel CFD panels. A no-op unless
++            // toggled on via View → Aerodynamics / Wind Tunnel. Mounted
++            // before the CentralPanel so egui docks it to the right.
++            crate::aero_workbench::draw_aero_workbench(self, ctx);
+ 
+-        // FEM Workbench (right) — native linear-static + modal FEA on
+-        // valenx-fem's in-process solvers. A no-op unless toggled on via
+-        // View → FEM Workbench. Mounted before the CentralPanel so egui
+-        // docks it to the right (alongside the other open workbenches).
+-        crate::fem_workbench::draw_fem_workbench(self, ctx);
++            // FEM Workbench (right) — native linear-static + modal FEA on
++            // valenx-fem's in-process solvers. A no-op unless toggled on via
++            // View → FEM Workbench. Mounted before the CentralPanel so egui
++            // docks it to the right (alongside the other open workbenches).
++            crate::fem_workbench::draw_fem_workbench(self, ctx);
+ 
+-        // CFD Workbench (right) — native 2-D incompressible laminar CFD
+-        // (SIMPLE) on valenx-cfd-native. A no-op unless toggled on via
+-        // View → CFD Workbench. Mounted before the CentralPanel so egui
+-        // docks it to the right alongside the other workbenches.
+-        crate::cfd_workbench::draw_cfd_workbench(self, ctx);
++            // CFD Workbench (right) — native 2-D incompressible laminar CFD
++            // (SIMPLE) on valenx-cfd-native. A no-op unless toggled on via
++            // View → CFD Workbench. Mounted before the CentralPanel so egui
++            // docks it to the right alongside the other workbenches.
++            crate::cfd_workbench::draw_cfd_workbench(self, ctx);
+ 
+-        // Reaction Dynamics workbench (right) — native ab-initio MD on
+-        // valenx-reactdyn. A no-op unless toggled on via View → Reaction
+-        // Dynamics. Mounted before the CentralPanel so egui docks it to
+-        // the right alongside the other workbenches.
+-        crate::reactdyn_workbench::draw_reactdyn_workbench(self, ctx);
++            // Reaction Dynamics workbench (right) — native ab-initio MD on
++            // valenx-reactdyn. A no-op unless toggled on via View → Reaction
++            // Dynamics. Mounted before the CentralPanel so egui docks it to
++            // the right alongside the other workbenches.
++            crate::reactdyn_workbench::draw_reactdyn_workbench(self, ctx);
+ 
+-        // Astro / Launch workbench (right) — the valenx-astro launch
+-        // ascent simulator + mission planners. A no-op unless toggled
+-        // on via View → Astro / Launch. Mounted before the CentralPanel
+-        // so egui docks it to the right (alongside the other open
+-        // workbenches).
+-        crate::astro_workbench::draw_astro_workbench(self, ctx);
++            // Astro / Launch workbench (right) — the valenx-astro launch
++            // ascent simulator + mission planners. A no-op unless toggled
++            // on via View → Astro / Launch. Mounted before the CentralPanel
++            // so egui docks it to the right (alongside the other open
++            // workbenches).
++            crate::astro_workbench::draw_astro_workbench(self, ctx);
+ 
+-        // Central viewport — grabs the wgpu render state for the
+-        // offscreen-depth-buffered shaded path if the wgpu backend is
+-        // available.
+-        let wgpu_render_state = frame.wgpu_render_state().cloned();
+-        let pixels_per_point = ctx.pixels_per_point();
+-        // Welcome / landing-page action picked this frame. Resolved
+-        // inside the CentralPanel closure (the landing page renders
+-        // there) and dispatched against `&mut self` AFTER the closure
+-        // ends so we don't fight the borrow checker.
+-        let mut pending_landing_action: Option<landing_page::LandingAction> = None;
+-        // Show the welcome landing page whenever nothing is loaded —
+-        // no project, no STL drop, no canonical mesh. The moment any
+-        // of those load (e.g. user drops a .stl) we fall through to
+-        // the regular viewport render path. Driven purely by app
+-        // state — no menu / toggle — so the page exists strictly as
+-        // an empty-state for the central panel.
+-        let show_landing = self.project.is_none()
+-            && self.stl.is_none()
+-            && self.mesh.is_none();
+-        egui::CentralPanel::default().show(ctx, |ui| {
+-            if show_landing {
+-                // CARGO_PKG_REPOSITORY inherits from
+-                // [workspace.package].repository at build time, so the
+-                // URL stays in lock-step with Cargo.toml without us
+-                // hardcoding it here. Falls back to the empty string
+-                // if (somehow) the manifest is missing the field; the
+-                // link rows still render but resolve to "/blob/…"
+-                // suffixes, which are visibly broken (good — that's
+-                // the kind of regression the build should make loud).
+-                pending_landing_action = landing_page::render(
+-                    ui,
+-                    env!("CARGO_PKG_VERSION"),
+-                    &self.settings.recent_projects,
+-                    env!("CARGO_PKG_REPOSITORY"),
+-                    self.landing_inline_message.as_deref(),
+-                );
+-                return;
+-            }
++            // Central viewport — grabs the wgpu render state for the
++            // offscreen-depth-buffered shaded path if the wgpu backend is
++            // available.
++            let wgpu_render_state = frame.wgpu_render_state().cloned();
++            let pixels_per_point = ctx.pixels_per_point();
++            // Welcome / landing-page action picked this frame. Resolved
++            // inside the CentralPanel closure (the landing page renders
++            // there) and dispatched against `&mut self` AFTER the closure
++            // ends so we don't fight the borrow checker.
++            let mut pending_landing_action: Option<landing_page::LandingAction> = None;
++            // Show the welcome landing page whenever nothing is loaded —
++            // no project, no STL drop, no canonical mesh. The moment any
++            // of those load (e.g. user drops a .stl) we fall through to
++            // the regular viewport render path. Driven purely by app
++            // state — no menu / toggle — so the page exists strictly as
++            // an empty-state for the central panel.
++            let show_landing = self.project.is_none() && self.stl.is_none() && self.mesh.is_none();
++            egui::CentralPanel::default().show(ctx, |ui| {
++                if show_landing {
++                    // CARGO_PKG_REPOSITORY inherits from
++                    // [workspace.package].repository at build time, so the
++                    // URL stays in lock-step with Cargo.toml without us
++                    // hardcoding it here. Falls back to the empty string
++                    // if (somehow) the manifest is missing the field; the
++                    // link rows still render but resolve to "/blob/…"
++                    // suffixes, which are visibly broken (good — that's
++                    // the kind of regression the build should make loud).
++                    pending_landing_action = landing_page::render(
++                        ui,
++                        env!("CARGO_PKG_VERSION"),
++                        &self.settings.recent_projects,
++                        env!("CARGO_PKG_REPOSITORY"),
++                        self.landing_inline_message.as_deref(),
++                    );
++                    return;
++                }
+ 
+-            // ── Viewport dispatch ─────────────────────────────────────────
+-            // The 2D DNA viewport has no GPU / wgpu dependency and no
+-            // borrows of camera / mesh / field overlays, so it gets its
+-            // own clean branch. The 3D path is unchanged — all its
+-            // state-building code is in the `else` branch below.
+-            if self.active_viewport == ViewportKind::Viewport2dDna {
+-                // Show the user's live sequence from the Genetics
+-                // Sequence panel; falls back to the demo plasmid when
+-                // the panel is empty / unparseable.
+-                let live = self.genetics.sequence.to_seq_record();
+-                crate::viewport_2d::show(ui, &mut self.viewport_2d, live.as_ref());
+-                return;
+-            }
++                self.draw_viewport_into(ui, &wgpu_render_state, pixels_per_point);
++            });
+ 
+-            // ── 3D viewport (unchanged) ───────────────────────────────────
+-            let wgpu_ctx = match (self.wgpu_renderer.as_mut(), wgpu_render_state.as_ref()) {
+-                (Some(renderer), Some(rs)) => Some(viewport::WgpuCtx {
+-                    renderer,
+-                    render_state: rs,
+-                    pixels_per_point,
+-                }),
+-                _ => None,
+-            };
+-            // Pick a field overlay for the viewport. The Wind Tunnel
+-            // workbench's aero field (Cp / velocity / pressure / Q),
+-            // when present, takes priority — it is paired with the
+-            // coloured surface / cut-plane mesh the workbench pushed
+-            // into `self.mesh`. Otherwise fall back to the post-run
+-            // results overlay below.
+-            //
+-            // Prefer the user-selected results field (clicked in the
+-            // Results pane); fall back to "first scalar OnNode field
+-            // whose data length matches the current mesh's node count"
+-            // so freshly-finished runs land coloured immediately. Most
+-            // CFD runs include `p` (pressure), most thermal runs `T`,
+-            // both of which satisfy the filter for a clean default.
+-            //
+-            // Within the chosen field's time series, `selected_time_index`
+-            // picks which snapshot to render. The index is clamped
+-            // here against the actual time-series length so the
+-            // slider can't outrun reality.
+-            // Resolved overlay is owned (synthesized magnitude for
+-            // vector fields, clone for scalars) so its data outlives
+-            // any borrow into self.last_run_results. Viewport receives
+-            // an Option<&Field> referencing this local.
+-            let results_field_overlay: Option<valenx_fields::Field> = self
+-                .last_run_results
+-                .as_ref()
+-                .zip(self.mesh.as_ref())
+-                .and_then(|(results, loaded)| {
+-                    let n = loaded.mesh.nodes.len();
+-                    let renderable = |f: &&valenx_fields::Field| -> bool {
+-                        if !matches!(f.location, valenx_fields::Location::OnNode) {
+-                            return false;
+-                        }
+-                        let comps = f.kind.components();
+-                        match f.kind {
+-                            valenx_fields::FieldKind::Scalar => f.data.len() == n,
+-                            // 1D / 2D / 3D vectors render as |v|; Voigt
+-                            // stress (Vector{dim:6}) does too — magnitude_field
+-                            // handles arbitrary dim.
+-                            valenx_fields::FieldKind::Vector { .. } if comps > 0 => {
+-                                f.data.len() == n * comps
+-                            }
+-                            // Tensors (e.g. 3x3 stress) render as
+-                            // Frobenius norm via magnitude_field.
+-                            valenx_fields::FieldKind::Tensor { .. } if comps > 0 => {
+-                                f.data.len() == n * comps
+-                            }
+-                            _ => false,
+-                        }
+-                    };
+-                    let selected = self.selected_field_name.as_deref();
+-                    let mut chosen_name: Option<&str> = None;
+-                    for name in results.fields.names() {
+-                        let is_selected = selected == Some(name);
+-                        let has_renderable = results.fields.by_name(name).any(|f| renderable(&f));
+-                        if has_renderable && (is_selected || chosen_name.is_none()) {
+-                            chosen_name = Some(name);
+-                            if is_selected {
+-                                break;
+-                            }
++            // Dispatch the landing-page click captured above (if any).
++            // Done after the closure exits so the action handlers have
++            // exclusive `&mut self` — the click handlers need to call
++            // `open_new_project_dialog` / `pick_project` / `load_project`,
++            // all of which mutate the same fields the closure borrowed.
++            if let Some(action) = pending_landing_action {
++                match action {
++                    landing_page::LandingAction::NewProject => {
++                        self.landing_inline_message = None;
++                        self.open_new_project_dialog();
++                    }
++                    landing_page::LandingAction::OpenProject => {
++                        self.landing_inline_message = None;
++                        self.pick_project();
++                    }
++                    landing_page::LandingAction::OpenRecent(path) => {
++                        self.landing_inline_message = None;
++                        self.load_project(path);
++                    }
++                    landing_page::LandingAction::DropMissingRecent(path) => {
++                        // The user clicked a recent-project row whose path
++                        // no longer exists on disk. Prune the entry +
++                        // persist + render the confirmation inline on the
++                        // landing page (cleaner than routing the error to
++                        // the top status bar where it doesn't make sense
++                        // for an action the user took on this view).
++                        let before = self.settings.recent_projects.len();
++                        self.settings.recent_projects.retain(|p| p != &path);
++                        if self.settings.recent_projects.len() != before {
++                            crate::settings_io::save_settings_to_state_dir(&self.settings);
+                         }
++                        self.landing_inline_message = Some(format!(
++                            "Removed missing project from recents: {}",
++                            path.display()
++                        ));
+                     }
+-                    let name = chosen_name?;
+-                    let series: Vec<&valenx_fields::Field> =
+-                        results.fields.by_name(name).filter(renderable).collect();
+-                    if series.is_empty() {
+-                        return None;
+-                    }
+-                    let idx = self.selected_time_index.min(series.len() - 1);
+-                    // Project to a per-node scalar — the rendering
+-                    // pipeline below only knows how to colour scalars.
+-                    // magnitude_field is identity for already-scalar
+-                    // fields and ||v|| per node for vectors.
+-                    series[idx].magnitude_field()
+-                });
+-            // The aero flow-visualization overlay wins when active:
+-            // the Wind Tunnel workbench paired it with the coloured
+-            // body / cut-plane mesh now in `self.mesh`.
+-            let field_overlay_owned: Option<valenx_fields::Field> =
+-                self.aero_field_overlay.clone().or(results_field_overlay);
+-            // Sketch overlay (Phase 1H — Task 51). Forwards the active
+-            // sketch + selection + pending-click state only when the
+-            // user has the panel checkbox ticked. The rubber-band line
+-            // preview reads pending_click_x/y as a stand-in for the
+-            // real viewport cursor in world space — the numeric click
+-            // pipeline is the Phase 1 placeholder for a real
+-            // viewport-click pipeline that lands in Phase 2.
+-            let sketcher = &self.mesh_toolbox.sketcher;
+-            let pending_line_start: Option<(f64, f64)> =
+-                if matches!(sketcher.tool, crate::mesh_toolbox::SketcherTool::Line) {
+-                    sketcher
+-                        .pending_first_click
+-                        .and_then(|id| sketcher.sketch.point_at(id).ok())
+-                        .map(|p| p.read(&sketcher.sketch.vars))
+-                } else {
+-                    None
+-                };
+-            let cursor_screen = ctx.pointer_latest_pos();
+-            let sketch_overlay = if sketcher.show_overlay {
+-                Some(crate::sketch_overlay::SketchOverlayState {
+-                    sketch: &sketcher.sketch,
+-                    selected: &sketcher.selected,
+-                    pending_line_start,
+-                    cursor_screen,
+-                })
+-            } else {
+-                None
+-            };
+-            // Draft overlay (Phase 4E). Forward the document + cursor
+-            // + grid spacing only when the user has opted in via the
+-            // panel checkbox — zero cost when off.
+-            let draft = &self.mesh_toolbox.draft;
+-            let draft_overlay = if draft.show_overlay {
+-                Some(crate::draft_overlay::DraftOverlayState {
+-                    document: &draft.document,
+-                    selected: draft.selected_entity,
+-                    cursor_screen,
+-                    grid_spacing: draft.grid_spacing,
+-                })
+-            } else {
+-                None
+-            };
+-            let state = viewport::ViewportState {
+-                camera: &mut self.camera,
+-                stl: self.stl.as_ref(),
+-                mesh: self.mesh.as_ref(),
+-                shading: self.shading,
+-                wgpu: wgpu_ctx,
+-                field_overlay: field_overlay_owned.as_ref(),
+-                // Cut-plane preview overlay: forward the Mesh
+-                // Toolbox's plane only while its "Show cut overlay"
+-                // checkbox is ticked, so the viewport pays nothing
+-                // for the feature when it's off.
+-                cut_overlay: if self.mesh_toolbox.cut_show_overlay {
+-                    Some((self.mesh_toolbox.cut_point, self.mesh_toolbox.cut_normal))
+-                } else {
+-                    None
+-                },
+-                sketch_overlay,
+-                draft_overlay,
+-                // CAM simulation overlay (Phase 10E). Forward the
+-                // last-generated toolpath only when the user has
+-                // pressed "Toggle Simulate Overlay" in the CAM panel.
+-                cam_overlay: if self.mesh_toolbox.cam.show_overlay {
+-                    self.mesh_toolbox.cam.last_toolpath.as_ref()
+-                } else {
+-                    None
+-                },
+-                snap_to_grid: self.snap_to_grid,
+-            };
+-            viewport::show(ui, state);
+-        });
+-
+-        // Dispatch the landing-page click captured above (if any).
+-        // Done after the closure exits so the action handlers have
+-        // exclusive `&mut self` — the click handlers need to call
+-        // `open_new_project_dialog` / `pick_project` / `load_project`,
+-        // all of which mutate the same fields the closure borrowed.
+-        if let Some(action) = pending_landing_action {
+-            match action {
+-                landing_page::LandingAction::NewProject => {
+-                    self.landing_inline_message = None;
+-                    self.open_new_project_dialog();
+-                }
+-                landing_page::LandingAction::OpenProject => {
+-                    self.landing_inline_message = None;
+-                    self.pick_project();
+-                }
+-                landing_page::LandingAction::OpenRecent(path) => {
+-                    self.landing_inline_message = None;
+-                    self.load_project(path);
+-                }
+-                landing_page::LandingAction::DropMissingRecent(path) => {
+-                    // The user clicked a recent-project row whose path
+-                    // no longer exists on disk. Prune the entry +
+-                    // persist + render the confirmation inline on the
+-                    // landing page (cleaner than routing the error to
+-                    // the top status bar where it doesn't make sense
+-                    // for an action the user took on this view).
+-                    let before = self.settings.recent_projects.len();
+-                    self.settings.recent_projects.retain(|p| p != &path);
+-                    if self.settings.recent_projects.len() != before {
+-                        crate::settings_io::save_settings_to_state_dir(&self.settings);
+-                    }
+-                    self.landing_inline_message = Some(format!(
+-                        "Removed missing project from recents: {}",
+-                        path.display()
+-                    ));
+-                }
+-                landing_page::LandingAction::OpenLink(target) => {
+-                    if let Err(e) = landing_page::open_link(&target) {
+-                        self.last_error = Some(format!("Open link: {e}"));
++                    landing_page::LandingAction::OpenLink(target) => {
++                        if let Err(e) = landing_page::open_link(&target) {
++                            self.last_error = Some(format!("Open link: {e}"));
++                        }
+                     }
+                 }
+             }
+-        }
++        } // end classic-layout `else` arm
+ 
+         // Command palette overlay — split into "decide" + "invoke"
+         // so the borrow checker can see that we only touch `palette`
+@@ -1251,9 +1114,7 @@ impl eframe::App for ValenxApp {
+                     // Settings → New projects, so analysis projects stay
+                     // empty unless the user asked for geometry to model.
+                     if self.settings.starter_cube_in_new_projects {
+-                        self.apply_create_primitive(
+-                            crate::mesh_toolbox::CadPrimitiveKind::Box,
+-                        );
++                        self.apply_create_primitive(crate::mesh_toolbox::CadPrimitiveKind::Box);
+                     }
+                 }
+             }
+@@ -1382,17 +1243,207 @@ impl eframe::App for ValenxApp {
+         // it the same way so closing the window doesn't leak a
+         // worker thread that's deep in valenx-rnadesign.
+         self.genetics.rna_designer.cancel_run();
+-        if self.run_handle.is_some()
+-            || self.sweep_handle.is_some()
+-            || self.aero.run.is_some()
+-        {
++        if self.run_handle.is_some() || self.sweep_handle.is_some() || self.aero.run.is_some() {
+             std::thread::sleep(std::time::Duration::from_millis(200));
+         }
+     }
+ }
+ 
+ impl ValenxApp {
+-    fn draw_browser(&mut self, ui: &mut egui::Ui) {
++    /// Render the central viewport (3-D scene, or the 2-D DNA / plasmid
++    /// view) into an existing [`egui::Ui`].
++    ///
++    /// Extracted from the `CentralPanel` closure in
++    /// [`eframe::App::update`] so both the classic central panel and the
++    /// docked-layout `Viewport` tile (see [`crate::docking`]) render the
++    /// identical scene. The only mechanical changes from the inline
++    /// version are that the early `return`s now exit this method (instead
++    /// of the panel closure) and the pointer position comes from
++    /// `ui.ctx()` rather than a captured `&Context`.
++    pub(crate) fn draw_viewport_into(
++        &mut self,
++        ui: &mut egui::Ui,
++        wgpu_render_state: &Option<eframe::egui_wgpu::RenderState>,
++        pixels_per_point: f32,
++    ) {
++        // ── Viewport dispatch ─────────────────────────────────────────
++        // The 2D DNA viewport has no GPU / wgpu dependency and no
++        // borrows of camera / mesh / field overlays, so it gets its
++        // own clean branch. The 3D path is unchanged — all its
++        // state-building code is in the `else` branch below.
++        if self.active_viewport == ViewportKind::Viewport2dDna {
++            // Show the user's live sequence from the Genetics
++            // Sequence panel; falls back to the demo plasmid when
++            // the panel is empty / unparseable.
++            let live = self.genetics.sequence.to_seq_record();
++            crate::viewport_2d::show(ui, &mut self.viewport_2d, live.as_ref());
++            return;
++        }
++
++        // ── 3D viewport (unchanged) ───────────────────────────────────
++        let wgpu_ctx = match (self.wgpu_renderer.as_mut(), wgpu_render_state.as_ref()) {
++            (Some(renderer), Some(rs)) => Some(viewport::WgpuCtx {
++                renderer,
++                render_state: rs,
++                pixels_per_point,
++            }),
++            _ => None,
++        };
++        // Pick a field overlay for the viewport. The Wind Tunnel
++        // workbench's aero field (Cp / velocity / pressure / Q),
++        // when present, takes priority — it is paired with the
++        // coloured surface / cut-plane mesh the workbench pushed
++        // into `self.mesh`. Otherwise fall back to the post-run
++        // results overlay below.
++        //
++        // Prefer the user-selected results field (clicked in the
++        // Results pane); fall back to "first scalar OnNode field
++        // whose data length matches the current mesh's node count"
++        // so freshly-finished runs land coloured immediately. Most
++        // CFD runs include `p` (pressure), most thermal runs `T`,
++        // both of which satisfy the filter for a clean default.
++        //
++        // Within the chosen field's time series, `selected_time_index`
++        // picks which snapshot to render. The index is clamped
++        // here against the actual time-series length so the
++        // slider can't outrun reality.
++        // Resolved overlay is owned (synthesized magnitude for
++        // vector fields, clone for scalars) so its data outlives
++        // any borrow into self.last_run_results. Viewport receives
++        // an Option<&Field> referencing this local.
++        let results_field_overlay: Option<valenx_fields::Field> = self
++            .last_run_results
++            .as_ref()
++            .zip(self.mesh.as_ref())
++            .and_then(|(results, loaded)| {
++                let n = loaded.mesh.nodes.len();
++                let renderable = |f: &&valenx_fields::Field| -> bool {
++                    if !matches!(f.location, valenx_fields::Location::OnNode) {
++                        return false;
++                    }
++                    let comps = f.kind.components();
++                    match f.kind {
++                        valenx_fields::FieldKind::Scalar => f.data.len() == n,
++                        // 1D / 2D / 3D vectors render as |v|; Voigt
++                        // stress (Vector{dim:6}) does too — magnitude_field
++                        // handles arbitrary dim.
++                        valenx_fields::FieldKind::Vector { .. } if comps > 0 => {
++                            f.data.len() == n * comps
++                        }
++                        // Tensors (e.g. 3x3 stress) render as
++                        // Frobenius norm via magnitude_field.
++                        valenx_fields::FieldKind::Tensor { .. } if comps > 0 => {
++                            f.data.len() == n * comps
++                        }
++                        _ => false,
++                    }
++                };
++                let selected = self.selected_field_name.as_deref();
++                let mut chosen_name: Option<&str> = None;
++                for name in results.fields.names() {
++                    let is_selected = selected == Some(name);
++                    let has_renderable = results.fields.by_name(name).any(|f| renderable(&f));
++                    if has_renderable && (is_selected || chosen_name.is_none()) {
++                        chosen_name = Some(name);
++                        if is_selected {
++                            break;
++                        }
++                    }
++                }
++                let name = chosen_name?;
++                let series: Vec<&valenx_fields::Field> =
++                    results.fields.by_name(name).filter(renderable).collect();
++                if series.is_empty() {
++                    return None;
++                }
++                let idx = self.selected_time_index.min(series.len() - 1);
++                // Project to a per-node scalar — the rendering
++                // pipeline below only knows how to colour scalars.
++                // magnitude_field is identity for already-scalar
++                // fields and ||v|| per node for vectors.
++                series[idx].magnitude_field()
++            });
++        // The aero flow-visualization overlay wins when active:
++        // the Wind Tunnel workbench paired it with the coloured
++        // body / cut-plane mesh now in `self.mesh`.
++        let field_overlay_owned: Option<valenx_fields::Field> =
++            self.aero_field_overlay.clone().or(results_field_overlay);
++        // Sketch overlay (Phase 1H — Task 51). Forwards the active
++        // sketch + selection + pending-click state only when the
++        // user has the panel checkbox ticked. The rubber-band line
++        // preview reads pending_click_x/y as a stand-in for the
++        // real viewport cursor in world space — the numeric click
++        // pipeline is the Phase 1 placeholder for a real
++        // viewport-click pipeline that lands in Phase 2.
++        let sketcher = &self.mesh_toolbox.sketcher;
++        let pending_line_start: Option<(f64, f64)> =
++            if matches!(sketcher.tool, crate::mesh_toolbox::SketcherTool::Line) {
++                sketcher
++                    .pending_first_click
++                    .and_then(|id| sketcher.sketch.point_at(id).ok())
++                    .map(|p| p.read(&sketcher.sketch.vars))
++            } else {
++                None
++            };
++        let cursor_screen = ui.ctx().pointer_latest_pos();
++        let sketch_overlay = if sketcher.show_overlay {
++            Some(crate::sketch_overlay::SketchOverlayState {
++                sketch: &sketcher.sketch,
++                selected: &sketcher.selected,
++                pending_line_start,
++                cursor_screen,
++            })
++        } else {
++            None
++        };
++        // Draft overlay (Phase 4E). Forward the document + cursor
++        // + grid spacing only when the user has opted in via the
++        // panel checkbox — zero cost when off.
++        let draft = &self.mesh_toolbox.draft;
++        let draft_overlay = if draft.show_overlay {
++            Some(crate::draft_overlay::DraftOverlayState {
++                document: &draft.document,
++                selected: draft.selected_entity,
++                cursor_screen,
++                grid_spacing: draft.grid_spacing,
++            })
++        } else {
++            None
++        };
++        let state = viewport::ViewportState {
++            camera: &mut self.camera,
++            stl: self.stl.as_ref(),
++            mesh: self.mesh.as_ref(),
++            shading: self.shading,
++            wgpu: wgpu_ctx,
++            field_overlay: field_overlay_owned.as_ref(),
++            // Cut-plane preview overlay: forward the Mesh
++            // Toolbox's plane only while its "Show cut overlay"
++            // checkbox is ticked, so the viewport pays nothing
++            // for the feature when it's off.
++            cut_overlay: if self.mesh_toolbox.cut_show_overlay {
++                Some((self.mesh_toolbox.cut_point, self.mesh_toolbox.cut_normal))
++            } else {
++                None
++            },
++            sketch_overlay,
++            draft_overlay,
++            // CAM simulation overlay (Phase 10E). Forward the
++            // last-generated toolpath only when the user has
++            // pressed "Toggle Simulate Overlay" in the CAM panel.
++            cam_overlay: if self.mesh_toolbox.cam.show_overlay {
++                self.mesh_toolbox.cam.last_toolpath.as_ref()
++            } else {
++                None
++            },
++            snap_to_grid: self.snap_to_grid,
++        };
++        viewport::show(ui, state);
++    }
++}
++
++impl ValenxApp {
++    pub(crate) fn draw_browser(&mut self, ui: &mut egui::Ui) {
+         ui.collapsing("Project", |ui| match &self.project {
+             None => {
+                 // The welcome landing page in the central viewport
+@@ -1879,9 +1930,7 @@ impl ValenxApp {
+                         for (_id, entry) in self.registry.iter() {
+                             let info = entry.adapter.info();
+                             if !show_non_oss
+-                                && !valenx_core::adapter_helpers::is_oss_license(
+-                                    info.tool_license,
+-                                )
++                                && !valenx_core::adapter_helpers::is_oss_license(info.tool_license)
+                             {
+                                 hidden += 1;
+                                 continue;

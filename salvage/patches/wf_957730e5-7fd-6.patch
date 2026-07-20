@@ -1,0 +1,32 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..8aaee43b 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -7078,6 +7078,15 @@ dependencies = [
+ name = "valenx-icons"
+ version = "0.1.0-alpha.1"
+ 
++[[package]]
++name = "valenx-immunodynamics"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "serde",
++ "serde_json",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-inspect"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..559ab532 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -122,6 +122,7 @@ members = [
+     "crates/valenx-rnadesign",
+     "crates/valenx-variant-effect",
+     "crates/valenx-reactdyn",
++    "crates/valenx-immunodynamics",
+ 
+     "crates/valenx-test-utils",
+     "crates/valenx-e2e-tests",

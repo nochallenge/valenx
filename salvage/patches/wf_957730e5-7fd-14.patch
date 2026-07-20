@@ -1,0 +1,33 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..91dfcaaa 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -7462,6 +7462,15 @@ dependencies = [
+  "valenx-mesh",
+ ]
+ 
++[[package]]
++name = "valenx-projectile"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "serde",
++ "serde_json",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-py"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..1ddc1530 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -123,6 +123,8 @@ members = [
+     "crates/valenx-variant-effect",
+     "crates/valenx-reactdyn",
+ 
++    "crates/valenx-projectile",
++
+     "crates/valenx-test-utils",
+     "crates/valenx-e2e-tests",
+ 

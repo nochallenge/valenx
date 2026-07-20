@@ -1,0 +1,33 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..f5494e78 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -7483,6 +7483,14 @@ dependencies = [
+  "serde",
+ ]
+ 
++[[package]]
++name = "valenx-radioactivity"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "serde",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-rbac"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..48d797a9 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -123,6 +123,9 @@ members = [
+     "crates/valenx-variant-effect",
+     "crates/valenx-reactdyn",
+ 
++    # Physics — closed-form analytic models
++    "crates/valenx-radioactivity",
++
+     "crates/valenx-test-utils",
+     "crates/valenx-e2e-tests",
+ 

@@ -1,0 +1,572 @@
+### valenx/.claude/worktrees/wf_35dd2f66-a12-1/
+ M Cargo.lock
+ M Cargo.toml
+ M crates/valenx-app/Cargo.toml
+ M crates/valenx-app/src/lib.rs
+ M crates/valenx-app/src/update.rs
+?? crates/valenx-app/src/docking.rs
+### valenx/.claude/worktrees/wf_35dd2f66-a12-10/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-nozzle/
+### valenx/.claude/worktrees/wf_35dd2f66-a12-11/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-buoyancy/
+### valenx/.claude/worktrees/wf_35dd2f66-a12-12/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-openchannel/
+### valenx/.claude/worktrees/wf_35dd2f66-a12-13/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-thevenin/
+### valenx/.claude/worktrees/wf_35dd2f66-a12-14/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-rlcresonance/
+### valenx/.claude/worktrees/wf_35dd2f66-a12-15/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-opamp/
+### valenx/.claude/worktrees/wf_35dd2f66-a12-16/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-doseresponse/
+### valenx/.claude/worktrees/wf_35dd2f66-a12-17/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-hardyweinberg/
+### valenx/.claude/worktrees/wf_35dd2f66-a12-2/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-flywheel/
+### valenx/.claude/worktrees/wf_35dd2f66-a12-3/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-gyroscope/
+### valenx/.claude/worktrees/wf_35dd2f66-a12-4/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-epicyclic/
+### valenx/.claude/worktrees/wf_35dd2f66-a12-5/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-thickcylinder/
+### valenx/.claude/worktrees/wf_35dd2f66-a12-6/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-curvedbeam/
+### valenx/.claude/worktrees/wf_35dd2f66-a12-7/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-cablesag/
+### valenx/.claude/worktrees/wf_35dd2f66-a12-8/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-fin/
+### valenx/.claude/worktrees/wf_35dd2f66-a12-9/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-radiation/
+### valenx/.claude/worktrees/wf_3b9d8edf-8c6-1/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-resistor-network/
+### valenx/.claude/worktrees/wf_3b9d8edf-8c6-10/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-led/
+### valenx/.claude/worktrees/wf_3b9d8edf-8c6-11/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-samplingtheory/
+### valenx/.claude/worktrees/wf_3b9d8edf-8c6-12/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-pidtuning/
+### valenx/.claude/worktrees/wf_3b9d8edf-8c6-13/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-shaftdesign/
+### valenx/.claude/worktrees/wf_3b9d8edf-8c6-14/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-conveyor/
+### valenx/.claude/worktrees/wf_3b9d8edf-8c6-15/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-strainrosette/
+### valenx/.claude/worktrees/wf_3b9d8edf-8c6-16/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-springcombination/
+### valenx/.claude/worktrees/wf_3b9d8edf-8c6-2/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-powerfactor/
+### valenx/.claude/worktrees/wf_3b9d8edf-8c6-3/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-threephase/
+### valenx/.claude/worktrees/wf_3b9d8edf-8c6-4/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-thermalexpansion/
+### valenx/.claude/worktrees/wf_3b9d8edf-8c6-5/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-leverage/
+### valenx/.claude/worktrees/wf_3b9d8edf-8c6-6/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-pulley/
+### valenx/.claude/worktrees/wf_3b9d8edf-8c6-7/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-inclinedplane/
+### valenx/.claude/worktrees/wf_3b9d8edf-8c6-8/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-insulation/
+### valenx/.claude/worktrees/wf_3b9d8edf-8c6-9/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-batterypack/
+### valenx/.claude/worktrees/wf_519a8e08-985-1/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-gasdynamics/
+### valenx/.claude/worktrees/wf_519a8e08-985-10/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-weld/
+### valenx/.claude/worktrees/wf_519a8e08-985-11/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-creep/
+### valenx/.claude/worktrees/wf_519a8e08-985-12/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-pump/
+### valenx/.claude/worktrees/wf_519a8e08-985-13/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-orifice/
+### valenx/.claude/worktrees/wf_519a8e08-985-14/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-fanlaws/
+### valenx/.claude/worktrees/wf_519a8e08-985-15/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-refrigeration/
+### valenx/.claude/worktrees/wf_519a8e08-985-16/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-transmissionline/
+### valenx/.claude/worktrees/wf_519a8e08-985-2/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-optics/
+### valenx/.claude/worktrees/wf_519a8e08-985-3/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-bolt/
+### valenx/.claude/worktrees/wf_519a8e08-985-4/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-spring-design/
+### valenx/.claude/worktrees/wf_519a8e08-985-5/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-bearing/
+### valenx/.claude/worktrees/wf_519a8e08-985-6/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-gearbox/
+### valenx/.claude/worktrees/wf_519a8e08-985-7/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-electrochem/
+### valenx/.claude/worktrees/wf_519a8e08-985-8/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-radioactivity/
+### valenx/.claude/worktrees/wf_519a8e08-985-9/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-acidbase/
+### valenx/.claude/worktrees/wf_6364ab97-d12-1/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-filter/
+### valenx/.claude/worktrees/wf_6364ab97-d12-10/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-antenna/
+### valenx/.claude/worktrees/wf_6364ab97-d12-11/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-dimensional/
+### valenx/.claude/worktrees/wf_6364ab97-d12-12/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-soilbearing/
+### valenx/.claude/worktrees/wf_6364ab97-d12-13/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-columnsteel/
+### valenx/.claude/worktrees/wf_6364ab97-d12-14/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-rcbeam/
+### valenx/.claude/worktrees/wf_6364ab97-d12-15/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-openchannel/
+### valenx/.claude/worktrees/wf_6364ab97-d12-16/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-flywheel/
+### valenx/.claude/worktrees/wf_6364ab97-d12-2/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-opamp/
+### valenx/.claude/worktrees/wf_6364ab97-d12-3/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-torsion/
+### valenx/.claude/worktrees/wf_6364ab97-d12-4/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-plate/
+### valenx/.claude/worktrees/wf_6364ab97-d12-5/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-fft/
+### valenx/.claude/worktrees/wf_6364ab97-d12-6/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-thermistor/
+### valenx/.claude/worktrees/wf_6364ab97-d12-7/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-straingauge/
+### valenx/.claude/worktrees/wf_6364ab97-d12-8/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-heatpump/
+### valenx/.claude/worktrees/wf_6364ab97-d12-9/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-solarpv/
+### valenx/.claude/worktrees/wf_957730e5-7fd-1/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-hemodynamics/
+### valenx/.claude/worktrees/wf_957730e5-7fd-10/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-truss/
+### valenx/.claude/worktrees/wf_957730e5-7fd-11/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-heat-transfer/
+### valenx/.claude/worktrees/wf_957730e5-7fd-12/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-pipeflow/
+### valenx/.claude/worktrees/wf_957730e5-7fd-13/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-thermocycle/
+### valenx/.claude/worktrees/wf_957730e5-7fd-14/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-projectile/
+### valenx/.claude/worktrees/wf_957730e5-7fd-15/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-vibration/
+### valenx/.claude/worktrees/wf_957730e5-7fd-16/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-fluid-statics/
+### valenx/.claude/worktrees/wf_957730e5-7fd-2/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-thermoreg/
+### valenx/.claude/worktrees/wf_957730e5-7fd-3/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-enzymekinetics/
+### valenx/.claude/worktrees/wf_957730e5-7fd-4/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-popdynamics/
+### valenx/.claude/worktrees/wf_957730e5-7fd-5/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-diffusion/
+### valenx/.claude/worktrees/wf_957730e5-7fd-6/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-immunodynamics/
+### valenx/.claude/worktrees/wf_957730e5-7fd-7/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-bmr/
+### valenx/.claude/worktrees/wf_957730e5-7fd-8/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-osmosis/
+### valenx/.claude/worktrees/wf_957730e5-7fd-9/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-beam/
+### valenx/.claude/worktrees/wf_962f1107-43f-1/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-acoustics/
+### valenx/.claude/worktrees/wf_962f1107-43f-10/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-psychrometrics/
+### valenx/.claude/worktrees/wf_962f1107-43f-11/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-heatexchanger/
+### valenx/.claude/worktrees/wf_962f1107-43f-12/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-combustion/
+### valenx/.claude/worktrees/wf_962f1107-43f-13/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-battery-ecm/
+### valenx/.claude/worktrees/wf_962f1107-43f-14/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-windturbine/
+### valenx/.claude/worktrees/wf_962f1107-43f-15/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-pressure-vessel/
+### valenx/.claude/worktrees/wf_962f1107-43f-16/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-fracture/
+### valenx/.claude/worktrees/wf_962f1107-43f-2/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-optics/
+### valenx/.claude/worktrees/wf_962f1107-43f-3/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-controls/
+### valenx/.claude/worktrees/wf_962f1107-43f-4/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-statics/
+### valenx/.claude/worktrees/wf_962f1107-43f-5/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-kinematics/
+### valenx/.claude/worktrees/wf_962f1107-43f-6/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-mohr/
+### valenx/.claude/worktrees/wf_962f1107-43f-7/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-fatigue/
+### valenx/.claude/worktrees/wf_962f1107-43f-8/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-buckling/
+### valenx/.claude/worktrees/wf_962f1107-43f-9/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-gasdynamics/
+### valenx/.claude/worktrees/wf_b2c49952-3ba-1/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-beltdrive/
+### valenx/.claude/worktrees/wf_b2c49952-3ba-10/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-shellandtube/
+### valenx/.claude/worktrees/wf_b2c49952-3ba-11/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-leadscrew/
+### valenx/.claude/worktrees/wf_b2c49952-3ba-12/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-coil/
+### valenx/.claude/worktrees/wf_b2c49952-3ba-13/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-capacitor/
+### valenx/.claude/worktrees/wf_b2c49952-3ba-14/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-zener/
+### valenx/.claude/worktrees/wf_b2c49952-3ba-15/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-bjt/
+### valenx/.claude/worktrees/wf_b2c49952-3ba-16/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-mosfet/
+### valenx/.claude/worktrees/wf_b2c49952-3ba-2/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-chaindrive/
+### valenx/.claude/worktrees/wf_b2c49952-3ba-3/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-screwthread/
+### valenx/.claude/worktrees/wf_b2c49952-3ba-4/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-clutch/
+### valenx/.claude/worktrees/wf_b2c49952-3ba-5/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-brake/
+### valenx/.claude/worktrees/wf_b2c49952-3ba-6/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-rivet/
+### valenx/.claude/worktrees/wf_b2c49952-3ba-7/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-retainingwall/
+### valenx/.claude/worktrees/wf_b2c49952-3ba-8/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-weir/
+### valenx/.claude/worktrees/wf_b2c49952-3ba-9/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-pipenetwork/
+### valenx/.claude/worktrees/wf_c4faf9be-582-1/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-endurance/
+### valenx/.claude/worktrees/wf_c4faf9be-582-2/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-bonemech/
+### valenx/.claude/worktrees/wf_c4faf9be-582-3/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-regnet/
+### valenx/.claude/worktrees/wf_c4faf9be-582-4/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-pharmacokinetics/
+### valenx/.claude/worktrees/wf_db45936a-7ba-1/
+ M Cargo.lock
+ M crates/valenx-app/Cargo.toml
+ M crates/valenx-app/src/adapter_status.rs
+ M crates/valenx-app/src/aero_workbench.rs
+ M crates/valenx-app/src/astro/mod.rs
+ M crates/valenx-app/src/astro/model.rs
+ M crates/valenx-app/src/astro_workbench.rs
+ M crates/valenx-app/src/audit.rs
+ M crates/valenx-app/src/audit_history.rs
+ M crates/valenx-app/src/cam_overlay.rs
+ M crates/valenx-app/src/cfd_workbench.rs
+ M crates/valenx-app/src/commands.rs
+ M crates/valenx-app/src/fem_workbench.rs
+ M crates/valenx-app/src/first_run.rs
+ M crates/valenx-app/src/genetics/mod.rs
+ M crates/valenx-app/src/genetics_workbench.rs
+ M crates/valenx-app/src/histograms.rs
+ M crates/valenx-app/src/history.rs
+ M crates/valenx-app/src/lib.rs
+ M crates/valenx-app/src/loading.rs
+ M crates/valenx-app/src/log_panel.rs
+ M crates/valenx-app/src/main.rs
+ M crates/valenx-app/src/mesh_toolbox.rs
+ M crates/valenx-app/src/rbac_io.rs
+ M crates/valenx-app/src/reactdyn_workbench.rs
+ M crates/valenx-app/src/settings_io.rs
+ M crates/valenx-app/src/setup.rs
+ M crates/valenx-app/src/solver_parse.rs
+ M crates/valenx-app/src/time_format.rs
+ M crates/valenx-app/src/tooltips.rs
+ M crates/valenx-app/src/types.rs
+ M crates/valenx-app/src/undo.rs
+ M crates/valenx-app/src/update.rs
+ M crates/valenx-app/src/view_actions.rs
+ M crates/valenx-app/src/viewport_kind.rs
+?? crates/valenx-app/src/docking.rs
+### valenx/.claude/worktrees/wf_fb1bddb2-9e5-1/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-geartooth/
+### valenx/.claude/worktrees/wf_fb1bddb2-9e5-10/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-queueing/
+### valenx/.claude/worktrees/wf_fb1bddb2-9e5-11/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-reliability/
+### valenx/.claude/worktrees/wf_fb1bddb2-9e5-12/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-rootfind/
+### valenx/.claude/worktrees/wf_fb1bddb2-9e5-13/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-odesolver/
+### valenx/.claude/worktrees/wf_fb1bddb2-9e5-14/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-interpolation/
+### valenx/.claude/worktrees/wf_fb1bddb2-9e5-15/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-regression/
+### valenx/.claude/worktrees/wf_fb1bddb2-9e5-16/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-statistics/
+### valenx/.claude/worktrees/wf_fb1bddb2-9e5-2/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-camdynamics/
+### valenx/.claude/worktrees/wf_fb1bddb2-9e5-3/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-hydraulics/
+### valenx/.claude/worktrees/wf_fb1bddb2-9e5-4/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-pneumatics/
+### valenx/.claude/worktrees/wf_fb1bddb2-9e5-5/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-thermocouple/
+### valenx/.claude/worktrees/wf_fb1bddb2-9e5-6/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-transformer/
+### valenx/.claude/worktrees/wf_fb1bddb2-9e5-7/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-dcmotor/
+### valenx/.claude/worktrees/wf_fb1bddb2-9e5-8/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-inductionmotor/
+### valenx/.claude/worktrees/wf_fb1bddb2-9e5-9/
+ M Cargo.lock
+ M Cargo.toml
+?? crates/valenx-rectifier/

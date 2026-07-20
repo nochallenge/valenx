@@ -1,0 +1,32 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..25a90731 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -7646,6 +7646,15 @@ dependencies = [
+  "valenx-mesh",
+ ]
+ 
++[[package]]
++name = "valenx-strainrosette"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "nalgebra",
++ "serde",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-structpredict"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..fa0de7e7 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -103,6 +103,7 @@ members = [
+     "crates/valenx-occt-exchange",
+     "crates/valenx-occt-advanced",
+     "crates/valenx-occt-viz",
++    "crates/valenx-strainrosette",
+ 
+     # Round 6 — computational biology
+     "crates/valenx-bioseq",

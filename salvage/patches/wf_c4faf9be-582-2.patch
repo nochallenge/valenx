@@ -1,0 +1,31 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..a59c7142 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -6600,6 +6600,14 @@ dependencies = [
+  "valenx-cgal-port",
+ ]
+ 
++[[package]]
++name = "valenx-bonemech"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "serde",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-brlcad-csg"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..e240b4a6 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -122,6 +122,7 @@ members = [
+     "crates/valenx-rnadesign",
+     "crates/valenx-variant-effect",
+     "crates/valenx-reactdyn",
++    "crates/valenx-bonemech",
+ 
+     "crates/valenx-test-utils",
+     "crates/valenx-e2e-tests",

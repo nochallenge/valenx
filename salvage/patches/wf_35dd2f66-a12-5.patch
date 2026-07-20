@@ -1,0 +1,31 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..7de009a2 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -7718,6 +7718,13 @@ dependencies = [
+ name = "valenx-test-utils"
+ version = "0.1.0-alpha.1"
+ 
++[[package]]
++name = "valenx-thickcylinder"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-threads-pro"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..00189988 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -123,6 +123,8 @@ members = [
+     "crates/valenx-variant-effect",
+     "crates/valenx-reactdyn",
+ 
++    "crates/valenx-thickcylinder",
++
+     "crates/valenx-test-utils",
+     "crates/valenx-e2e-tests",
+ 

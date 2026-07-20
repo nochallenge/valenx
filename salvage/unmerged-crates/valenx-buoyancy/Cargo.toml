@@ -1,0 +1,17 @@
+[package]
+name        = "valenx-buoyancy"
+description = "Archimedes buoyancy and floating-body initial stability (research/educational grade): buoyant force rho*g*V, displaced volume, neutral buoyancy, rectangular-barge draft, waterplane second moment, and metacentric height GM = BM - BG with a stable/neutral/unstable verdict. Standard textbook closed-form hydrostatics validated against analytic ground truth — NOT a naval-architecture or production-certified engineering tool (no hull form factors, free-surface/cargo-shift corrections, large-angle GZ curves, structural or stability-code compliance)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

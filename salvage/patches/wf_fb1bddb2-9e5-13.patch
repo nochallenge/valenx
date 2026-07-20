@@ -1,0 +1,33 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..9019c5db 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -7313,6 +7313,14 @@ dependencies = [
+  "valenx-viz",
+ ]
+ 
++[[package]]
++name = "valenx-odesolver"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "serde",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-opencamlib"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..eca46c14 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -123,6 +123,9 @@ members = [
+     "crates/valenx-variant-effect",
+     "crates/valenx-reactdyn",
+ 
++    # Numerical methods
++    "crates/valenx-odesolver",
++
+     "crates/valenx-test-utils",
+     "crates/valenx-e2e-tests",
+ 

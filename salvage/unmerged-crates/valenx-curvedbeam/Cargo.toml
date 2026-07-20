@@ -1,0 +1,17 @@
+[package]
+name        = "valenx-curvedbeam"
+description = "Winkler-Bach curved-beam bending: neutral-axis shift and inner/outer fibre stress for rectangular and solid-circular sections, with the straight-beam (large-radius) limit recovering My/I. Research/educational grade — standard textbook closed-form models validated against analytic ground truth, NOT a clinical/medical or production-certified engineering tool (no component tolerances, safety factors, fatigue/thermal limits, or code compliance)."
+
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+thiserror = { workspace = true }
+
+[lints.rust]
+unused_imports = "warn"
+missing_docs   = "warn"

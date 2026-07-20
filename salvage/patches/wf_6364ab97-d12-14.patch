@@ -1,0 +1,32 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..53feba14 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -7492,6 +7492,15 @@ dependencies = [
+  "thiserror 2.0.18",
+ ]
+ 
++[[package]]
++name = "valenx-rcbeam"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "serde",
++ "serde_json",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-reactdyn"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..b40e35a4 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -65,6 +65,7 @@ members = [
+     "crates/valenx-plot",
+     "crates/valenx-meshpart",
+     "crates/valenx-reinforcement",
++    "crates/valenx-rcbeam",
+     "crates/valenx-sheet-metal",
+     "crates/valenx-geomatics",
+     "crates/valenx-fasteners",

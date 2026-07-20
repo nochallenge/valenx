@@ -1,0 +1,32 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..4bbe45df 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -7003,6 +7003,15 @@ dependencies = [
+  "valenx-mesh",
+ ]
+ 
++[[package]]
++name = "valenx-geartooth"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "serde",
++ "serde_json",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-genediting"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..3ad59433 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -71,6 +71,7 @@ members = [
+     "crates/valenx-symbols",
+     "crates/valenx-frames",
+     "crates/valenx-gears",
++    "crates/valenx-geartooth",
+     "crates/valenx-springs",
+     "crates/valenx-manipulator",
+     "crates/valenx-kicad",

@@ -1,0 +1,32 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..2c71d1f7 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -6991,6 +6991,15 @@ dependencies = [
+  "thiserror 2.0.18",
+ ]
+ 
++[[package]]
++name = "valenx-gearbox"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "serde",
++ "serde_json",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-gears"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..96a21ba4 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -71,6 +71,7 @@ members = [
+     "crates/valenx-symbols",
+     "crates/valenx-frames",
+     "crates/valenx-gears",
++    "crates/valenx-gearbox",
+     "crates/valenx-springs",
+     "crates/valenx-manipulator",
+     "crates/valenx-kicad",

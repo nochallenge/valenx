@@ -1,0 +1,32 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..849c39e1 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -7499,6 +7499,15 @@ dependencies = [
+  "valenx-qchem",
+ ]
+ 
++[[package]]
++name = "valenx-rectifier"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "serde",
++ "serde_json",
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-reinforcement"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..3a5cc2b5 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -73,6 +73,7 @@ members = [
+     "crates/valenx-gears",
+     "crates/valenx-springs",
+     "crates/valenx-manipulator",
++    "crates/valenx-rectifier",
+     "crates/valenx-kicad",
+     "crates/valenx-defeaturing",
+     "crates/valenx-collision",

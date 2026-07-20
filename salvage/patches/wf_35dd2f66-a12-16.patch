@@ -1,0 +1,32 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 37298d3d..02f66e1b 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -6786,6 +6786,13 @@ dependencies = [
+  "valenx-dock",
+ ]
+ 
++[[package]]
++name = "valenx-doseresponse"
++version = "0.1.0-alpha.1"
++dependencies = [
++ "thiserror 2.0.18",
++]
++
+ [[package]]
+ name = "valenx-draft"
+ version = "0.1.0-alpha.1"
+diff --git a/Cargo.toml b/Cargo.toml
+index 8b15389e..569425ff 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -370,6 +370,9 @@ members = [
+     # Biology (Phase 45) — pharmacokinetics + RNA tertiary structure
+     "crates/valenx-adapters/bio/valenx-adapter-pksim",
+     "crates/valenx-adapters/bio/valenx-adapter-simrna",
++
++    # Pharmacology dose-response (native, Hill equation)
++    "crates/valenx-doseresponse",
+ ]
+ 
+ # ---------------------------------------------------------------------------
