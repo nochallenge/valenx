@@ -50,7 +50,7 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
       build_scope: ${{ steps.filter.outputs.build_scope }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - id: filter
@@ -135,7 +135,7 @@ jobs:
     if: needs.changes.outputs.code != 'false'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Pin to the repo's MSRV toolchain (rust-toolchain.toml) so CI rustfmt
       # matches local `cargo fmt`. @stable installs a newer rustfmt whose
       # line-wrapping differs at the 100-col boundary, causing false diffs.
@@ -150,7 +150,7 @@ jobs:
     if: needs.changes.outputs.code != 'false'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.88.0
         with:
           components: clippy
@@ -188,7 +188,7 @@ jobs:
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: System deps (Ubuntu)
@@ -255,7 +255,7 @@ jobs:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: PyO3 link flags (macOS)
@@ -281,7 +281,7 @@ jobs:
     env:
       RUSTDOCFLAGS: "-D warnings"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.88.0
       - uses: Swatinem/rust-cache@v2
       # `--all-features` pulls OpenCASCADE + the EGL/GL/Wayland GUI stack
@@ -312,7 +312,7 @@ jobs:
     name: user manual
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check docs/ exists
         id: check
         run: |
@@ -337,7 +337,7 @@ jobs:
     if: needs.changes.outputs.code != 'false'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check deny.toml exists
         id: check
         run: |
