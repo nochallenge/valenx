@@ -348,6 +348,15 @@ jobs:
           fi
       - uses: EmbarkStudios/cargo-deny-action@v2
         if: steps.check.outputs.has_deny == 'true'
+        env:
+          # The action runs inside a musl container that has no toolchain
+          # matching the `channel` pin in `rust-toolchain.toml`, so rustup
+          # aborts ("override toolchain ... is not installed") before any
+          # advisory is ever checked — which failed the whole `CI OK` gate.
+          # cargo-deny only parses Cargo.lock / Cargo.toml and compiles
+          # nothing, so overriding the pin here is safe and keeps the pin
+          # authoritative for every job that actually builds code.
+          RUSTUP_TOOLCHAIN: stable
         with:
           command: check all
 

@@ -78,6 +78,13 @@ ignore = [
     "RUSTSEC-2026-0194", # quick-xml — quadratic-time duplicate-attribute check (DoS)
     "RUSTSEC-2026-0195", # quick-xml — unbounded NsReader namespace alloc (memory DoS)
     "RUSTSEC-2026-0192", # ttf-parser — unmaintained (not a vulnerability)
+    # cgmath 0.18.0 — UNMAINTAINED (not a vulnerability). Pulled in only
+    # transitively by the vendored `truck` CAD kernel (truck-base 0.5, plus
+    # matext4cgmath), which uses it for its linear-algebra types. There is no
+    # drop-in replacement inside that dependency tree — dropping cgmath means
+    # truck migrating off it upstream, so we cannot bump it directly. No code
+    # of ours calls cgmath. Drops when truck's math stack updates.
+    "RUSTSEC-2026-0196",
 ]
 
 [licenses]
